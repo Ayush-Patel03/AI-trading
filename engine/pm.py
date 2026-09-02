@@ -1525,7 +1525,10 @@ def main():
     state["republish_url"] = jrn["artifact_url"]
     state["attempt"] = jrn["attempt"]
     state["changed"] = jrn["changed"]
-    state["live_board_url"] = book.get("board_url") or archive.PM_BOARD_URL
+    import config
+    state["live_board_url"] = (book.get("board_url")
+                               or config.board_url("trade_desk")
+                               or archive.PM_BOARD_URL)
 
     with open(os.path.join(BASE, f"pm_book_next{sfx}.json"), "w") as f:
         json.dump(book, f, indent=2)

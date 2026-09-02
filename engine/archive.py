@@ -47,6 +47,8 @@ Paths resolve from SCAN_DIR, like every other file in the engine.
 import argparse, hashlib, json, os, re, sys
 from datetime import datetime
 
+import config
+
 BASE = os.environ.get("SCAN_DIR") or os.path.dirname(os.path.abspath(__file__))
 
 # The four scheduled slots. A known slot gets a stable, time-free id so a re-run replaces
@@ -61,7 +63,10 @@ SLOT_SLUGS = {
 SLOT_TIMES = {"premarket": "08:00", "opening-range": "10:00",
               "midday": "12:30", "power-hour": "15:00"}
 DEFAULT_KEEP = 40          # 10 trading days of four scans
-LIVE_BOARD_URL = "https://claude.ai/code/artifact/4c70ec93-b61b-4e49-83ef-e9e5be010a4f"
+# Board URLs are identifiers and live in the PRIVATE engine-config.json, never here.
+# None is a valid answer: a run without the config republishes nothing rather than
+# creating a second rolling board.
+LIVE_BOARD_URL = None          # resolved via config.board_url("scan_desk")
 
 
 def slugify(text):
@@ -165,7 +170,8 @@ def record(results, artifact_url=None, live_url=None):
         "slot": meta.get("slot") or meta.get("session"),
         "time": meta.get("time"),
         "artifact_url": artifact_url or meta.get("artifact_url"),
-        "live_board_url": live_url or meta.get("live_board_url") or LIVE_BOARD_URL,
+        "live_board_url": (live_url or meta.get("live_board_url")
+                           or config.board_url("scan_desk")),
         "stale": bool(meta.get("stale")),
         "minutes_late": meta.get("minutes_late"),
         "coverage_avg": meta.get("coverage_avg"),
@@ -263,7 +269,7 @@ PM_SLOTS = ("pre-market", "opening-range", "midday", "power-hour")
 PM_SLOT_LABELS = {"pre-market": "Pre-market", "opening-range": "Opening range",
                   "midday": "Midday", "power-hour": "Power hour", "ad-hoc": "Ad-hoc"}
 PM_CLOSE_SLOT = "power-hour"
-PM_BOARD_URL = "https://claude.ai/code/artifact/7723cd30-f09e-4b6e-a289-6e39b1547d1f"
+PM_BOARD_URL = None            # resolved via config.board_url("trade_desk")
 CLOSE_REASON = "close-of-day record of an open book"
 RERUN_REASON = "re-run of a slot whose board is already published"
 # Only the swing desk publishes boards (PM.md section 13), and the sentinel prompt is told
