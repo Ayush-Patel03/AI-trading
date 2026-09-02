@@ -1,0 +1,21 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+# Run artefacts and live state never belong in this repo.
+pm_book_next*.json
+pm_state*.json
+pm_journal_next*.json
+pm_journal_current*.json
+pm_heartbeat*.json
+pm_quotes.json
+pm_broker.json
+pm_prices.json
+pm_orders*.json
+scan_data*.json
+scan_results*.json
+paper_book*.json
+fresh_probe*.json
+portfolio_state.json
+engine-config.json
+engine_sha
+*.html

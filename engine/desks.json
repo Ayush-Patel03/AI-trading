@@ -1,0 +1,38 @@
+{
+  "_what": "Strategy desks for the Portfolio Manager. Same engine, same risk rules unless overridden, different candidate mandate, SEPARATE paper book and journal per desk — so the weekly review can attribute results to a setup class instead of to the blend. pm.py --desk <name> loads this file from $SCAN_DIR. The default desk 'swing' is the unfiltered book on the unsuffixed files and is what the Trade Desk board shows.",
+  "_rules": "Every desk starts from the same $5,000 of paper capital, runs under the same account lock and paper lock, and is written back under the same revision/--check protocol. Desk books live at claude/paper-book-<desk>.json and journals at claude/pm-journal-<desk>.json. A desk with no candidates in its mandate simply reports that and manages its own holdings.",
+  "desks": {
+    "swing": {
+      "label": "Swing — the unfiltered book",
+      "doc_book": "claude/paper-book.json",
+      "doc_journal": "claude/pm-journal.json",
+      "book": "paper_book.json",
+      "journal": "pm_journal_current.json",
+      "rules": {},
+      "filter": {},
+      "publishes_board": true
+    },
+    "pullback": {
+      "label": "Pullback — mean-reversion entries inside an uptrend",
+      "doc_book": "claude/paper-book-pullback.json",
+      "doc_journal": "claude/pm-journal-pullback.json",
+      "book": "paper_book_pullback.json",
+      "journal": "pm_journal_current_pullback.json",
+      "rules": {},
+      "filter": {"setups": ["Pullback in Uptrend", "Early Recovery"], "rsi_range": [25, 55]},
+      "publishes_board": false,
+      "_thesis": "Buy the dip in a name whose 200-day still defines an uptrend, RSI in the mean-reversion zone. Same ATR stop, same 3R target; the test is whether pullback entries outperform momentum entries on this scoring model."
+    },
+    "momentum": {
+      "label": "Momentum — trend continuation only",
+      "doc_book": "claude/paper-book-momentum.json",
+      "doc_journal": "claude/pm-journal-momentum.json",
+      "book": "paper_book_momentum.json",
+      "journal": "pm_journal_current_momentum.json",
+      "rules": {},
+      "filter": {"setups": ["Momentum"], "rsi_range": [50, 72]},
+      "publishes_board": false,
+      "_thesis": "Only names above both moving averages with the 50 over the 200 and RSI showing healthy strength, not exhaustion. Same risk rules; the test is whether trend continuation beats mean reversion."
+    }
+  }
+}
