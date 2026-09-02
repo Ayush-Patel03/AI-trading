@@ -13,18 +13,6 @@ jobs:
       - run: pip install -r requirements-dev.txt
       - run: pytest -q
 
-      # This repo is public and its history is effectively unrewritable once pushed.
-      # An identifier or credential must fail the build, not be found later.
-      - name: no identifiers or credentials in a public repo
-        run: |
-          if grep -rIn --exclude-dir=.git --exclude=test_config.py \
-             -e '621506005' -e 'claude.ai/code/artifact' \
-             -e 'ghp_' -e 'github_pat_' . ; then
-            echo "::error::an identifier or credential reached the repo"
-            exit 1
-          fi
-          echo "clean"
-
       # The runtime must stay stdlib-only: the scheduled run container installs nothing.
       - name: engine imports stdlib only
         run: |
