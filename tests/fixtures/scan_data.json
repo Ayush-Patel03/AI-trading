@@ -1,0 +1,219 @@
+{
+  "meta": {
+    "scan_date": "2026-09-02",
+    "time": "12:30",
+    "slot": "Midday",
+    "data_warnings": []
+  },
+  "regime": {
+    "vix": 15.2,
+    "spy": {
+      "pct_off_52w_high": -1.2,
+      "returns_1y": 14.8
+    },
+    "qqq": {
+      "returns_1y": 22.4
+    },
+    "iwm": {
+      "returns_1y": 6.1
+    },
+    "breadth": {
+      "pct_above_50dma": 64.0,
+      "nyse_ad_ratio": 1.9,
+      "nyse_new_highs": 210,
+      "nyse_new_lows": 61
+    },
+    "sector_etfs": {
+      "XLK": {
+        "day": 1.1,
+        "ytd": 21.4
+      },
+      "XLF": {
+        "day": 0.42,
+        "ytd": 9.7
+      },
+      "XLV": {
+        "day": 0.11,
+        "ytd": 2.1
+      },
+      "XLE": {
+        "day": -0.35,
+        "ytd": -4.2
+      },
+      "XLY": {
+        "day": 0.55,
+        "ytd": 8.0
+      },
+      "XLI": {
+        "day": 0.22,
+        "ytd": 6.6
+      }
+    }
+  },
+  "candidates": {
+    "NVDA": {
+      "name": "NVIDIA Corp",
+      "sector": "Technology",
+      "gics": "Information Technology",
+      "industry": "Semiconductors",
+      "market_cap": 5400000000000.0,
+      "day_change_pct": 1.8,
+      "price_sources": 2,
+      "price": 222.26,
+      "ma_50": 208.62,
+      "ma_200": 176.4,
+      "rsi_14": 61.0,
+      "week52_change_pct": 88.4,
+      "week52_high": 232.1,
+      "week52_low": 86.62,
+      "avg_volume_20d": 181000000,
+      "volume": 204000000,
+      "rel_volume": 1.13,
+      "atr_14": 7.48,
+      "atr_pct": 3.39,
+      "gap_pct": 0.9,
+      "gap_basis": "session_open",
+      "ret_20d_pct": 7.2,
+      "ret_60d_pct": 18.9,
+      "rs_20d_vs_SPY": 4.4,
+      "rs_60d_vs_SPY": 11.0,
+      "bars_used": 252,
+      "revenue_growth_pct": 54.2,
+      "eps_growth_pct": 61.0,
+      "profit_margin_pct": 52.4,
+      "roe_pct": 88.1,
+      "peg": 1.2,
+      "forward_pe": 34.0,
+      "debt_to_equity": 0.14,
+      "analyst_rating": "Strong Buy",
+      "analyst_target": 265.0,
+      "next_earnings": "2026-11-18",
+      "earnings_timing": "pm",
+      "short_float_pct": 1.1,
+      "catalysts": [
+        "Data-centre revenue guided above consensus"
+      ],
+      "retail": {
+        "wsb_mentions": 412,
+        "wsb_rank": 1,
+        "stocktwits_score": 74,
+        "stocktwits_label": "Bullish"
+      }
+    },
+    "MU": {
+      "name": "Micron Technology",
+      "sector": "Technology",
+      "gics": "Information Technology",
+      "industry": "Semiconductors",
+      "market_cap": 1050000000000.0,
+      "day_change_pct": -0.6,
+      "price_sources": 2,
+      "price": 941.9,
+      "ma_50": 968.3,
+      "ma_200": 742.1,
+      "rsi_14": 44.0,
+      "week52_change_pct": 112.0,
+      "week52_high": 1024.0,
+      "week52_low": 402.55,
+      "avg_volume_20d": 22400000,
+      "volume": 19800000,
+      "rel_volume": 0.88,
+      "atr_14": 58.21,
+      "atr_pct": 6.07,
+      "gap_pct": -2.4,
+      "gap_basis": "session_open",
+      "revenue_growth_pct": 38.0,
+      "eps_growth_pct": 44.5,
+      "profit_margin_pct": 29.9,
+      "roe_pct": 31.0,
+      "peg": 0.7,
+      "forward_pe": 17.5,
+      "debt_to_equity": 0.31,
+      "analyst_rating": "Buy",
+      "analyst_target": 1120.0,
+      "next_earnings": "2026-09-24",
+      "earnings_timing": "pm",
+      "short_float_pct": 2.4,
+      "catalysts": [],
+      "retail": {
+        "wsb_mentions": 88,
+        "wsb_rank": 9,
+        "stocktwits_score": 61,
+        "stocktwits_label": "Bullish"
+      }
+    },
+    "XOM": {
+      "name": "Exxon Mobil",
+      "sector": "Energy",
+      "gics": "Energy",
+      "industry": "Oil & Gas",
+      "market_cap": 440000000000.0,
+      "day_change_pct": -1.1,
+      "price_sources": 2,
+      "price": 88.2,
+      "ma_50": 95.4,
+      "ma_200": 104.8,
+      "rsi_14": 31.0,
+      "week52_change_pct": -18.2,
+      "week52_high": 121.4,
+      "week52_low": 85.1,
+      "avg_volume_20d": 17000000,
+      "volume": 25500000,
+      "rel_volume": 1.5,
+      "atr_14": 2.1,
+      "atr_pct": 2.38,
+      "revenue_growth_pct": -6.0,
+      "eps_growth_pct": -14.0,
+      "profit_margin_pct": 8.2,
+      "roe_pct": 11.0,
+      "peg": 3.9,
+      "forward_pe": 13.0,
+      "debt_to_equity": 0.25,
+      "analyst_rating": "Hold",
+      "analyst_target": 96.0,
+      "next_earnings": "2026-10-30",
+      "short_float_pct": 1.0,
+      "catalysts": [],
+      "retail": {}
+    },
+    "THIN": {
+      "name": "Thin Data Co",
+      "sector": null,
+      "gics": "Industrials",
+      "industry": null,
+      "market_cap": null,
+      "day_change_pct": null,
+      "price_sources": 2,
+      "price": 50.0,
+      "ma_50": 47.0,
+      "ma_200": 40.0
+    },
+    "NOPX": {
+      "name": "No Price Co",
+      "sector": null,
+      "gics": null,
+      "industry": null,
+      "market_cap": null,
+      "day_change_pct": null,
+      "price_sources": 2,
+      "price": null,
+      "ma_50": 10.0,
+      "ma_200": 9.0
+    }
+  },
+  "history": [
+    {
+      "date": "2026-09-02",
+      "slot": "Opening range",
+      "time": "10:00",
+      "regime_label": "Constructive",
+      "avg": 61.0,
+      "scores": {
+        "NVDA": 78.0,
+        "MU": 70.0,
+        "XOM": 30.0,
+        "THIN": 55.0
+      }
+    }
+  ]
+}

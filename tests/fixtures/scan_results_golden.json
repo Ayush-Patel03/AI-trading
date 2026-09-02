@@ -1,0 +1,540 @@
+{
+  "insider_panel": null,
+  "ipo": null,
+  "meta": {
+    "coverage_avg": 76.0,
+    "data_warnings": [
+      "No usable price, dropped from the ranking: NOPX"
+    ],
+    "dropped": [
+      "NOPX"
+    ],
+    "engine_sha": null,
+    "scan_date": "2026-09-02",
+    "slot": "Midday",
+    "time": "12:30"
+  },
+  "notable": [
+    "DEGRADED: 2 of 4 rows scored on a partial evidence base (intelligence missing on 2, catalyst missing on 1, fundamentals missing on 1, momentum missing on 1). Scores are normalised to what was available, so they stay comparable, but conviction is capped.",
+    "Regime flipped: Constructive to Risk-On",
+    "THIN scores 100 (Buy, Momentum)",
+    "THIN score moved +45 since the last scan",
+    "NVDA scores 77 (Strong Buy, Momentum)"
+  ],
+  "regime": {
+    "breadth": {
+      "nyse_ad_ratio": 1.9,
+      "nyse_new_highs": 210,
+      "nyse_new_lows": 61,
+      "pct_above_50dma": 64.0
+    },
+    "iwm": {
+      "returns_1y": 6.1
+    },
+    "label": "Risk-On",
+    "multiplier": 1.05,
+    "notes": [
+      "SPY -1.2% off its 52-week high \u2014 index at/near highs",
+      "VIX 15.2 \u2014 low volatility, risk-seeking conditions",
+      "64% of stocks above their 50-day MA \u2014 broad participation",
+      "NYSE advancers lead decliners 1.90-to-1, 210 new highs vs 61 new lows \u2014 positive but not a breadth thrust",
+      "Trailing 1-year: SPY +14.8%, QQQ +22.4%, IWM +6.1% \u2014 QQQ leading",
+      "5 of 6 GICS sectors green \u2014 broad advance led by XLK (+1.10%)",
+      "YTD sector spread 26 points: XLK +21.4% vs XLE -4.2% \u2014 dispersion is where the segmentation edge lives"
+    ],
+    "qqq": {
+      "returns_1y": 22.4
+    },
+    "sector_etfs": {
+      "XLE": {
+        "day": -0.35,
+        "ytd": -4.2
+      },
+      "XLF": {
+        "day": 0.42,
+        "ytd": 9.7
+      },
+      "XLI": {
+        "day": 0.22,
+        "ytd": 6.6
+      },
+      "XLK": {
+        "day": 1.1,
+        "ytd": 21.4
+      },
+      "XLV": {
+        "day": 0.11,
+        "ytd": 2.1
+      },
+      "XLY": {
+        "day": 0.55,
+        "ytd": 8.0
+      }
+    },
+    "spy": {
+      "pct_off_52w_high": -1.2,
+      "returns_1y": 14.8
+    },
+    "vix": 15.2
+  },
+  "results": [
+    {
+      "analyst_rating": null,
+      "analyst_target": null,
+      "atr_14": null,
+      "atr_pct": null,
+      "bars_used": null,
+      "beta": null,
+      "catalysts": [],
+      "confidence": "single",
+      "confidence_note": "One source only \u2014 price unconfirmed",
+      "coverage_pct": 25.0,
+      "day_change_pct": null,
+      "debt_to_equity": null,
+      "earnings_timing": null,
+      "entered_top5": false,
+      "eps_growth_pct": null,
+      "forward_pe": null,
+      "gap_basis": null,
+      "gap_pct": null,
+      "gics": "Industrials",
+      "implied_move_pct": null,
+      "industry": null,
+      "is_new": false,
+      "ma_200": 40.0,
+      "ma_50": 47.0,
+      "market_cap": null,
+      "missing_pillars": [
+        "catalyst",
+        "fundamentals",
+        "intelligence",
+        "momentum"
+      ],
+      "name": "Thin Data Co",
+      "next_earnings": null,
+      "normalized_score": 96.0,
+      "off_high_pct": null,
+      "peg": null,
+      "pillars": {
+        "catalyst": 0,
+        "fundamentals": 0,
+        "intelligence": 0,
+        "momentum": 0,
+        "trend": 24.0
+      },
+      "price": 50.0,
+      "price_disagreement_pct": null,
+      "profit_margin_pct": null,
+      "raw_score": 24.0,
+      "reasons": {
+        "catalyst": [],
+        "fundamentals": [],
+        "intelligence": [
+          "No measurable retail chatter \u2014 an institutional name, not a crowd trade",
+          "No recent earnings call analysed"
+        ],
+        "momentum": [],
+        "trend": [
+          "Above the 200-day by 25.0%",
+          "50-day above 200-day (golden-cross alignment)",
+          "+6.4% vs the 50-day \u2014 riding the trend line"
+        ]
+      },
+      "rel_volume": null,
+      "ret_20d_pct": null,
+      "ret_60d_pct": null,
+      "retail": {},
+      "revenue_growth_pct": null,
+      "roe_pct": null,
+      "rs_20d_vs_spy": null,
+      "rs_60d_vs_spy": null,
+      "rsi_14": null,
+      "score": 100,
+      "score_delta": 45.0,
+      "score_trail": [
+        55.0,
+        100
+      ],
+      "sector": null,
+      "setup": "Momentum",
+      "setup_note": "Price above both MAs with 50 over 200 \u2014 trend intact and extended",
+      "short_float_pct": null,
+      "sic": null,
+      "ticker": "THIN",
+      "transcript": null,
+      "upside_pct": null,
+      "verdict": "Buy",
+      "verdict_note": "Capped from Strong Buy \u2014 only 25% of the evidence base was available (catalyst, fundamentals, intelligence, momentum missing)",
+      "vs_ma200_pct": 25.0,
+      "vs_ma50_pct": 6.4,
+      "week52_change_pct": null,
+      "week52_high": null,
+      "week52_low": null
+    },
+    {
+      "analyst_rating": "Strong Buy",
+      "analyst_target": 265.0,
+      "atr_14": 7.48,
+      "atr_pct": 3.39,
+      "bars_used": 252,
+      "beta": null,
+      "catalysts": [
+        "Data-centre revenue guided above consensus"
+      ],
+      "confidence": "single",
+      "confidence_note": "One source only \u2014 price unconfirmed",
+      "coverage_pct": 100.0,
+      "day_change_pct": 1.8,
+      "debt_to_equity": 0.14,
+      "earnings_timing": "pm",
+      "entered_top5": false,
+      "eps_growth_pct": 61.0,
+      "forward_pe": 34.0,
+      "gap_basis": "session_open",
+      "gap_pct": 0.9,
+      "gics": "Information Technology",
+      "implied_move_pct": null,
+      "industry": "Semiconductors",
+      "is_new": false,
+      "ma_200": 176.4,
+      "ma_50": 208.62,
+      "market_cap": 5400000000000.0,
+      "missing_pillars": [],
+      "name": "NVIDIA Corp",
+      "next_earnings": "2026-11-18",
+      "normalized_score": 73.0,
+      "off_high_pct": -4.2,
+      "peg": 1.2,
+      "pillars": {
+        "catalyst": 12.0,
+        "fundamentals": 19.0,
+        "intelligence": 7.0,
+        "momentum": 11.0,
+        "trend": 24.0
+      },
+      "price": 222.26,
+      "price_disagreement_pct": null,
+      "profit_margin_pct": 52.4,
+      "raw_score": 73.0,
+      "reasons": {
+        "catalyst": [
+          "Analyst consensus: Strong Buy",
+          "+19.2% to the average analyst target",
+          "1 active news catalysts in the last few weeks"
+        ],
+        "fundamentals": [
+          "Revenue growth +54.2%",
+          "EPS growth +61.0%",
+          "Profit margin 52.4% \u2014 highly profitable",
+          "PEG 1.20 \u2014 fairly valued for its growth",
+          "Debt/equity 0.14 \u2014 clean balance sheet"
+        ],
+        "intelligence": [
+          "412 Reddit mentions, no prior-day baseline",
+          "Rank #1 on r/wallstreetbets",
+          "StockTwits 74 (Bullish)",
+          "No recent earnings call analysed",
+          "1 distinct news items on the tape"
+        ],
+        "momentum": [
+          "+88.4% over the last 52 weeks",
+          "93% up its 52-week range (-4.2% off the high) \u2014 near highs",
+          "Relative volume 1.13x \u2014 normal participation",
+          "RSI 61 \u2014 healthy trend strength",
+          "Relative strength vs SPY +4.4 pts over 20 sessions",
+          "ATR 3.4% of price \u2014 moderate daily range"
+        ],
+        "trend": [
+          "Above the 200-day by 26.0%",
+          "50-day above 200-day (golden-cross alignment)",
+          "+6.5% vs the 50-day \u2014 riding the trend line"
+        ]
+      },
+      "rel_volume": 1.13,
+      "ret_20d_pct": 7.2,
+      "ret_60d_pct": 18.9,
+      "retail": {
+        "stocktwits_label": "Bullish",
+        "stocktwits_score": 74,
+        "wsb_mentions": 412,
+        "wsb_rank": 1
+      },
+      "revenue_growth_pct": 54.2,
+      "roe_pct": 88.1,
+      "rs_20d_vs_spy": 4.4,
+      "rs_60d_vs_spy": 11.0,
+      "rsi_14": 61.0,
+      "score": 76.7,
+      "score_delta": -1.3,
+      "score_trail": [
+        78.0,
+        76.7
+      ],
+      "sector": "Technology",
+      "setup": "Momentum",
+      "setup_note": "Price above both MAs with 50 over 200 \u2014 trend intact and extended",
+      "short_float_pct": 1.1,
+      "sic": null,
+      "ticker": "NVDA",
+      "transcript": null,
+      "upside_pct": 19.2,
+      "verdict": "Strong Buy",
+      "verdict_note": "High conviction across trend, fundamentals and catalyst",
+      "vs_ma200_pct": 26.0,
+      "vs_ma50_pct": 6.5,
+      "week52_change_pct": 88.4,
+      "week52_high": 232.1,
+      "week52_low": 86.62
+    },
+    {
+      "analyst_rating": "Buy",
+      "analyst_target": 1120.0,
+      "atr_14": 58.21,
+      "atr_pct": 6.07,
+      "bars_used": null,
+      "beta": null,
+      "catalysts": [],
+      "confidence": "single",
+      "confidence_note": "One source only \u2014 price unconfirmed",
+      "coverage_pct": 100.0,
+      "day_change_pct": -0.6,
+      "debt_to_equity": 0.31,
+      "earnings_timing": "pm",
+      "entered_top5": false,
+      "eps_growth_pct": 44.5,
+      "forward_pe": 17.5,
+      "gap_basis": "session_open",
+      "gap_pct": -2.4,
+      "gics": "Information Technology",
+      "implied_move_pct": null,
+      "industry": "Semiconductors",
+      "is_new": false,
+      "ma_200": 742.1,
+      "ma_50": 968.3,
+      "market_cap": 1050000000000.0,
+      "missing_pillars": [],
+      "name": "Micron Technology",
+      "next_earnings": "2026-09-24",
+      "normalized_score": 69.0,
+      "off_high_pct": -8.0,
+      "peg": 0.7,
+      "pillars": {
+        "catalyst": 9.0,
+        "fundamentals": 19.0,
+        "intelligence": 6.0,
+        "momentum": 10.0,
+        "trend": 25
+      },
+      "price": 941.9,
+      "price_disagreement_pct": null,
+      "profit_margin_pct": 29.9,
+      "raw_score": 69.0,
+      "reasons": {
+        "catalyst": [
+          "Analyst consensus: Buy",
+          "+18.9% to the average analyst target"
+        ],
+        "fundamentals": [
+          "Revenue growth +38.0%",
+          "EPS growth +44.5%",
+          "Profit margin 29.9%",
+          "PEG 0.70 \u2014 growth is cheap relative to price",
+          "Debt/equity 0.31 \u2014 clean balance sheet"
+        ],
+        "intelligence": [
+          "88 Reddit mentions, no prior-day baseline",
+          "Rank #9 on r/wallstreetbets",
+          "StockTwits 61 (Bullish)",
+          "No recent earnings call analysed"
+        ],
+        "momentum": [
+          "+112.0% over the last 52 weeks",
+          "87% up its 52-week range (-8.0% off the high) \u2014 near highs",
+          "Relative volume 0.88x (intraday partial \u2014 indicative only)",
+          "RSI 44 \u2014 the mean-reversion entry zone for a pullback",
+          "Gapped -2.4% at the open against the prior close",
+          "ATR 6.1% of price \u2014 high daily range"
+        ],
+        "trend": [
+          "Above the 200-day by 26.9%",
+          "50-day above 200-day (golden-cross alignment)",
+          "-2.7% below the 50-day \u2014 constructive pullback zone"
+        ]
+      },
+      "rel_volume": 0.88,
+      "ret_20d_pct": null,
+      "ret_60d_pct": null,
+      "retail": {
+        "stocktwits_label": "Bullish",
+        "stocktwits_score": 61,
+        "wsb_mentions": 88,
+        "wsb_rank": 9
+      },
+      "revenue_growth_pct": 38.0,
+      "roe_pct": 31.0,
+      "rs_20d_vs_spy": null,
+      "rs_60d_vs_spy": null,
+      "rsi_14": 44.0,
+      "score": 72.5,
+      "score_delta": 2.5,
+      "score_trail": [
+        70.0,
+        72.5
+      ],
+      "sector": "Technology",
+      "setup": "Pullback in Uptrend",
+      "setup_note": "Long-term trend up but price has pulled back below the 50-day \u2014 mean-reversion entry",
+      "short_float_pct": 2.4,
+      "sic": null,
+      "ticker": "MU",
+      "transcript": null,
+      "upside_pct": 18.9,
+      "verdict": "Strong Buy",
+      "verdict_note": "High conviction across trend, fundamentals and catalyst",
+      "vs_ma200_pct": 26.9,
+      "vs_ma50_pct": -2.7,
+      "week52_change_pct": 112.0,
+      "week52_high": 1024.0,
+      "week52_low": 402.55
+    },
+    {
+      "analyst_rating": "Hold",
+      "analyst_target": 96.0,
+      "atr_14": 2.1,
+      "atr_pct": 2.38,
+      "bars_used": null,
+      "beta": null,
+      "catalysts": [],
+      "confidence": "single",
+      "confidence_note": "One source only \u2014 price unconfirmed",
+      "coverage_pct": 80.0,
+      "day_change_pct": -1.1,
+      "debt_to_equity": 0.25,
+      "earnings_timing": null,
+      "entered_top5": false,
+      "eps_growth_pct": -14.0,
+      "forward_pe": 13.0,
+      "gap_basis": null,
+      "gap_pct": null,
+      "gics": "Energy",
+      "implied_move_pct": null,
+      "industry": "Oil & Gas",
+      "is_new": false,
+      "ma_200": 104.8,
+      "ma_50": 95.4,
+      "market_cap": 440000000000.0,
+      "missing_pillars": [
+        "intelligence"
+      ],
+      "name": "Exxon Mobil",
+      "next_earnings": "2026-10-30",
+      "normalized_score": 28.7,
+      "off_high_pct": -27.3,
+      "peg": 3.9,
+      "pillars": {
+        "catalyst": 5.0,
+        "fundamentals": 4.0,
+        "intelligence": 0,
+        "momentum": 6.0,
+        "trend": 8.0
+      },
+      "price": 88.2,
+      "price_disagreement_pct": null,
+      "profit_margin_pct": 8.2,
+      "raw_score": 23.0,
+      "reasons": {
+        "catalyst": [
+          "Analyst consensus: Hold",
+          "+8.8% to the average analyst target"
+        ],
+        "fundamentals": [
+          "Revenue growth -6.0%",
+          "EPS growth -14.0%",
+          "Profit margin 8.2% \u2014 thin",
+          "PEG 3.90 \u2014 expensive relative to growth",
+          "Debt/equity 0.25 \u2014 clean balance sheet"
+        ],
+        "intelligence": [
+          "No measurable retail chatter \u2014 an institutional name, not a crowd trade",
+          "No recent earnings call analysed"
+        ],
+        "momentum": [
+          "-18.2% over the last 52 weeks",
+          "9% up its 52-week range \u2014 near the low end",
+          "Relative volume 1.50x \u2014 heavy participation",
+          "RSI 31",
+          "ATR 2.4% of price \u2014 low daily range"
+        ],
+        "trend": [
+          "Below the 200-day by 15.8% \u2014 structurally broken",
+          "50-day below 200-day (death-cross alignment)",
+          "-7.5% below the 50-day \u2014 constructive pullback zone"
+        ]
+      },
+      "rel_volume": 1.5,
+      "ret_20d_pct": null,
+      "ret_60d_pct": null,
+      "retail": {},
+      "revenue_growth_pct": -6.0,
+      "roe_pct": 11.0,
+      "rs_20d_vs_spy": null,
+      "rs_60d_vs_spy": null,
+      "rsi_14": 31.0,
+      "score": 30.2,
+      "score_delta": 0.2,
+      "score_trail": [
+        30.0,
+        30.2
+      ],
+      "sector": "Energy",
+      "setup": "Broken Trend",
+      "setup_note": "Price below the 200-day \u2014 structural downtrend, avoid until reclaimed",
+      "short_float_pct": 1.0,
+      "sic": null,
+      "ticker": "XOM",
+      "transcript": null,
+      "upside_pct": 8.8,
+      "verdict": "Avoid",
+      "verdict_note": "Structure is broken \u2014 no long setup regardless of score",
+      "vs_ma200_pct": -15.8,
+      "vs_ma50_pct": -7.5,
+      "week52_change_pct": -18.2,
+      "week52_high": 121.4,
+      "week52_low": 85.1
+    }
+  ],
+  "sector_concentration": {
+    "Energy": 1,
+    "Industrials": 1,
+    "Information Technology": 2
+  },
+  "tape": [
+    {
+      "avg": 61.0,
+      "date": "2026-09-02",
+      "regime_label": "Constructive",
+      "scores": {
+        "MU": 70.0,
+        "NVDA": 78.0,
+        "THIN": 55.0,
+        "XOM": 30.0
+      },
+      "slot": "Opening range",
+      "time": "10:00"
+    },
+    {
+      "avg": 69.8,
+      "date": "2026-09-02",
+      "regime_label": "Risk-On",
+      "scores": {
+        "MU": 72.5,
+        "NVDA": 76.7,
+        "THIN": 100,
+        "XOM": 30.2
+      },
+      "slot": "Midday",
+      "time": "12:30",
+      "top": "THIN"
+    }
+  ]
+}

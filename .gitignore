@@ -19,3 +19,13 @@ portfolio_state.json
 engine-config.json
 engine_sha
 *.html
+
+# Coverage artefacts
+.coverage
+htmlcov/
+
+# The run-artefact patterns above are deliberately broad, which swallowed the frozen
+# scanner fixtures — tests/fixtures/scan_data.json and scan_results_golden.json were
+# untracked while the suite passed locally and would have failed on a fresh clone.
+# Fixtures are source, not run output.
+!tests/fixtures/**
