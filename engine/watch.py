@@ -53,7 +53,9 @@ import argparse, json, os, sys, datetime as dt
 BASE = os.environ.get("SCAN_DIR") or os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, BASE)
 
-import pm            # quote parsing and the broker-divergence check, unchanged
+# ONLY these two names, deliberately (PM.md 12c). A bare `import pm` was here and
+# was never used — it handed this program every mutating function pm.py has, which
+# is exactly the surface a separate program exists to not have. Do not add one.
 from pm import quotes_to_prices, broker_divergence
 
 SESSIONS = {

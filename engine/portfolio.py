@@ -24,6 +24,13 @@ RULES = {
     "min_cash_reserve_pct": 15.0,
     "max_daily_loss_pct": 3.0,       # kill switch
     "min_score_to_propose": 60.0,
+    # A score is normalised to the evidence that WAS available, which keeps rows comparable
+    # — and means a row with one pillar and a near-perfect score in it normalises to ~100
+    # and outranks a fully-evidenced Strong Buy. scanner.py already caps such a row's
+    # VERDICT (MIN_COVERAGE_FOR_STRONG), but nothing capped its SIZE: conviction scales with
+    # score, so the row with the least evidence behind it was sized at maximum risk.
+    # Same number as the verdict cap, deliberately — one evidence bar, not two.
+    "min_coverage_to_propose": 70.0,
     # Exit / trim score thresholds. THE SINGLE SOURCE (M2): pm.py's exit pass reads these
     # rather than carrying its own copies of 45 and 55, which is how the two files drifted
     # apart in the first place. Scan Desk's advisory verdict and the manager's actual exit
@@ -263,6 +270,14 @@ def build_proposals(results, marked, rules=RULES, daily_pnl_pct=0.0):
             continue
         if r["verdict"] == "Avoid" or r["setup"] == "Broken Trend":
             continue
+        cov = r.get("coverage_pct")
+        if isinstance(cov, (int, float)) and not isinstance(cov, bool) \
+                and cov < rules["min_coverage_to_propose"]:
+            hard.append(f"Only {cov:.0f}% of the evidence base was available "
+                        f"({', '.join(r.get('missing_pillars') or []) or 'pillars missing'}) — "
+                        f"under the {rules['min_coverage_to_propose']:.0f}% floor. The score is "
+                        "normalised to what was there, so a thin row can outrank a complete "
+                        "one; it is not sized on that basis")
         if r.get("confidence") == "conflict":
             hard.append(f"Price sources disagree by {r.get('price_disagreement_pct')}% — "
                         "not tradeable until confirmed")

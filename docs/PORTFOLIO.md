@@ -98,13 +98,28 @@ as a computed correlation.
 | Max deployed | 85% (15% cash reserve) | `live.py` |
 | Daily loss halt | 3% | kill switch |
 | Min score to propose | 60 | Scan Desk |
+| Min coverage to propose | 70% of the evidence base | added 2026-09-02 |
 
 The 60-point floor assumes a **100-point evidence base**. Before coverage normalisation
 (2026-08-31) a scan with a dead source scored every name 15-20 points low and this gate
 silently blocked the entire book — it looked like "no setups today" rather than "no data
 today". Scores are now normalised to the pillars that had data, so the floor means what it
-says again. A row under 70% coverage is capped at Buy, which keeps thin evidence from
-sizing a full-conviction position.
+says again.
+
+**But normalisation cuts both ways, and the correction to that used to be wrong here.** This
+paragraph claimed a row under 70% coverage "is capped at Buy, which keeps thin evidence from
+sizing a full-conviction position." Only the first half was true. `scanner.py` caps such a
+row's **verdict**; nothing capped its **size**, and conviction scales with the *score*, not
+with the verdict. A row carrying trend data and nothing else — 24 of the 25 points that
+existed — normalises to ~100 and ranks **above** a fully-evidenced Strong Buy, and would have
+been sized at the maximum 2% risk on the thinnest evidence on the board. Found by the scanner
+test suite on 2026-09-02 (`test_a_thin_row_is_not_sized_on_a_normalised_score`).
+
+`min_coverage_to_propose` (70%, the same number as the verdict cap — one evidence bar, not
+two) now blocks such a row and names the missing pillars. It can only ever refuse. Today's
+scans run at 99% coverage even with the sentiment bundle detached, so it is not a gate that
+binds in normal operation; it is the guard against the pathological case, which is the only
+case where it was ever going to matter.
 
 **Hard blocks vs soft trims.** A hard block (sector limit, price conflict, cumulative risk, zero
 shares) stops the proposal. A soft trim (position cap, deployed cap) reduces size but the proposal
