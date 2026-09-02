@@ -27,10 +27,13 @@ health record — lives in a private claude.ai project and never appears here.
 | `engine/archive.py` | run identity, book fingerprints, when a run earns a frozen board |
 | `engine/config.py` | reads identifiers from the private `engine-config.json` |
 | `engine/paper_mirror.py` | projects the paper books into `portfolio.json` so Scan Desk sees the real book |
+| `engine/backtest.py` | replays the scoring model over historical bars into `validate.py`'s own record format |
+| `engine/fills.py` | the honest cost model — bid, ask, and gaps through a stop. Wired into nothing yet |
+| `engine/universe.py` | screens a stated index membership instead of retail attention. Wired into nothing yet |
 | `engine/history.py`, `validate.py` | the score trail and the weekly validation |
 | `engine/sentiment.py` | retail sentiment parsers (ApeWisdom, StockTwits, Reddit) |
 | `engine/render*.py` | the HTML boards |
-| `docs/` | the doctrine. `PM.md` governs; read it before changing anything in `engine/` |
+| `docs/` | the doctrine. `PM.md` governs; read it before changing anything in `engine/`. `BACKTEST.md` covers measuring the edge |
 
 ## How it runs
 

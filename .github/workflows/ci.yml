@@ -21,7 +21,7 @@ jobs:
           allowed = set(sys.stdlib_module_names) | {
               "archive", "portfolio", "config", "technicals", "sentiment",
               "scanner", "history", "pm", "render", "render_pm", "render_portfolio",
-              "validate", "watch"}
+              "validate", "watch", "paper_mirror", "backtest", "fills", "universe"}
           bad = []
           for p in pathlib.Path("engine").glob("*.py"):
               for node in ast.walk(ast.parse(p.read_text())):
