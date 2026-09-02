@@ -7,9 +7,16 @@ import json
 import subprocess
 import sys
 
+from conftest import ENGINE
+
 
 def _cli(run_dir, *args):
-    return subprocess.run([sys.executable, "pm.py", *args], cwd=run_dir,
+    """Drive the real engine/pm.py the way a scheduled slot does.
+
+    The module is invoked from the repo, not from a copy in the run directory: the run
+    directory holds STATE. pm.py resolves every path from $SCAN_DIR, so this is the same
+    contract a real run has, and it keeps one executable copy of the engine."""
+    return subprocess.run([sys.executable, str(ENGINE / "pm.py"), *args], cwd=run_dir,
                           capture_output=True, text=True,
                           env={"SCAN_DIR": str(run_dir), "PATH": "/usr/bin:/bin"})
 

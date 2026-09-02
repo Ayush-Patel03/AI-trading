@@ -24,7 +24,12 @@ FILL MODEL (paper) — deliberately pessimistic, see PM.md
     against itself on purpose.
   * Exits are marketable and fill in the same run, at price less
     exit_slippage_pct. Protection must not sit unfilled.
-  * Targets rest as sell limits and fill at the target when price >= target.
+  * Targets do NOT rest as sell limits (M2/M3, corrected 2026-09-02). When the slot
+    price is at or through the 3R target the scale-out fires as a MARKETABLE sale at
+    the slot price less exit_slippage_pct, exactly like any other exit. That is more
+    conservative than a limit filled at the target, not less — but the docstring used
+    to claim the limit, and code and doctrine disagreeing is how a future change goes
+    wrong. PM.md section 3 says the same thing in the same words.
   * The book observes four prices a day, not a tape. It misses intraday
     touches in both directions. Never present paper results as backtest-grade.
 
@@ -95,6 +100,14 @@ PM_RULES = {
     "scale_out_pct": 50.0,          # sell half when the 3R target prints
     "trim_pct": 33.0,               # sell a third on a `trim` rating
     "max_trims_before_exit": 2,     # a name trimmed twice and still weak is closed, not nibbled
+    # Rebalance discipline (2026-09-02). Trim has been capped at once per session since day
+    # one, and PM.md gives the reason: "the manager nibbles the same losing position every
+    # slot and calls it risk management." rebalance_pass had no equivalent guard and nibbled
+    # the WINNING position instead — NVDA was shaved four times on 2026-09-02 for a combined
+    # $0.86. Same reasoning, opposite sign. Two guards, because they stop different things:
+    "max_rebalances_per_session": 1,  # count: stop the every-slot shave of one name
+    "rebalance_deadband_pct": 1.5,    # size: a name oscillating around 15.0% is not a breach.
+                                      # Trigger above cap + deadband; still trim back to the cap.
     "pdt_max_day_trades": 3,        # FINRA: 3 per 5 rolling business days under $25k
     "pdt_window_business_days": 5,
     "pdt_reserve": 1,               # keep one day trade back as an exit hatch
@@ -276,9 +289,18 @@ def broker_divergence(payload, book):
     precisely so a hand trade or a funding event gets NOTICED. PM.md promises that a
     divergence 'is reported, never quietly reconciled'; this is the mechanism behind
     the promise (STATE-02). Warn-only: it never mutates the book, and a malformed
-    payload contributes nothing rather than crashing the run."""
-    rows = (((payload or {}).get("data") or {}).get("results")
-            or (payload or {}).get("results") or [])
+    payload contributes nothing rather than crashing the run.
+
+    The positions key is `data.positions`, NOT `data.results` (2026-09-02). This parser
+    originally read `results` — the shape `get_equity_quotes` returns — which it appears to
+    have inherited from the quote parser directly above. The effect was that a real live
+    holding produced no warning at all and the run reported "no divergence": exactly the
+    "checked and clean" / "never actually checked" collision COVER-01 removed for the
+    sentinel. Both keys are accepted now so an older staged payload still parses."""
+    d = payload or {}
+    data = d.get("data") if isinstance(d.get("data"), dict) else {}
+    rows = (data.get("positions") or data.get("results")
+            or d.get("positions") or d.get("results") or [])
     warns = []
     for row in rows:
         if not isinstance(row, dict):
@@ -553,6 +575,7 @@ def _apply_buy(book, sym, shares, price, meta, today, jrn, reason):
             "atr_14": meta.get("atr_14"), "atr_pct": meta.get("atr_pct"),
             "stop_pct": meta.get("stop_pct"),
             "entry_score": meta.get("score"), "trim_count": 0, "last_trim_date": None,
+            "rebalance_count": 0, "last_rebalance_date": None,
             "gics": meta.get("gics"), "industry": meta.get("industry"),
             "thesis": meta.get("thesis"), "scaled_out": False,
             "high_water": round(price, 6), "last_price": round(price, 6),
@@ -711,7 +734,7 @@ def exit_pass(book, pb, scan_by_tk, today, equity, jrn):
         elif r and r.get("setup") == "Broken Trend":
             action, want = "thesis", pos["shares"]
             detail = f"Setup is now Broken Trend — below the 200-day, score {r.get('score', 0):.0f}"
-        elif r and r.get("score") is not None and r["score"] < 45:
+        elif r and r.get("score") is not None and r["score"] < RULES["exit_score_below"]:
             action, want = "thesis", pos["shares"]
             detail = f"Score fell to {r['score']:.0f} — the thesis that bought it is gone"
         elif pos.get("target") and px >= pos["target"] and not pos.get("scaled_out"):
@@ -726,7 +749,8 @@ def exit_pass(book, pb, scan_by_tk, today, equity, jrn):
             action = "target"
         else:
             why = None
-            if r and r.get("score") is not None and 45 <= r["score"] < 55:
+            if (r and r.get("score") is not None
+                    and RULES["exit_score_below"] <= r["score"] < RULES["trim_score_below"]):
                 why = f"Score {r['score']:.0f} — weakening"
             elif r and r.get("upside_pct") is not None and r["upside_pct"] < 0:
                 why = f"Trading {r['upside_pct']:+.1f}% through the analyst target"
@@ -788,12 +812,28 @@ def exit_pass(book, pb, scan_by_tk, today, equity, jrn):
 def rebalance_pass(book, pb, today, equity, jrn, house=None):
     slip = 1 - PM_RULES["exit_slippage_pct"] / 100
     cap = equity * RULES["max_position_pct"] / 100
+    # Trigger above the cap PLUS the deadband; trim back to the cap itself. The cap is
+    # still the cap — the deadband only decides when a breach is worth acting on.
+    trigger = equity * (RULES["max_position_pct"] + PM_RULES["rebalance_deadband_pct"]) / 100
     for pos in list(book.get("positions", [])):
         px = tradeable(pb, pos["symbol"])
         if px is None:
             continue
         val = px * pos["shares"]
         if val <= cap:
+            continue
+        pct = val / equity * 100 if equity else 0.0
+        if val <= trigger:
+            jrn["skipped"].append({"symbol": pos["symbol"], "reason":
+                                   f"{pct:.1f}% of equity, over the "
+                                   f"{RULES['max_position_pct']:.0f}% cap but inside the "
+                                   f"{PM_RULES['rebalance_deadband_pct']:.1f}pt rebalance "
+                                   "deadband — a price wobble is not a breach"})
+            continue
+        if pos.get("last_rebalance_date") == today.isoformat():
+            jrn["skipped"].append({"symbol": pos["symbol"], "reason":
+                                   f"{pct:.1f}% of equity and over the cap, but it was already "
+                                   "rebalanced today — one rebalance per name per session"})
             continue
         excess = _round_shares((val - cap) / px)
         if excess <= 0 or excess * px < RULES["min_notional"]:
@@ -805,8 +845,14 @@ def rebalance_pass(book, pb, today, equity, jrn, house=None):
                                              + (note or "blocked")})
             continue
         _apply_sell(book, pos["symbol"], sellable, round(px * slip, 4), today, jrn, "rebalance",
-                    f"Position was {val / equity * 100:.1f}% of equity, over the "
+                    f"Position was {pct:.1f}% of equity, over the "
                     f"{RULES['max_position_pct']:.0f}% cap")
+        # Book the rebalance on the surviving position, not on the stale loop variable —
+        # _apply_sell drops a position it closes out entirely.
+        live = next((p for p in book["positions"] if p["symbol"] == pos["symbol"]), None)
+        if live is not None:
+            live["rebalance_count"] = live.get("rebalance_count", 0) + 1
+            live["last_rebalance_date"] = today.isoformat()
     counts = {}
     for p in book.get("positions", []):
         counts[p.get("gics")] = counts.get(p.get("gics"), 0) + 1
@@ -1245,6 +1291,7 @@ def run(book, scan, prices_override, slot, now_iso, mode):
                 "scan_stale": scan_stale, "positions": len(book["positions"]),
                 "working_orders": len(book["working_orders"])})
 
+    _basis = pf_mod.capital_basis(book)
     state = {
         "generated": jrn["ts"], "mode": mode, "slot": slot, "date": jrn["date"],
         "engine_sha": jrn["engine_sha"],
@@ -1255,9 +1302,15 @@ def run(book, scan, prices_override, slot, now_iso, mode):
                  "deployed_pct": round(marked["invested"] / marked["equity"] * 100, 2)
                  if marked["equity"] else 0.0,
                  "realized_pnl": round(book["realized_pnl"], 2),
-                 "starting_equity": book.get("starting_equity", marked["equity"]),
-                 "total_return_pct": round((marked["equity"] / book["starting_equity"] - 1) * 100, 2)
-                 if book.get("starting_equity") else 0.0,
+                 # M4: the return is measured against the capital actually put in — the
+                 # seed PLUS every recorded deposit — not against a seed that stopped
+                 # describing the book the moment it was funded.
+                 "starting_equity": _basis or book.get("starting_equity", marked["equity"]),
+                 "seed_equity": book.get("starting_equity"),
+                 "deposits_total": round((_basis or 0.0) - (book.get("starting_equity") or 0.0), 2)
+                 if _basis else 0.0,
+                 "total_return_pct": round((marked["equity"] / _basis - 1) * 100, 2)
+                 if _basis else 0.0,
                  "open_equity": book["day"].get("open_equity"),
                  "daily_pnl_pct": jrn["daily_pnl_pct"],
                  "halted": bool(book["day"].get("halted")),
@@ -1292,9 +1345,28 @@ def run(book, scan, prices_override, slot, now_iso, mode):
 
 
 # ------------------------------------------------------------------ CLI
+def _in_base(path):
+    """Resolve a caller-supplied filename inside the run directory, or None (M5).
+
+    Every input a run reads is staged into $SCAN_DIR by the caller, so a path that
+    resolves outside it is a caller mistake, not a feature. `os.path.join` silently
+    honours an absolute path and `..` walks out, so the old code would happily read —
+    or, more often, crash on — a file the run never staged. None means "treat it as
+    absent", which every caller already handles."""
+    if not isinstance(path, str) or not path:
+        return None
+    base = os.path.realpath(BASE)
+    p = os.path.realpath(os.path.join(base, path))
+    if p == base or p.startswith(base + os.sep):
+        return p
+    print(f"NOTE: refusing {path!r} — it resolves outside the run directory; treated as absent.",
+          file=sys.stderr)
+    return None
+
+
 def _load(path, default=None):
-    p = os.path.join(BASE, path)
-    if not os.path.exists(p):
+    p = _in_base(path)
+    if p is None or not os.path.exists(p):
         return default
     with open(p) as f:
         return json.load(f)

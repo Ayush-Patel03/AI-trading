@@ -19,9 +19,15 @@ def run_dir(tmp_path, monkeypatch):
     Mirrors what the clone step produces, so a test exercises the same layout a real
     scheduled run does.
     """
-    for f in ENGINE.iterdir():
-        if f.suffix in (".py", ".json"):
-            shutil.copy(f, tmp_path / f.name)
+    # Stage DATA only, never the modules. pm.py does `sys.path.insert(0, BASE)` at import,
+    # so a copy of pm.py in the run directory becomes the module `importlib.reload` picks
+    # up — and every test then executed a throwaway file under /tmp instead of engine/pm.py.
+    # The suite passed either way (the bytes are identical), but coverage attributed every
+    # line to fifteen different temp paths and reported 5% for a module the tests exercise
+    # heavily. Data staging is what a real run does; module staging is what the clone does,
+    # and sys.path already points at engine/.
+    for f in ENGINE.glob("*.json"):
+        shutil.copy(f, tmp_path / f.name)
     for name, dest in (("book_swing.json", "paper_book.json"),
                        ("book_pullback.json", "paper_book_pullback.json"),
                        ("book_momentum.json", "paper_book_momentum.json")):

@@ -24,6 +24,12 @@ RULES = {
     "min_cash_reserve_pct": 15.0,
     "max_daily_loss_pct": 3.0,       # kill switch
     "min_score_to_propose": 60.0,
+    # Exit / trim score thresholds. THE SINGLE SOURCE (M2): pm.py's exit pass reads these
+    # rather than carrying its own copies of 45 and 55, which is how the two files drifted
+    # apart in the first place. Scan Desk's advisory verdict and the manager's actual exit
+    # must never disagree about when a thesis is gone.
+    "exit_score_below": 45.0,     # below this the thesis that bought it is gone — close
+    "trim_score_below": 55.0,     # between the two it is weakening — trim, do not close
     "atr_stop_multiple": 1.5,     # repo uses 1.2x; 1.5x for a multi-day swing hold
     "max_stop_pct": 12.0,         # never risk more than this per share, however wide the ATR
     "min_stop_pct": 3.0,          # never place a stop inside normal daily noise
@@ -31,6 +37,31 @@ RULES = {
     "min_notional": 1.00,        # Robinhood's minimum fractional order
     "share_decimals": 6,
 }
+
+def capital_basis(book):
+    """What was actually put in — the seed plus every later deposit (M4).
+
+    `starting_equity` is set once when a book is seeded and never moves. Fund the account
+    afterwards and the return is measured against a basis that no longer describes the
+    capital at work: deposit $5,000 into a $5,000 book and it reports +100% having earned
+    nothing. A book records funding as `deposits: [{date, amount}]`; withdrawals are the
+    same list with a negative amount.
+
+    Returns None when the book was never seeded, so a caller can report no return rather
+    than a fabricated one."""
+    seed = (book or {}).get("starting_equity")
+    if not isinstance(seed, (int, float)) or isinstance(seed, bool) or seed <= 0:
+        return None
+    added = 0.0
+    for d in (book.get("deposits") or []):
+        if not isinstance(d, dict):
+            continue
+        amt = d.get("amount")
+        if isinstance(amt, (int, float)) and not isinstance(amt, bool):
+            added += float(amt)
+    basis = float(seed) + added
+    return basis if basis > 0 else None
+
 
 # ---- sizing: verbatim logic from src/execution/position_sizing.py ----
 def calculate_position_size(portfolio_value, entry_price, stop_loss_price, max_risk_pct=2.0,
@@ -184,9 +215,9 @@ def review_holdings(marked, results):
             continue
         if r["setup"] == "Broken Trend":
             st, note = "exit", f"Setup is now Broken Trend (below the 200-day) — score {r['score']:.0f}"
-        elif r["score"] < 45:
+        elif r["score"] < RULES["exit_score_below"]:
             st, note = "exit", f"Score fell to {r['score']:.0f} — thesis no longer supported"
-        elif r["score"] < 55:
+        elif r["score"] < RULES["trim_score_below"]:
             st, note = "trim", f"Score {r['score']:.0f} — weakening, consider reducing"
         elif r.get("upside_pct") is not None and r["upside_pct"] < 0:
             st, note = "trim", f"Trading above the analyst target ({r['upside_pct']:+.1f}%)"
