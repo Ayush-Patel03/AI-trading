@@ -31,6 +31,8 @@ runs wherever it is copied.
 import json, os, sys
 from datetime import date, datetime
 
+import config
+
 BASE = os.environ.get("SCAN_DIR") or os.path.dirname(os.path.abspath(__file__))
 if BASE not in sys.path:
     sys.path.insert(0, BASE)
@@ -728,6 +730,9 @@ def scan(data):
     meta["coverage_avg"] = (round(sum(r["coverage_pct"] for r in rows) / len(rows), 0)
                             if rows else 0)
     meta["dropped"] = sorted(skipped)
+    # Which commit of the engine produced this scan. Written by the clone step as
+    # $SCAN_DIR/engine_sha; None when the engine was not run from a repo.
+    meta["engine_sha"] = config.engine_sha()
 
     return {"meta": meta, "ipo": data.get("ipo"), "insider_panel": data.get("insider"),
             "sector_concentration": dict(conc),

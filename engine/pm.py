@@ -1222,6 +1222,10 @@ def run(book, scan, prices_override, slot, now_iso, mode):
     jrn["run_id"] = archive.pm_run_id(jrn["date"], slot, jrn["ts"]) + DESK["suffix"]
     jrn["book_revision"] = book["revision"]
     jrn["book_fingerprint"] = archive.book_fingerprint(book)
+    # Which commit of the engine took this decision. Written by the clone step as
+    # $SCAN_DIR/engine_sha; None when the engine was not run from a repo.
+    import config
+    jrn["engine_sha"] = config.engine_sha()
     # HOUSE-01 — a compact record on every entry, so the weekly review can read combined
     # exposure out of the journal without reconstructing three books.
     jrn["house"] = ({"equity": house["equity"], "desks": house["desk_count"],
@@ -1243,6 +1247,7 @@ def run(book, scan, prices_override, slot, now_iso, mode):
 
     state = {
         "generated": jrn["ts"], "mode": mode, "slot": slot, "date": jrn["date"],
+        "engine_sha": jrn["engine_sha"],
         "desk": DESK["name"], "sentinel": sentinel,
         "account": book.get("mirrors", {}),
         "book": {"equity": marked["equity"], "cash": marked["cash"],
