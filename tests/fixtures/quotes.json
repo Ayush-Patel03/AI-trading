@@ -1,0 +1,190 @@
+{
+  "data": {
+    "results": [
+      {
+        "quote": {
+          "symbol": "MU",
+          "last_trade_price": "941.900000",
+          "venue_last_trade_time": "2026-09-02T14:34:24Z",
+          "last_non_reg_trade_price": null,
+          "venue_last_non_reg_trade_time": null,
+          "adjusted_previous_close": "933.440000",
+          "previous_close": "933.440000",
+          "previous_close_date": "2026-09-01",
+          "bid_price": "941.620000",
+          "venue_bid_time": "2026-09-02T14:34:24Z",
+          "ask_price": "942.100000",
+          "venue_ask_time": "2026-09-02T14:34:24Z",
+          "has_traded": true,
+          "state": "active"
+        },
+        "close": {
+          "symbol": "MU",
+          "date": "2026-09-01",
+          "price": "933.44"
+        }
+      },
+      {
+        "quote": {
+          "symbol": "SNDK",
+          "last_trade_price": "1526.540000",
+          "venue_last_trade_time": "2026-09-02T14:34:24Z",
+          "last_non_reg_trade_price": null,
+          "venue_last_non_reg_trade_time": null,
+          "adjusted_previous_close": "1536.870000",
+          "previous_close": "1536.870000",
+          "previous_close_date": "2026-09-01",
+          "bid_price": "1525.340000",
+          "venue_bid_time": "2026-09-02T14:34:24Z",
+          "ask_price": "1526.860000",
+          "venue_ask_time": "2026-09-02T14:34:24Z",
+          "has_traded": true,
+          "state": "active"
+        },
+        "close": {
+          "symbol": "SNDK",
+          "date": "2026-09-01",
+          "price": "1536.87"
+        }
+      },
+      {
+        "quote": {
+          "symbol": "NVDA",
+          "last_trade_price": "222.255000",
+          "venue_last_trade_time": "2026-09-02T14:34:24Z",
+          "last_non_reg_trade_price": null,
+          "venue_last_non_reg_trade_time": null,
+          "adjusted_previous_close": "217.440000",
+          "previous_close": "217.440000",
+          "previous_close_date": "2026-09-01",
+          "bid_price": "222.240000",
+          "venue_bid_time": "2026-09-02T14:34:24Z",
+          "ask_price": "222.270000",
+          "venue_ask_time": "2026-09-02T14:34:24Z",
+          "has_traded": true,
+          "state": "active"
+        },
+        "close": {
+          "symbol": "NVDA",
+          "date": "2026-09-01",
+          "price": "217.44"
+        }
+      },
+      {
+        "quote": {
+          "symbol": "HOOD",
+          "last_trade_price": "106.565000",
+          "venue_last_trade_time": "2026-09-02T14:34:24Z",
+          "last_non_reg_trade_price": null,
+          "venue_last_non_reg_trade_time": null,
+          "adjusted_previous_close": "103.510000",
+          "previous_close": "103.510000",
+          "previous_close_date": "2026-09-01",
+          "bid_price": "106.540000",
+          "venue_bid_time": "2026-09-02T14:34:24Z",
+          "ask_price": "106.580000",
+          "venue_ask_time": "2026-09-02T14:34:24Z",
+          "has_traded": true,
+          "state": "active"
+        },
+        "close": {
+          "symbol": "HOOD",
+          "date": "2026-09-01",
+          "price": "103.51"
+        }
+      },
+      {
+        "quote": {
+          "symbol": "MRVL",
+          "last_trade_price": "206.135000",
+          "venue_last_trade_time": "2026-09-02T14:34:24Z",
+          "last_non_reg_trade_price": null,
+          "venue_last_non_reg_trade_time": null,
+          "adjusted_previous_close": "210.390000",
+          "previous_close": "210.390000",
+          "previous_close_date": "2026-09-01",
+          "bid_price": "206.100000",
+          "venue_bid_time": "2026-09-02T14:34:24Z",
+          "ask_price": "206.170000",
+          "venue_ask_time": "2026-09-02T14:34:24Z",
+          "has_traded": true,
+          "state": "active"
+        },
+        "close": {
+          "symbol": "MRVL",
+          "date": "2026-09-01",
+          "price": "210.39"
+        }
+      },
+      {
+        "quote": {
+          "symbol": "DELL",
+          "last_trade_price": "436.110000",
+          "venue_last_trade_time": "2026-09-02T14:34:24Z",
+          "last_non_reg_trade_price": null,
+          "venue_last_non_reg_trade_time": null,
+          "adjusted_previous_close": "425.000000",
+          "previous_close": "425.000000",
+          "previous_close_date": "2026-09-01",
+          "bid_price": "435.780000",
+          "venue_bid_time": "2026-09-02T14:34:24Z",
+          "ask_price": "436.340000",
+          "venue_ask_time": "2026-09-02T14:34:24Z",
+          "has_traded": true,
+          "state": "active"
+        },
+        "close": {
+          "symbol": "DELL",
+          "date": "2026-09-01",
+          "price": "425.0"
+        }
+      },
+      {
+        "quote": {
+          "symbol": "MDB",
+          "last_trade_price": "378.051900",
+          "venue_last_trade_time": "2026-09-02T14:34:24Z",
+          "last_non_reg_trade_price": null,
+          "venue_last_non_reg_trade_time": null,
+          "adjusted_previous_close": "434.210000",
+          "previous_close": "434.210000",
+          "previous_close_date": "2026-09-01",
+          "bid_price": "377.540000",
+          "venue_bid_time": "2026-09-02T14:34:24Z",
+          "ask_price": "378.090000",
+          "venue_ask_time": "2026-09-02T14:34:24Z",
+          "has_traded": true,
+          "state": "active"
+        },
+        "close": {
+          "symbol": "MDB",
+          "date": "2026-09-01",
+          "price": "434.21"
+        }
+      },
+      {
+        "quote": {
+          "symbol": "AVGO",
+          "last_trade_price": "402.100000",
+          "venue_last_trade_time": "2026-09-02T14:34:24Z",
+          "last_non_reg_trade_price": null,
+          "venue_last_non_reg_trade_time": null,
+          "adjusted_previous_close": "399.800000",
+          "previous_close": "399.800000",
+          "previous_close_date": "2026-09-01",
+          "bid_price": "402.050000",
+          "venue_bid_time": "2026-09-02T14:34:24Z",
+          "ask_price": "402.150000",
+          "venue_ask_time": "2026-09-02T14:34:24Z",
+          "has_traded": true,
+          "state": "active"
+        },
+        "close": {
+          "symbol": "AVGO",
+          "date": "2026-09-01",
+          "price": "399.8"
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "_what": "One-candidate scan fixture. conftest rewrites meta.scan_date to today so the 240-minute freshness gate and the macro gate behave deterministically. SCHW is Financials and is held by no desk, so it isolates the house caps from the per-desk sector cap (every desk sits at 3 Information Technology names in these books).",
+  "meta": {"scan_date": "2026-09-02", "time": "10:00", "slot": "opening range", "macro_events": []},
+  "results": [
+    {"ticker": "SCHW", "name": "Charles Schwab", "price": 92.40, "score": 78.0,
+     "setup": "Momentum", "verdict": "Strong Buy", "gics": "Financials",
+     "sector": "Financials", "industry": "Capital Markets", "rsi_14": 60.0,
+     "atr_14": 2.77, "atr_pct": 3.0, "ma_50": 87.78, "ma_200": 79.46,
+     "confidence": "ok", "upside_pct": 12.0, "analyst_target": 103.49,
+     "setup_note": "Price above both MAs with 50 over 200 — trend intact"}
+  ]
+}
