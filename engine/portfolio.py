@@ -191,8 +191,12 @@ def mark_portfolio(pf, prices):
                           "cost_basis": round(cost, 2),
                           "unrealized": round(mv - cost, 2),
                           "unrealized_pct": round((mv - cost) / cost * 100, 2) if cost else 0.0,
-                          "gics": prices.get(tk, {}).get("gics"),
-                          "industry": prices.get(tk, {}).get("industry"),
+                          # Fall back to the label the HOLDING carries. A name that dropped
+                          # out of today's scan universe used to lose its sector here and
+                          # then vanish from the sector count — the concentration gate went
+                          # blind on exactly the holdings it was meant to be watching.
+                          "gics": prices.get(tk, {}).get("gics") or h.get("gics"),
+                          "industry": prices.get(tk, {}).get("industry") or h.get("industry"),
                           "priced_from_scan": tk in prices})
     invested = sum(p["market_value"] for p in positions)
     cash = pf.get("cash", 0.0)

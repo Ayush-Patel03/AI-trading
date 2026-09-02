@@ -180,6 +180,9 @@ python3 sentiment.py --apewisdom apewisdom.json --stocktwits-trending st_trendin
                      --out sentiment.json --merge-into scan_data.json
 python3 scanner.py            # → scan_results.json + ranked console table
 # >>> HAND-OFF, IMMEDIATELY: project_write scan_results.json → claude/latest-scan.json  <<<
+# PAPER MIRROR (STATE-01): build portfolio.json from the paper books, so the panel and
+# its risk gates describe the book the manager actually holds — not the flat live account.
+python3 paper_mirror.py       # → portfolio.json  (exit 2 = refused; then skip portfolio.py)
 python3 portfolio.py          # → portfolio_state.json  (only if portfolio.json exists)
 python3 render.py             # → scan-desk.html
 # publish, then ARCHIVE (section 3b):
@@ -462,15 +465,20 @@ ever be opened.** Everything below was fixed the same evening, before the 2026-0
 - **9.1 options quotes 403** — partially routed around (§12), still needs the account change for
   a true straddle price. **9.3 openinsider egress** — replacement found (MarketBeat), the
   allowlist entry still needs an admin.
-- **STATE-01** — the Scan Desk portfolio panel reads `portfolio.json` (the live-account mirror,
-  $50 flat), not `claude/paper-book.json`. Once the paper book holds positions the panel is
-  fiction and the scan keeps proposing names the manager already holds. Fix: have the scan build
-  `portfolio.json` from `paper-book.json` while the mode is paper, labelled PAPER. Not done.
-- **M2** — exit thresholds 45/55 are hardcoded in both `pm.py` and `portfolio.py`; change one and
-  they drift. **M3** — `pm.py` never creates a resting sell limit, so targets actually fill at
-  market with 0.25% slippage, not at the target as PM.md §3 says. **M4** — `starting_equity`
-  never updates when the account is funded. **M5** — `_load()` accepts an absolute path that
-  escapes `SCAN_DIR` and then crashes rather than falling back.
+- ~~**STATE-01** — the Scan Desk portfolio panel reads the live-account mirror, not the paper
+  books.~~ **Fixed 2026-09-02.** `engine/paper_mirror.py` projects all three paper books into
+  `portfolio.json` before `portfolio.py` runs, labelled PAPER throughout. The panel, the sector
+  cap, the max-position count and the deployed-room budget now describe the book the system
+  really holds. It **refuses** (exit 2, writes nothing) when no book is staged or when any book
+  is not in paper mode — an invented panel is worse than the old one. `mark_portfolio` also
+  falls back to the holding's own GICS label, so a name that drops out of the scan universe no
+  longer vanishes from the sector count.
+- ~~**M2**–**M5**~~ **All four closed 2026-09-02.** The 45/55 exit and trim thresholds are now
+  `portfolio.RULES["exit_score_below"]` / `["trim_score_below"]`, read by both modules, with a
+  static test forbidding the literals returning. `pm.py`'s docstring no longer claims targets
+  rest as sell limits — they fire as marketable sales, as PM.md §3 has always said. The reported
+  return is measured against `portfolio.capital_basis()` — the seed plus every recorded deposit.
+  `_load()` resolves inside `$SCAN_DIR` or reports the file absent.
 - The two **sentiment refresh** tasks were created from the trading-system repo's API and cannot
   be edited by an agent — the holiday guard is not on them. Their `_meta.generated_at` staleness
   is caught by the scan prompts instead. **The probe did not investigate why that bundle goes

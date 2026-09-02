@@ -250,6 +250,28 @@ nibbles the same losing position every slot and calls it risk management. This w
 behaviour in the first simulation: XOM trimmed four times in three days, each one a
 separate commission-free way of being wrong slowly.
 
+### Rebalance discipline — the same rule, opposite sign
+
+Trim was capped from day one; `rebalance_pass` was not, and it nibbled the **winning**
+position instead. On 2026-09-02 NVDA was rebalanced four times — three on swing, once on
+momentum — each time it crossed the 15% cap on a rising price. The amounts were trivial
+(0.039, 0.082, 0.007, 0.069 shares) and the combined P&L was **+$0.86**, so nothing was lost.
+At real size, four shaves a day on the one name that is working is a persistent drag, and it
+is the same failure the trim cap exists to prevent.
+
+Two guards, added 2026-09-02, because they stop different things:
+
+- **Count** — `max_rebalances_per_session` (1). A name rebalanced today is not rebalanced
+  again this session; the run journals why. The next session it is eligible again, because a
+  name that keeps running away from the cap on a later day is a real breach again.
+- **Size** — `rebalance_deadband_pct` (1.5). The trigger is cap + deadband, so a position
+  oscillating around 15.0% is left alone. **The cap is still the cap:** once it does fire, the
+  position is trimmed back to 15%, not to the trigger. The deadband decides *when* a breach is
+  worth acting on, never *what* the limit is.
+
+Both are preventive and neither is corrective: like every other cap here, they gate an action,
+they do not unwind a book that is already over.
+
 ---
 
 ## 3. The fill model — where paper flatters or slanders itself
@@ -264,10 +286,12 @@ session roll and the manager re-decides.
 **Exits are marketable and fill in the same run**, 0.25% against the book. Protection that
 can go unfilled is not protection.
 
-**Targets** — the doctrine says they rest as sell limits and fill at the target. The audit
-(M3) found that `pm.py` never actually creates a resting sell order: a target exit fires as
-a marketable sale at the slot price less 0.25%, like any other exit. That is *more*
-conservative than the description, not less, but read the P&L knowing it. Not yet fixed.
+**Targets do not rest as sell limits.** When the slot price is at or through the 3R target
+the scale-out fires as a marketable sale at the slot price less 0.25%, exactly like any
+other exit. That is *more* conservative than a limit filled at the target, not less — read
+the P&L knowing it. This paragraph used to describe a resting limit the engine never
+created (audit M3); **corrected 2026-09-02**, in the doctrine and in `pm.py`'s own
+docstring, so the two cannot drift again.
 
 Two biases follow, in opposite directions, and they do not cancel:
 
@@ -594,18 +618,24 @@ For the manager this matters in three places:
   Never present it as a correlation.
 - **No options, no crypto, no shorts.** Long equity only.
 - **Slippage is a flat 0.25%** on exits. It is a placeholder, not a measurement.
-- **Targets fill at market, not at the target** (audit M3) — see section 3.
+- **Targets fill at market, not at the target** — see section 3. The behaviour is unchanged
+  and deliberate; what changed on 2026-09-02 is that the doctrine and the code now say so in
+  the same words.
 - **Quotes are single-venue last prints.** Fine for a $50 book; on a thin name the bid/ask
   spread is a bigger cost than anything the model reasons about, and nothing here measures it.
 - **The manager cannot act between slots.** Everything it knows is up to four hours old
   by the time the next run corrects it.
-- **Scan Desk's portfolio panel does not know about the paper book** (audit STATE-01). The
-  scan reads `portfolio.json`, the live-account mirror, so once the paper book holds
-  positions the Scan Desk panel is fiction and the scan keeps proposing names the manager
-  already holds. The manager's own gates catch the double-entry; the scan's sector caps do
-  not. Not yet fixed.
-- **Exit thresholds 45/55 are duplicated** in `pm.py` and `portfolio.py` (audit M2);
-  `starting_equity` never updates on funding (M4); `_load()` accepts an absolute path (M5).
+- ~~**Scan Desk's portfolio panel does not know about the paper book** (audit STATE-01).~~
+  **Closed 2026-09-02.** `engine/paper_mirror.py` projects every paper book into
+  `portfolio.json` before the scan's portfolio pass, labelled PAPER, so the panel and its
+  sector caps describe the book the manager actually holds. It refuses to write rather than
+  publish an empty panel, and refuses outright once any book leaves paper mode.
+- ~~**Exit thresholds 45/55 are duplicated**; `starting_equity` never updates on funding;
+  `_load()` accepts an absolute path.~~ **M2, M4 and M5 closed 2026-09-02.** The thresholds
+  live once, in `portfolio.RULES`, and a static test forbids the literals coming back. The
+  reported return is measured against `portfolio.capital_basis()` — the seed plus every
+  entry in the book's `deposits` list — so funding the account no longer reports a return it
+  did not earn. `_load()` resolves inside `$SCAN_DIR` or reports the file absent.
 - **A frozen board is a snapshot of a decision, not of the market.** It shows the book as
   the manager saw it, at four prices a day. Section 3 still governs how to read the P&L on
   it, archived or live.

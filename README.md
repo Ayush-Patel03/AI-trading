@@ -26,6 +26,7 @@ health record — lives in a private claude.ai project and never appears here.
 | `engine/watch.py` | the read-only extended-session watch; no write path to a book, by construction |
 | `engine/archive.py` | run identity, book fingerprints, when a run earns a frozen board |
 | `engine/config.py` | reads identifiers from the private `engine-config.json` |
+| `engine/paper_mirror.py` | projects the paper books into `portfolio.json` so Scan Desk sees the real book |
 | `engine/history.py`, `validate.py` | the score trail and the weekly validation |
 | `engine/sentiment.py` | retail sentiment parsers (ApeWisdom, StockTwits, Reddit) |
 | `engine/render*.py` | the HTML boards |
