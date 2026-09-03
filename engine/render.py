@@ -320,6 +320,52 @@ ins_buy="".join(f'<tr><td class="mono">{e(str(x.get("ticker") or DASH))}</td>'
                 f'<td class="uw">{e(str(x.get("note") or ""))}</td></tr>'
                 for x in (insider.get("purchases") or []))
 ins_notes="".join(f"<li>{e(str(n))}</li>" for n in (insider.get("notes") or []))
+
+# --- RENDER-02: a panel with no rows must say it was not collected ---
+# With no `insider` key, this used to emit two tables with headers and an empty <tbody>,
+# which reads as "we looked and found no insider activity" when it means "this slot does no
+# insider work". The pre-market, opening-range and midday slots never collect insiders by
+# design (power hour owns them), so the false claim was on three boards out of four, every
+# day. Same for IPOs. This is the exact failure the skill's own honesty rules name.
+def _panel(title, body, empty, note):
+    if body:
+        return f'<section class="card panel"><h2>{e(title)}</h2>{body}</section>'
+    return (f'<section class="card panel"><h2>{e(title)}</h2>'
+            f'<p class="pnote-empty">{e(empty)}</p>'
+            f'<ul class="pnotes"><li>{e(note)}</li></ul></section>')
+
+_ipo_body = ""
+if ipo_up or ipo_rec or ipo_notes:
+    _ipo_body = (
+        '<div class="subh">Upcoming</div>'
+        '<div class="tablewrap"><table><thead><tr><th>Sym</th><th>Company</th><th>Range</th>'
+        f'<th>Date</th><th>Underwriters</th></tr></thead><tbody>{ipo_up}</tbody></table></div>'
+        '<div class="subh">Recent pricings &mdash; return from offer</div>'
+        '<div class="tablewrap"><table><thead><tr><th>Sym</th><th>Company</th><th>Offer</th>'
+        f'<th>Return</th></tr></thead><tbody>{ipo_rec}</tbody></table></div>'
+        f'<ul class="pnotes">{ipo_notes}</ul>')
+IPO_PANEL = _panel(
+    "IPO watch", _ipo_body,
+    "Not collected this slot.",
+    "The power-hour scan owns IPO work. An empty table here would read as "
+    "'no deals', which is a different claim from 'we did not look'.")
+
+_ins_body = ""
+if ins_cl or ins_buy or ins_notes:
+    _ins_body = (
+        '<div class="subh">Clusters &mdash; multiple insiders, same name</div>'
+        '<div class="tablewrap"><table><thead><tr><th>Sym</th><th>Filers</th><th>Side</th>'
+        f'<th>Value</th><th></th></tr></thead><tbody>{ins_cl}</tbody></table></div>'
+        '<div class="subh">Notable purchases</div>'
+        '<div class="tablewrap"><table><thead><tr><th>Sym</th><th>Insider</th><th>Value</th>'
+        f'<th></th></tr></thead><tbody>{ins_buy}</tbody></table></div>'
+        f'<ul class="pnotes">{ins_notes}</ul>')
+INSIDER_PANEL = _panel(
+    "Insider activity", _ins_body,
+    "Not collected this slot.",
+    "The power-hour scan owns Form 4 work. Carry the last slot's rows forward, each "
+    "labelled CARRIED FROM <slot>, rather than publishing an empty panel.")
+
 warn="".join(f"<li>{e(str(w))}</li>" for w in (meta.get("data_warnings") or []))
 srcs=" &middot; ".join(e(str(x)) for x in (meta.get("sources") or []))
 conc=R.get("sector_concentration",{})
@@ -650,22 +696,8 @@ footer ul{{margin:0;padding-left:18px}}
 {PORTF}
 
 <div class="panels">
- <section class="card panel">
-  <h2>IPO watch</h2>
-  <div class="subh">Upcoming</div>
-  <div class="tablewrap"><table><thead><tr><th>Sym</th><th>Company</th><th>Range</th><th>Date</th><th>Underwriters</th></tr></thead><tbody>{ipo_up}</tbody></table></div>
-  <div class="subh">Recent pricings &mdash; return from offer</div>
-  <div class="tablewrap"><table><thead><tr><th>Sym</th><th>Company</th><th>Offer</th><th>Return</th></tr></thead><tbody>{ipo_rec}</tbody></table></div>
-  <ul class="pnotes">{ipo_notes}</ul>
- </section>
- <section class="card panel">
-  <h2>Insider activity</h2>
-  <div class="subh">Clusters &mdash; multiple insiders, same name</div>
-  <div class="tablewrap"><table><thead><tr><th>Sym</th><th>Filers</th><th>Side</th><th>Value</th><th></th></tr></thead><tbody>{ins_cl}</tbody></table></div>
-  <div class="subh">Notable purchases</div>
-  <div class="tablewrap"><table><thead><tr><th>Sym</th><th>Insider</th><th>Value</th><th></th></tr></thead><tbody>{ins_buy}</tbody></table></div>
-  <ul class="pnotes">{ins_notes}</ul>
- </section>
+ {IPO_PANEL}
+ {INSIDER_PANEL}
 </div>
 
 <footer>
@@ -731,9 +763,14 @@ RIBBON_LIVE = (f'<div class="ribbon live"><span class="tag">Live board</span><sp
                f'This run also published a frozen copy, <b>{e(TITLE)}</b>, which will not '
                f'change. Completed slots in the tape above link to their own boards.'
                f'</span></div>')
+# The link is omitted when no board URL was staged. config.board_url() documents None as a
+# real answer — "a run without the config republishes nothing rather than forking a second
+# rolling board" — and this honours it instead of dying inside html.escape(None). RENDER-01,
+# found on the 2026-09-03 pre-market run, AFTER the scan had already succeeded.
+_live_link = (f' <a href="{e(str(LIVE))}">Open the live Scan Desk &rarr;</a>' if LIVE else "")
 RIBBON_SNAP = (f'<div class="ribbon snap"><span class="tag">Snapshot</span><span>'
                f'Frozen as it stood at <b>{e(LABEL)}</b>{_when}. This board will never '
-               f'update. <a href="{e(LIVE)}">Open the live Scan Desk &rarr;</a>'
+               f'update.{_live_link}'
                f'</span></div>')
 
 def _emit(path, title, ribbon):

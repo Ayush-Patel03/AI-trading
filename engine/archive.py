@@ -66,7 +66,16 @@ DEFAULT_KEEP = 40          # 10 trading days of four scans
 # Board URLs are identifiers and live in the PRIVATE engine-config.json, never here.
 # None is a valid answer: a run without the config republishes nothing rather than
 # creating a second rolling board.
-LIVE_BOARD_URL = None          # resolved via config.board_url("scan_desk")
+# Resolved from the PRIVATE engine-config.json staged into $SCAN_DIR — never a literal
+# in this repo. None when the config was not staged, and None is a real answer: a run
+# without it republishes nothing rather than forking a second rolling board.
+#
+# RENDER-01 (2026-09-03): this was a bare `None` that nothing ever resolved, so
+# render.py's `archive.LIVE_BOARD_URL` fallback was always None and the run died in
+# html.escape(None) AFTER the scan had succeeded. The migration moved the identifier
+# out and never wired the lookup back in; the equivalence proof compared pm_state.json
+# and could not have caught it.
+LIVE_BOARD_URL = config.board_url("scan_desk")
 
 
 def slugify(text):
@@ -269,7 +278,7 @@ PM_SLOTS = ("pre-market", "opening-range", "midday", "power-hour")
 PM_SLOT_LABELS = {"pre-market": "Pre-market", "opening-range": "Opening range",
                   "midday": "Midday", "power-hour": "Power hour", "ad-hoc": "Ad-hoc"}
 PM_CLOSE_SLOT = "power-hour"
-PM_BOARD_URL = None            # resolved via config.board_url("trade_desk")
+PM_BOARD_URL = config.board_url("trade_desk")   # same as above — see RENDER-01
 CLOSE_REASON = "close-of-day record of an open book"
 RERUN_REASON = "re-run of a slot whose board is already published"
 # Only the swing desk publishes boards (PM.md section 13), and the sentinel prompt is told

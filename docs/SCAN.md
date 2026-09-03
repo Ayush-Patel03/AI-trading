@@ -353,6 +353,31 @@ fourteen degraded-input variants.
 
 ---
 
+## 8b. Board defects found on the 2026-09-03 pre-market run — FIXED
+
+Both were found by a live run, after `scanner.py` had already succeeded, and both are the
+same class of failure: the board making a claim the run had not earned.
+
+- **RENDER-01 — `render.py` crashed instead of degrading when no board URL was staged.**
+  `archive.LIVE_BOARD_URL` was left as a bare `None` by the repo migration (the identifier
+  moved to the private `engine-config.json`) and nothing ever resolved it, so the snapshot
+  ribbon died in `html.escape(None)`. The scan and the hand-off survived; the board did not.
+  The migration's equivalence proof compared `pm_state.json` and could not have caught it.
+  **Fixed:** `archive.LIVE_BOARD_URL` / `PM_BOARD_URL` now resolve through
+  `config.board_url()` at import, and the ribbon omits the link when there is no URL —
+  which is what `config.board_url()` documented `None` to mean all along.
+- **RENDER-02 — an uncollected panel rendered as an empty one.** With no `insider_panel` in
+  `scan_results.json`, the board still emitted both tables with headers and an empty body,
+  which reads as *"we looked and found no insider activity"* when it means *"this slot does
+  no insider work"*. Pre-market, opening-range and midday never collect insiders by design,
+  so three boards out of four made the false claim every day. Same for IPOs. **Fixed:** an
+  empty panel now renders "Not collected this slot" and says which slot owns the work.
+
+`render.py` had no tests, which is why both shipped — it has no `__main__` guard, so
+importing it runs it, and that is now exactly how it is tested (`tests/test_render_panels.py`).
+
+---
+
 ## 9. LIVE DEFECTS — found at the 15:00 slot, 2026-08-31.
 
 ### 9.1 `get_option_quotes` returns HTTP 403 — the implied move cannot be computed. ROUTED AROUND 2026-09-01, still open at source.
