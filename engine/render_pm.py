@@ -749,7 +749,7 @@ if __name__ == "__main__":
     if not os.path.exists(src):
         print(f"FATAL: {src} not found", file=sys.stderr)
         sys.exit(2)
-    state = json.load(open(src))
+    state = json.load(open(src, encoding="utf-8"))
     if not isinstance(state.get("book"), dict):
         print("FATAL: pm_state.json has no book — refusing to publish an empty board",
               file=sys.stderr)
@@ -791,7 +791,7 @@ if __name__ == "__main__":
             print(f"REFUSING TO WRITE {path}: an unsubstituted @@ placeholder survived. "
                   "The template and the publish step have drifted apart.", file=sys.stderr)
             sys.exit(2)
-        with open(path, "w") as f:
+        with open(path, "w", encoding="utf-8") as f:
             f.write(doc)
         return len(doc)
 

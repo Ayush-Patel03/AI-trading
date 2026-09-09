@@ -26,7 +26,7 @@ def load(base=None):
     if base in _CACHE:
         return _CACHE[base]
     try:
-        with open(os.path.join(base, FILENAME)) as f:
+        with open(os.path.join(base, FILENAME), encoding="utf-8") as f:
             data = json.load(f)
         if not isinstance(data, dict):
             data = {}
@@ -58,7 +58,7 @@ def engine_sha(base=None):
     than stamped onto a decision.
     """
     try:
-        with open(os.path.join(_base(base), "engine_sha")) as f:
+        with open(os.path.join(_base(base), "engine_sha"), encoding="utf-8") as f:
             v = f.read().strip()
     except OSError:
         return None

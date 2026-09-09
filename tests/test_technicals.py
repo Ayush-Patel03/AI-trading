@@ -125,6 +125,6 @@ def test_the_shipped_quote_fixture_parses():
     import json
     import pathlib
     fix = pathlib.Path(__file__).parent / "fixtures" / "quotes.json"
-    got = t.quote_extras(json.loads(fix.read_text()))
+    got = t.quote_extras(json.loads(fix.read_text(encoding="utf-8")))
     assert got, "the captured connector payload produced no rows"
     assert all(v["price"] for v in got.values())

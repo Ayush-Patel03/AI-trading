@@ -21,7 +21,7 @@ def test_pm_carries_no_hardcoded_exit_thresholds():
 
     A comparison against a bare 45 or 55 in the exit pass is exactly the drift this
     finding was about, so it is caught statically rather than waited for."""
-    src = (ENGINE / "pm.py").read_text()
+    src = (ENGINE / "pm.py").read_text(encoding="utf-8")
     body = "\n".join(l for l in src.splitlines() if not l.lstrip().startswith("#"))
     offenders = re.findall(r'r\["score"\]\s*[<>=]+\s*(?:45|55)|(?:45|55)\s*<=\s*r\["score"\]', body)
     assert offenders == [], f"pm.py compares a score against a literal threshold: {offenders}"
@@ -30,9 +30,9 @@ def test_pm_carries_no_hardcoded_exit_thresholds():
 def test_the_exit_threshold_is_honoured_from_rules(run_dir, quotes, pm, monkeypatch, scan):
     """Move the rule and the engine's behaviour must move with it."""
     monkeypatch.setitem(pm.RULES, "exit_score_below", 95.0)
-    s = json.loads((run_dir / "scan_results.json").read_text())
+    s = json.loads((run_dir / "scan_results.json").read_text(encoding="utf-8"))
     s["results"] = [{"ticker": "NVDA", "score": 90.0, "setup": "Momentum", "price": 222.255}]
-    (run_dir / "scan_results.json").write_text(json.dumps(s))
+    (run_dir / "scan_results.json").write_text(json.dumps(s), encoding="utf-8")
     _, jrn, _ = run_pm(pm, run_dir, with_scan=True)
     exits = [d for d in jrn["decisions"]
              if d["symbol"] == "NVDA" and d.get("reason") == "thesis"]
@@ -82,11 +82,11 @@ def test_junk_in_the_deposits_list_is_ignored_not_fatal():
 def test_the_reported_return_is_measured_against_the_deposit_basis(run_dir, quotes, pm):
     """Deposit $5,000 into a $5,000 book that has earned nothing: the honest answer is 0%,
     not +100%."""
-    b = json.loads((run_dir / "paper_book.json").read_text())
+    b = json.loads((run_dir / "paper_book.json").read_text(encoding="utf-8"))
     equity = b["cash"] + sum(p["shares"] * p["avg_cost"] for p in b["positions"])
     b["starting_equity"] = round(equity / 2, 2)
     b["deposits"] = [{"date": "2026-09-02", "amount": round(equity / 2, 2)}]
-    (run_dir / "paper_book.json").write_text(json.dumps(b))
+    (run_dir / "paper_book.json").write_text(json.dumps(b), encoding="utf-8")
     _, _, state = run_pm(pm, run_dir)
     assert state["book"]["starting_equity"] == pytest.approx(equity, abs=1.0)
     assert state["book"]["seed_equity"] == pytest.approx(equity / 2, abs=1.0)

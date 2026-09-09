@@ -8,11 +8,11 @@ from conftest import run_pm
 
 
 def _break_stop(run_dir, symbol="NVDA", stop=240.00, book="paper_book.json"):
-    b = json.loads((run_dir / book).read_text())
+    b = json.loads((run_dir / book).read_text(encoding="utf-8"))
     for p in b["positions"]:
         if p["symbol"] == symbol:
             p["stop"] = stop
-    (run_dir / book).write_text(json.dumps(b))
+    (run_dir / book).write_text(json.dumps(b), encoding="utf-8")
 
 
 def test_stop_fires_and_closes_the_whole_position(pm, run_dir, quotes):
@@ -40,11 +40,11 @@ def test_a_position_with_no_fresh_price_is_reported_unprotected_not_sold(pm, run
 
 
 def test_target_scales_out_half_and_moves_the_stop_to_breakeven(pm, run_dir, quotes):
-    b = json.loads((run_dir / "paper_book.json").read_text())
+    b = json.loads((run_dir / "paper_book.json").read_text(encoding="utf-8"))
     for p in b["positions"]:
         if p["symbol"] == "NVDA":
             p["target"] = 200.00              # below the live print — target is through
-    (run_dir / "paper_book.json").write_text(json.dumps(b))
+    (run_dir / "paper_book.json").write_text(json.dumps(b), encoding="utf-8")
     book, jrn, _ = run_pm(pm, run_dir, slot="sentinel")
     d = [x for x in jrn["decisions"] if x["symbol"] == "NVDA"][0]
     assert d["reason"] == "target"

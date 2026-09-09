@@ -39,13 +39,13 @@ def run_dir(tmp_path, monkeypatch):
 @pytest.fixture
 def quotes(run_dir):
     """The frozen quote payload, restamped to now so the 30-minute age gate passes."""
-    payload = json.loads((FIX / "quotes.json").read_text())
+    payload = json.loads((FIX / "quotes.json").read_text(encoding="utf-8"))
     ts = dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     for row in payload["data"]["results"]:
         q = row["quote"]
         q["venue_last_trade_time"] = ts
         q["venue_bid_time"] = q["venue_ask_time"] = ts
-    (run_dir / "pm_quotes.json").write_text(json.dumps(payload))
+    (run_dir / "pm_quotes.json").write_text(json.dumps(payload), encoding="utf-8")
     return payload
 
 
@@ -67,8 +67,8 @@ def _fresh_scan_meta(s):
 @pytest.fixture
 def scan(run_dir):
     """A one-candidate scan, fresh by construction, so freshness and macro gates behave."""
-    s = _fresh_scan_meta(json.loads((FIX / "scan.json").read_text()))
-    (run_dir / "scan_results.json").write_text(json.dumps(s))
+    s = _fresh_scan_meta(json.loads((FIX / "scan.json").read_text(encoding="utf-8")))
+    (run_dir / "scan_results.json").write_text(json.dumps(s), encoding="utf-8")
     return s
 
 
@@ -89,18 +89,18 @@ def run_pm(pm, run_dir, slot="opening-range", book="paper_book.json", desk=None,
            with_scan=False, peers=True):
     """Drive one engine run the way a scheduled slot does."""
     if desk:
-        cfg = json.loads((run_dir / "desks.json").read_text())["desks"][desk]
+        cfg = json.loads((run_dir / "desks.json").read_text(encoding="utf-8"))["desks"][desk]
         pm.DESK.update({"name": desk, "filter": cfg.get("filter") or {}, "suffix": f"-{desk}"})
         book = cfg["book"]
     if peers:
         pm.load_peers("desks.json", pm.DESK["name"], book)
-    b = json.loads((run_dir / book).read_text())
+    b = json.loads((run_dir / book).read_text(encoding="utf-8"))
     prices = {}
     qpath = run_dir / "pm_quotes.json"
     if qpath.exists():
-        prices, _ = pm.quotes_to_prices(json.loads(qpath.read_text()), pm._now())
+        prices, _ = pm.quotes_to_prices(json.loads(qpath.read_text(encoding="utf-8")), pm._now())
     s = None
     spath = run_dir / "scan_results.json"
     if with_scan and spath.exists():
-        s = json.loads(spath.read_text())
+        s = json.loads(spath.read_text(encoding="utf-8"))
     return pm.run(b, s, prices, slot, None, "paper")

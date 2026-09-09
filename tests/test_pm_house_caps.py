@@ -38,7 +38,7 @@ def test_a_sector_breach_is_refused_and_names_the_sector(pm, run_dir, quotes, sc
 
 def test_a_single_name_breach_names_what_is_held_elsewhere(pm, run_dir, quotes):
     # HOOD is held on swing and momentum; enter it on pullback, which holds none.
-    s = json.loads((run_dir / "scan_results.json").read_text()) if (run_dir / "scan_results.json").exists() else None
+    s = json.loads((run_dir / "scan_results.json").read_text(encoding="utf-8")) if (run_dir / "scan_results.json").exists() else None
     hood = {"ticker": "HOOD", "name": "Robinhood Markets", "price": 106.565, "score": 78.0,
             "setup": "Pullback in Uptrend", "verdict": "Strong Buy", "gics": "Financials",
             "sector": "Financials", "industry": "Capital Markets", "rsi_14": 45.0,
@@ -47,7 +47,7 @@ def test_a_single_name_breach_names_what_is_held_elsewhere(pm, run_dir, quotes):
             "setup_note": "dip inside an uptrend"}
     from conftest import _fresh_scan_meta
     (run_dir / "scan_results.json").write_text(json.dumps(_fresh_scan_meta(
-        {"meta": {"slot": "opening range", "macro_events": []}, "results": [hood]})))
+        {"meta": {"slot": "opening range", "macro_events": []}, "results": [hood]})), encoding="utf-8")
     pm.PM_RULES["house_max_symbol_pct"] = 8.0          # HOOD already sits at 7.96%
     _, jrn, _ = run_pm(pm, run_dir, slot="opening-range", desk="pullback", with_scan=True)
     reasons = [s["reason"] for s in jrn["skipped"] if s["symbol"] == "HOOD"]

@@ -300,7 +300,7 @@ def main():
     ap.add_argument("--out")
     a = ap.parse_args()
 
-    raw = json.load(open(a.bars))
+    raw = json.load(open(a.bars, encoding="utf-8"))
     results = raw.get("data", {}).get("results") if isinstance(raw, dict) else raw
     if results is None:
         results = raw.get("results") if isinstance(raw, dict) else raw
@@ -309,7 +309,7 @@ def main():
 
     today_vol, fund_extra = {}, {}
     if a.fundamentals:
-        for r in _rows(json.load(open(a.fundamentals))):
+        for r in _rows(json.load(open(a.fundamentals, encoding="utf-8"))):
             if isinstance(r, dict) and r.get("symbol"):
                 s = r["symbol"].upper()
                 today_vol[s] = _f(r.get("volume"))
@@ -319,7 +319,7 @@ def main():
 
     quote_extra = {}
     if a.quotes:
-        quote_extra = quote_extras(json.load(open(a.quotes)))
+        quote_extra = quote_extras(json.load(open(a.quotes, encoding="utf-8")))
 
     out = {}
     for res in results:
@@ -349,7 +349,7 @@ def main():
 
     text = json.dumps(out, indent=2) + "\n"
     if a.out:
-        open(a.out, "w").write(text)
+        open(a.out, "w", encoding="utf-8").write(text)
     else:
         sys.stdout.write(text)
 

@@ -353,8 +353,8 @@ def build_proposals(results, marked, rules=RULES, daily_pnl_pct=0.0):
     return proposals, blocks
 
 if __name__ == "__main__":
-    R = json.load(open(os.path.join(BASE, "scan_results.json")))
-    pf = json.load(open(os.path.join(BASE, "portfolio.json")))
+    R = json.load(open(os.path.join(BASE, "scan_results.json"), encoding="utf-8"))
+    pf = json.load(open(os.path.join(BASE, "portfolio.json"), encoding="utf-8"))
     prices = {r["ticker"]: r for r in R["results"]}
     marked = mark_portfolio(pf, prices)
     reviewed = review_holdings(marked, R["results"])
@@ -363,7 +363,7 @@ if __name__ == "__main__":
     out = {"account": pf.get("account", {}), "marked": marked, "holdings": reviewed,
            "proposals": props, "blocks": blocks, "rules": RULES,
            "as_of": R["meta"]["scan_date"] + " " + str(R["meta"].get("time", ""))}
-    json.dump(out, open(os.path.join(BASE, "portfolio_state.json"), "w"), indent=2)
+    json.dump(out, open(os.path.join(BASE, "portfolio_state.json"), "w", encoding="utf-8"), indent=2)
 
     print(f"EQUITY ${marked['equity']:,.2f}  |  invested ${marked['invested']:,.2f} "
           f"({marked['deployed_pct']:.1f}%)  |  cash ${marked['cash']:,.2f} ({marked['cash_pct']:.1f}%)")

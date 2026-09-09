@@ -14,11 +14,11 @@ from conftest import run_pm
 
 
 def _resize(run_dir, symbol, shares, book="paper_book.json"):
-    b = json.loads((run_dir / book).read_text())
+    b = json.loads((run_dir / book).read_text(encoding="utf-8"))
     for p in b["positions"]:
         if p["symbol"] == symbol:
             p["shares"] = shares
-    (run_dir / book).write_text(json.dumps(b))
+    (run_dir / book).write_text(json.dumps(b), encoding="utf-8")
 
 
 def _rebalances(jrn, symbol="NVDA"):
@@ -57,7 +57,7 @@ def test_a_name_rebalanced_today_is_not_rebalanced_again(run_dir, quotes, pm):
     # Same session, next slot: push it back over the trigger and run again.
     book["positions"] = [dict(p, shares=4.0) if p["symbol"] == "NVDA" else p
                          for p in book["positions"]]
-    (run_dir / "paper_book.json").write_text(json.dumps(book))
+    (run_dir / "paper_book.json").write_text(json.dumps(book), encoding="utf-8")
     _, jrn2, _ = run_pm(pm, run_dir, slot="midday")
     assert _rebalances(jrn2) == [], "one rebalance per name per session"
     assert any("already rebalanced today" in s["reason"]
@@ -80,6 +80,6 @@ def test_a_new_session_may_rebalance_again(run_dir, quotes, pm):
     live = next(p for p in book["positions"] if p["symbol"] == "NVDA")
     live["last_rebalance_date"] = "2020-01-01"
     live["shares"] = 4.0
-    (run_dir / "paper_book.json").write_text(json.dumps(book))
+    (run_dir / "paper_book.json").write_text(json.dumps(book), encoding="utf-8")
     _, jrn2, _ = run_pm(pm, run_dir, slot="midday")
     assert len(_rebalances(jrn2)) == 1

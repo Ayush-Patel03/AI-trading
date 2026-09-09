@@ -435,7 +435,7 @@ def should_publish(jrn, book, prev_entry=None):
 def _load(path):
     if not path or path == "/dev/null" or not os.path.exists(path):
         return {}
-    with open(path) as fh:
+    with open(path, encoding="utf-8") as fh:
         text = fh.read().strip()
     return json.loads(text) if text else {}
 
@@ -444,7 +444,7 @@ def _results(path=None):
     p = path or os.path.join(BASE, "scan_results.json")
     if not os.path.exists(p):
         raise SystemExit(f"REFUSED: {p} does not exist. Run scanner.py first.")
-    return json.load(open(p))
+    return json.load(open(p, encoding="utf-8"))
 
 
 def main():
@@ -482,7 +482,7 @@ def main():
         # Written compact, not pretty. Four of these a day for ten days sit inside the
         # project's 2 MB knowledge budget only because they are not indented; indent=2
         # costs about 40% on a file this nested, for readability nothing actually reads.
-        json.dump(rec, open(out, "w"), separators=(",", ":"))
+        json.dump(rec, open(out, "w", encoding="utf-8"), separators=(",", ":"))
         size = os.path.getsize(out)
         print(f"record -> {out}  ({size:,} bytes, {rec['count']} rows)", file=sys.stderr)
         if size > 40_000:
@@ -496,7 +496,7 @@ def main():
 
     if a.history_entry:
         entry = history_entry(res, a.artifact_url)
-        json.dump(entry, open(a.history_entry, "w"), indent=2)
+        json.dump(entry, open(a.history_entry, "w", encoding="utf-8"), indent=2)
         print(f"history entry -> {a.history_entry}  ({entry['slot']}, {len(entry['scores'])} names)",
               file=sys.stderr)
 
@@ -521,7 +521,7 @@ def main():
         doc, pruned = merge_index(_load(a.current), index_row(rec), a.keep)
         text = json.dumps(doc, indent=2) + "\n"
         if a.out:
-            open(a.out, "w").write(text)
+            open(a.out, "w", encoding="utf-8").write(text)
         else:
             sys.stdout.write(text)
         print(f"index: {len(doc['runs'])} run(s), newest {doc['runs'][0]['run_id']}",

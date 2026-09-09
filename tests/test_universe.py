@@ -145,9 +145,9 @@ def test_every_excluded_name_carries_a_reason(uni):
 
 
 def test_the_cli_writes_a_universe_file(uni, run_dir):
-    (run_dir / "members.json").write_text(json.dumps({"index": "T", "symbols": ["AAA", "BBB"]}))
+    (run_dir / "members.json").write_text(json.dumps({"index": "T", "symbols": ["AAA", "BBB"]}), encoding="utf-8")
     assert uni.main(["--members", str(run_dir / "members.json"),
                      "--out", "universe.json"]) == 0
-    doc = json.loads((run_dir / "universe.json").read_text())
+    doc = json.loads((run_dir / "universe.json").read_text(encoding="utf-8"))
     assert doc["symbols"] == ["AAA", "BBB"]
     assert doc["index"] == "T"

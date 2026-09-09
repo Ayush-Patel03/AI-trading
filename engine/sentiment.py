@@ -587,7 +587,7 @@ def _load(path):
     if not os.path.exists(p):
         return None
     try:
-        with open(p) as fh:
+        with open(p, encoding="utf-8") as fh:
             return json.load(fh)
     except (json.JSONDecodeError, OSError):
         return None
@@ -614,7 +614,7 @@ def main(argv=None):
                 _load(a.reddit), _load(a.watchlists), _load(a.quotes),
                 options_scan=_load(a.opts), earnings_days=_load(a.edays))
     out = a.out if os.path.isabs(a.out) else os.path.join(BASE, a.out)
-    with open(out, "w") as fh:
+    with open(out, "w", encoding="utf-8") as fh:
         json.dump(res, fh, indent=2)
 
     m = res["_meta"]
@@ -632,7 +632,7 @@ def main(argv=None):
         else:
             sd, rep = merge_into_scan_data(sd, res)
             p = a.merge_into if os.path.isabs(a.merge_into) else os.path.join(BASE, a.merge_into)
-            with open(p, "w") as fh:
+            with open(p, "w", encoding="utf-8") as fh:
                 json.dump(sd, fh, indent=2)
             print(f"merged retail into {len(rep['merged'])} candidate(s); "
                   f"{len(rep['no_data'])} had no chatter"

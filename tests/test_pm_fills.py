@@ -20,7 +20,7 @@ def test_entry_fills_at_the_limit_on_a_later_run(pm, run_dir, quotes, scan):
     book, jrn1, _ = run_pm(pm, run_dir, slot="opening-range", with_scan=True)
     order = book["working_orders"][0]
     limit = order["limit_price"]
-    (run_dir / "paper_book.json").write_text(json.dumps(book))
+    (run_dir / "paper_book.json").write_text(json.dumps(book), encoding="utf-8")
     _, jrn2, _ = run_pm(pm, run_dir, slot="midday", with_scan=True)
     fills = [d for d in jrn2["decisions"] if d["action"] == "fill-buy"]
     assert fills, "a later slot must work the resting order"
@@ -39,10 +39,10 @@ def test_day_order_expires_at_the_session_roll(pm, run_dir, quotes, scan):
 
 def test_lapsed_thesis_cancels_instead_of_filling(pm, run_dir, quotes, scan):
     book, _, _ = run_pm(pm, run_dir, slot="opening-range", with_scan=True)
-    (run_dir / "paper_book.json").write_text(json.dumps(book))
-    lapsed = json.loads((run_dir / "scan_results.json").read_text())
+    (run_dir / "paper_book.json").write_text(json.dumps(book), encoding="utf-8")
+    lapsed = json.loads((run_dir / "scan_results.json").read_text(encoding="utf-8"))
     lapsed["results"][0]["score"] = 40.0          # under min_score_to_propose
-    (run_dir / "scan_results.json").write_text(json.dumps(lapsed))
+    (run_dir / "scan_results.json").write_text(json.dumps(lapsed), encoding="utf-8")
     _, jrn, _ = run_pm(pm, run_dir, slot="midday", with_scan=True)
     cancels = [d for d in jrn["decisions"] if d["action"] == "cancel"]
     assert cancels, "a thesis that lapsed before the fill must cancel"

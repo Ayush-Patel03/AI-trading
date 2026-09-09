@@ -149,7 +149,7 @@ def _median(xs):
 # ---------------------------------------------------------------- data
 def load_bars(path):
     """{TICKER: [(date, close), ...]} oldest first, from one response or a list of them."""
-    raw = json.load(open(path))
+    raw = json.load(open(path, encoding="utf-8"))
     blocks = raw if isinstance(raw, list) and raw and isinstance(raw[0], dict) and "symbol" not in raw[0] \
         else [raw]
     series = {}
@@ -180,7 +180,7 @@ def load_records(path):
     recs = []
     for fn in files:
         try:
-            r = json.load(open(fn))
+            r = json.load(open(fn, encoding="utf-8"))
         except (ValueError, OSError):
             continue
         if isinstance(r, dict) and r.get("results") and r.get("date"):
@@ -345,8 +345,8 @@ def main():
     res = analyse(obs, horizons)
     res["records_used"] = len(recs)
     res["tickers_without_bars"] = missing
-    json.dump(res, open(a.out, "w"), indent=2)
-    open(a.md, "w").write(markdown(res, horizons))
+    json.dump(res, open(a.out, "w", encoding="utf-8"), indent=2)
+    open(a.md, "w", encoding="utf-8").write(markdown(res, horizons))
     for h in horizons:
         H = res["horizons"][str(h)]
         s = H["score_vs_return"]

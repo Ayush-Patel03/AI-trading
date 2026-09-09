@@ -17,7 +17,7 @@ FIX = pathlib.Path(__file__).parent / "fixtures"
 
 
 def _scan():
-    doc = json.loads((FIX / "scan_results_golden.json").read_text())
+    doc = json.loads((FIX / "scan_results_golden.json").read_text(encoding="utf-8"))
     doc["meta"] = dict(doc.get("meta") or {}, slot="Pre-market", time="08:00")
     doc["meta"].pop("live_board_url", None)
     return doc
@@ -30,7 +30,7 @@ def _render(run_dir, scan=None, live_url=None, extra=None):
         doc["meta"]["live_board_url"] = live_url
     if extra:
         doc.update(extra)
-    (run_dir / "scan_results.json").write_text(json.dumps(doc))
+    (run_dir / "scan_results.json").write_text(json.dumps(doc), encoding="utf-8")
     sys.modules.pop("render", None)
     sys.modules.pop("archive", None)
     import archive           # noqa: F401  — reload it under this run dir too
@@ -40,8 +40,8 @@ def _render(run_dir, scan=None, live_url=None, extra=None):
     # Two boards per run: the rolling one that keeps the bookmarked URL current, and the
     # frozen per-run snapshot. Only the snapshot carries the "open the live board" link.
     snaps = [f for f in run_dir.glob("scan-desk-*.html")]
-    return ((run_dir / "scan-desk.html").read_text(),
-            snaps[0].read_text() if snaps else "")
+    return ((run_dir / "scan-desk.html").read_text(encoding="utf-8"),
+            snaps[0].read_text(encoding="utf-8") if snaps else "")
 
 
 # ------------------------------------------------------------------ RENDER-01
@@ -65,7 +65,7 @@ def test_the_link_appears_when_a_url_is_staged(run_dir):
 def test_the_url_is_resolved_from_the_private_config(run_dir):
     """The identifier lives in engine-config.json, staged at run time — never in this repo."""
     (run_dir / "engine-config.json").write_text(json.dumps(
-        {"boards": {"scan_desk": "https://example.invalid/from-config"}}))
+        {"boards": {"scan_desk": "https://example.invalid/from-config"}}), encoding="utf-8")
     _, html = _render(run_dir)
     assert "https://example.invalid/from-config" in html, \
         "archive.LIVE_BOARD_URL must resolve through config.board_url()"

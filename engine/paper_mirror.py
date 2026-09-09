@@ -41,7 +41,7 @@ MODE_LOCK = ("This mirror is built from PAPER books. It must never be used to de
 
 def _load(name, default=None):
     try:
-        with open(os.path.join(BASE, name)) as f:
+        with open(os.path.join(BASE, name), encoding="utf-8") as f:
             return json.load(f)
     except (OSError, ValueError):
         return default
@@ -156,7 +156,7 @@ def main(argv=None):
     if note:
         print(f"NOTE: {note} — the mirror covers only the books that were staged.",
               file=sys.stderr)
-    with open(os.path.join(BASE, a.out), "w") as f:
+    with open(os.path.join(BASE, a.out), "w", encoding="utf-8") as f:
         json.dump(mirror, f, indent=2)
     invested = sum((p["last_price"] or p["avg_cost"]) * p["shares"] for p in mirror["positions"])
     print(f"PAPER MIRROR  {a.out}  |  {len(mirror['desks'])} desk(s): "

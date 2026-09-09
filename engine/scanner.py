@@ -773,7 +773,7 @@ if __name__ == "__main__":
     import shutil
     import archive
     src = sys.argv[1] if len(sys.argv) > 1 else os.path.join(BASE, "scan_data.json")
-    out = scan(json.load(open(src)))
+    out = scan(json.load(open(src, encoding="utf-8")))
     # Every run owns its own file names. The unstamped scan_results.json stays as the
     # "latest" copy the rest of the pipeline reads; the stamped copy is the one that is
     # still here after the next slot runs. The input is snapshotted too, so a board can
@@ -781,8 +781,8 @@ if __name__ == "__main__":
     rid = archive.run_id(out["meta"])
     out["meta"]["run_id"] = rid
     fn = archive.files_for(rid)
-    json.dump(out, open(os.path.join(BASE, "scan_results.json"), "w"), indent=2)
-    json.dump(out, open(os.path.join(BASE, fn["results"]), "w"), indent=2)
+    json.dump(out, open(os.path.join(BASE, "scan_results.json"), "w", encoding="utf-8"), indent=2)
+    json.dump(out, open(os.path.join(BASE, fn["results"]), "w", encoding="utf-8"), indent=2)
     if os.path.abspath(src) != os.path.abspath(os.path.join(BASE, fn["data"])):
         shutil.copyfile(src, os.path.join(BASE, fn["data"]))
     print(f"RUN {rid}  ->  {fn['results']} + {fn['data']}\n")

@@ -23,7 +23,7 @@ def scanner(run_dir):
 
 @pytest.fixture
 def scan_data():
-    return json.loads((FIX / "scan_data.json").read_text())
+    return json.loads((FIX / "scan_data.json").read_text(encoding="utf-8"))
 
 
 @pytest.fixture
@@ -224,7 +224,7 @@ def test_the_whole_run_is_byte_identical_to_the_golden_output(scanner, scan_data
     threshold — shows up here as a diff that has to be justified, rather than as a board
     that quietly ranks differently one morning."""
     got = json.loads(json.dumps(scanner.scan(scan_data), sort_keys=True))
-    want = json.loads((FIX / "scan_results_golden.json").read_text())
+    want = json.loads((FIX / "scan_results_golden.json").read_text(encoding="utf-8"))
     assert got == want, (
         "the scoring model changed. If that was deliberate, regenerate the golden with:\n"
         "  python3 -c \"import json,scanner;"

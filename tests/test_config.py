@@ -17,18 +17,18 @@ def test_missing_config_returns_empty_not_crash(tmp_path):
 
 def test_board_url_reads_config(tmp_path):
     (tmp_path / "engine-config.json").write_text(json.dumps(
-        {"boards": {"trade_desk": "https://example.invalid/board"}}))
+        {"boards": {"trade_desk": "https://example.invalid/board"}}), encoding="utf-8")
     assert config.board_url("trade_desk", base=str(tmp_path)) == "https://example.invalid/board"
 
 
 def test_account_reads_config(tmp_path):
     (tmp_path / "engine-config.json").write_text(json.dumps(
-        {"account": {"id": "000000000", "nickname": "Test"}}))
+        {"account": {"id": "000000000", "nickname": "Test"}}), encoding="utf-8")
     assert config.account(str(tmp_path))["nickname"] == "Test"
 
 
 def test_malformed_config_is_treated_as_absent(tmp_path):
-    (tmp_path / "engine-config.json").write_text("{not json at all")
+    (tmp_path / "engine-config.json").write_text("{not json at all", encoding="utf-8")
     assert config.load(str(tmp_path)) == {}
 
 
@@ -77,7 +77,7 @@ def test_no_value_from_the_private_config_leaks_into_the_repo():
     cfg_path = root / "engine-config.json"
     if not cfg_path.exists():
         pytest.skip("engine-config.json not staged — shape test covers CI")
-    cfg = json.loads(cfg_path.read_text())
+    cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
     # Only the values that actually identify the account or the boards. The nickname is
     # a word that appears in the doctrine legitimately and is not an identifier.
     acct = cfg.get("account") or {}
@@ -92,3 +92,54 @@ def test_no_value_from_the_private_config_leaks_into_the_repo():
             if sec in text:
                 hits.append(f"{p.relative_to(root)}: a value from engine-config.json")
     assert hits == [], "private config values must never reach the repo: " + "; ".join(hits)
+
+
+# --- RENDER-03: platform default encoding (live defect, 2026-09-09) -----------------
+
+def test_nothing_reads_or_writes_text_on_the_platform_default_encoding():
+    """The scheduled runs are Linux, where the default is UTF-8, so this never bit them.
+    On Windows the default is cp1252 and `render.py` died on '\u2197' partway through a
+    board — which meant the suite could not be run at all on the machine this repo is
+    developed from, and eight tests failed there for reasons unrelated to the code under
+    test.
+
+    Every board, journal, scan record and markdown file this engine writes carries
+    em-dashes, bullets and arrows, so guarding the whole tree rather than the one module
+    that happened to fail is the point: a fix applied only to render.py would leave the
+    same landmine in fourteen other engine files and eighteen test files.
+
+    The tests are guarded too. A suite that cannot run on the developer's machine is a
+    suite that does not get run before a push.
+    """
+    import ast
+    import pathlib
+    root = pathlib.Path(__file__).resolve().parents[1]
+    bad = []
+    for d in ("engine", "tests"):
+        for p in sorted((root / d).glob("*.py")):
+            for node in ast.walk(ast.parse(p.read_text(encoding="utf-8"))):
+                if not isinstance(node, ast.Call):
+                    continue
+                name = getattr(node.func, "attr", None) or getattr(node.func, "id", None)
+                if name not in ("open", "read_text", "write_text"):
+                    continue
+                if "encoding" in {k.arg for k in node.keywords}:
+                    continue
+                if name == "open":
+                    mode = ""
+                    if len(node.args) > 1 and isinstance(node.args[1], ast.Constant):
+                        mode = node.args[1].value or ""
+                    if "b" in mode:
+                        continue
+                bad.append(f"{d}/{p.name}:{node.lineno} {name}()")
+    assert not bad, ("text I/O on the platform default encoding (breaks on Windows): "
+                     + ", ".join(bad))
+
+
+def test_the_child_process_helper_does_not_hardcode_a_posix_path():
+    """The coverage tests shell out to pm.py. Replacing the environment with
+    PATH=/usr/bin:/bin named directories that do not exist off Linux."""
+    import pathlib
+    src = (pathlib.Path(__file__).parent / "test_pm_coverage.py").read_text(encoding="utf-8")
+    assert "/usr/bin:/bin" not in src
+    assert "PYTHONIOENCODING" in src, "the child must be told to emit UTF-8"

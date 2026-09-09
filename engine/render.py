@@ -5,7 +5,7 @@ BASE = os.environ.get("SCAN_DIR") or os.path.dirname(os.path.abspath(__file__))
 if BASE not in sys.path:
     sys.path.insert(0, BASE)
 
-R = json.load(open(os.path.join(BASE, "scan_results.json")))
+R = json.load(open(os.path.join(BASE, "scan_results.json"), encoding="utf-8"))
 res, reg, meta = R["results"], R["regime"], R["meta"]
 tape, notable = R.get("tape", []), R.get("notable", [])
 ipo, insider = R.get("ipo") or {}, R.get("insider_panel") or {}
@@ -21,7 +21,7 @@ if os.path.exists(_pf_path):
     # A broken portfolio panel used to vanish silently, which looks identical to
     # "no positions". Never swallow this one.
     try:
-        PORTF = render_portfolio.build(json.load(open(_pf_path)))
+        PORTF = render_portfolio.build(json.load(open(_pf_path, encoding="utf-8")))
     except Exception:
         traceback.print_exc()
         sys.exit("REFUSING TO RENDER: portfolio_state.json exists but the portfolio "
@@ -778,7 +778,7 @@ def _emit(path, title, ribbon):
     if "@@" in doc:
         sys.exit(f"REFUSING TO WRITE {path}: an unsubstituted @@ placeholder survived. "
                  "The template and the publish step have drifted apart.")
-    open(path, "w").write(doc)
+    open(path, "w", encoding="utf-8").write(doc)
     return len(doc)
 
 SNAP_PATH   = os.path.join(BASE, archive.files_for(RID)["board"])

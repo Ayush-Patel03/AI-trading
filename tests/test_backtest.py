@@ -42,7 +42,7 @@ def _series(n, start=100.0, step=0.5, first_day=1):
 def _bars_file(run_dir, symbols):
     payload = {"data": {"results": [{"symbol": s, "bars": b} for s, b in symbols.items()]}}
     p = run_dir / "bars.json"
-    p.write_text(json.dumps(payload))
+    p.write_text(json.dumps(payload), encoding="utf-8")
     return str(p)
 
 
@@ -150,7 +150,7 @@ def test_vix_is_absent_rather_than_proxied(bt, run_dir):
 # ------------------------------------------------------------------ point-in-time fundamentals
 def test_financials_without_an_availability_date_are_refused(bt, run_dir):
     p = run_dir / "fin.json"
-    p.write_text(json.dumps({"AAA": [{"revenue_growth_pct": 20.0}]}))
+    p.write_text(json.dumps({"AAA": [{"revenue_growth_pct": 20.0}]}), encoding="utf-8")
     with pytest.raises(SystemExit) as e:
         bt.load_financials(str(p))
     assert "available_from" in str(e.value)

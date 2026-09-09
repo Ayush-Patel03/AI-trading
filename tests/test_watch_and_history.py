@@ -21,7 +21,7 @@ def test_watch_opens_exactly_one_file_for_writing(  # noqa: D401
 ):
     """Structural, not behavioural: a future edit that adds a second write path fails here
     before it can ever reach a book."""
-    tree = ast.parse((ENGINE / "watch.py").read_text())
+    tree = ast.parse((ENGINE / "watch.py").read_text(encoding="utf-8"))
     writes = []
     for node in ast.walk(tree):
         if isinstance(node, ast.Call) and getattr(node.func, "id", None) == "open":
@@ -40,7 +40,7 @@ def test_watch_opens_exactly_one_file_for_writing(  # noqa: D401
 
 
 def test_watch_never_names_a_paper_book():
-    src = (ENGINE / "watch.py").read_text()
+    src = (ENGINE / "watch.py").read_text(encoding="utf-8")
     body = "\n".join(l for l in src.splitlines()
                      if not l.lstrip().startswith("#") and '"""' not in l)
     # Reading a book is the job — the watch prices what is held. What it must never touch
@@ -55,7 +55,7 @@ def test_watch_never_names_a_paper_book():
 def test_watch_imports_only_the_two_functions_it_is_allowed():
     """PM.md 12c: it imports pm.py's quote parser and the divergence check, and nothing
     else. Do not give it one."""
-    tree = ast.parse((ENGINE / "watch.py").read_text())
+    tree = ast.parse((ENGINE / "watch.py").read_text(encoding="utf-8"))
     from_pm = []
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom) and node.module == "pm":

@@ -1368,7 +1368,7 @@ def _load(path, default=None):
     p = _in_base(path)
     if p is None or not os.path.exists(p):
         return default
-    with open(p) as f:
+    with open(p, encoding="utf-8") as f:
         return json.load(f)
 
 
@@ -1425,7 +1425,7 @@ def write_heartbeat(base, sfx, desk, slot, ts, book, quiet, decisions=0, warning
                           else (book or {}).get("revision")),
     }
     path = os.path.join(base, f"pm_heartbeat{sfx}.json")
-    with open(path, "w") as f:
+    with open(path, "w", encoding="utf-8") as f:
         json.dump(hb, f, indent=2)
     print(f"COVERAGE {desk} {slot} {ts} — {'quiet' if quiet else 'acted'}, "
           f"{hb['positions']} position(s), {hb['warnings']} warning(s)  ->  "
@@ -1607,15 +1607,15 @@ def main():
                                or config.board_url("trade_desk")
                                or archive.PM_BOARD_URL)
 
-    with open(os.path.join(BASE, f"pm_book_next{sfx}.json"), "w") as f:
+    with open(os.path.join(BASE, f"pm_book_next{sfx}.json"), "w", encoding="utf-8") as f:
         json.dump(book, f, indent=2)
-    with open(os.path.join(BASE, f"pm_state{sfx}.json"), "w") as f:
+    with open(os.path.join(BASE, f"pm_state{sfx}.json"), "w", encoding="utf-8") as f:
         json.dump(state, f, indent=2)
     # Per-run copies. The two unstamped files above are overwritten by the next slot;
     # these are not, so a run stays reconstructable after the fact.
-    with open(os.path.join(BASE, fn["book"]), "w") as f:
+    with open(os.path.join(BASE, fn["book"]), "w", encoding="utf-8") as f:
         json.dump(book, f, indent=2)
-    with open(os.path.join(BASE, fn["state"]), "w") as f:
+    with open(os.path.join(BASE, fn["state"]), "w", encoding="utf-8") as f:
         json.dump(state, f, indent=2)
 
     entries = [e for e in journal.get("entries", []) if e.get("run_key") != jrn["run_key"]]
@@ -1624,11 +1624,11 @@ def main():
                                 e.get("ts", "")))
     journal["entries"] = entries[-500:]
     journal["updated"] = jrn["ts"]
-    with open(os.path.join(BASE, f"pm_journal_next{sfx}.json"), "w") as f:
+    with open(os.path.join(BASE, f"pm_journal_next{sfx}.json"), "w", encoding="utf-8") as f:
         json.dump(journal, f, indent=2)
 
     if mode == "live":
-        with open(os.path.join(BASE, f"pm_orders{sfx}.json"), "w") as f:
+        with open(os.path.join(BASE, f"pm_orders{sfx}.json"), "w", encoding="utf-8") as f:
             json.dump({"generated": jrn["ts"], "slot": args.slot,
                        "orders": state["orders_to_place"]}, f, indent=2)
 

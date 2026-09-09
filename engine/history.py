@@ -57,7 +57,7 @@ SLOT_ORDER = {"Pre-market": "08:00", "Opening range": "10:00",
 def _load(path):
     if not path or path == "/dev/null" or not os.path.exists(path):
         return {}
-    with open(path) as fh:
+    with open(path, encoding="utf-8") as fh:
         text = fh.read().strip()
     if not text:
         return {}
@@ -143,7 +143,7 @@ def main():
 
     out = json.dumps(doc, indent=2) + "\n"
     if a.out:
-        open(a.out, "w").write(out)
+        open(a.out, "w", encoding="utf-8").write(out)
     else:
         sys.stdout.write(out)
 

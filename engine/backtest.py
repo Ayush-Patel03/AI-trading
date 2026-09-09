@@ -93,7 +93,7 @@ MIN_BARS_TO_SCORE = 220          # ma_200 plus a little; below this a row is not
 # ---------------------------------------------------------------- bars
 def load_bars(path):
     """{SYMBOL: [bar, ...]} oldest-first, from one response or a list of them."""
-    raw = json.load(open(path))
+    raw = json.load(open(path, encoding="utf-8"))
     blocks = raw if isinstance(raw, list) else [raw]
     out = {}
     for blk in blocks:
@@ -138,7 +138,7 @@ def load_financials(path):
     period end. A row without one is refused rather than dated by guesswork, because a
     quarter-end date used as an availability date leaks roughly six weeks of hindsight into
     every observation."""
-    raw = json.load(open(path))
+    raw = json.load(open(path, encoding="utf-8"))
     if not isinstance(raw, dict):
         raise SystemExit("REFUSED: --financials must be an object keyed by symbol")
     out = {}
@@ -323,7 +323,7 @@ def main(argv=None):
             continue
         out["meta"]["run_id"] = f"{d}-backtest"
         rec = archive.record(out)
-        with open(os.path.join(a.out_records, f"{d}-backtest.json"), "w") as f:
+        with open(os.path.join(a.out_records, f"{d}-backtest.json"), "w", encoding="utf-8") as f:
             json.dump(rec, f, indent=2)
         written += 1
         rows_total += len(out["results"])
@@ -343,7 +343,7 @@ def main(argv=None):
                  % (a.out_records, a.bars)),
     }
     if a.summary:
-        with open(os.path.join(BASE, a.summary), "w") as f:
+        with open(os.path.join(BASE, a.summary), "w", encoding="utf-8") as f:
             json.dump(summary, f, indent=2)
 
     print(f"BACKTEST  {written} replays, {rows_total} observations, "

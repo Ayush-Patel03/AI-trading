@@ -180,7 +180,7 @@ def main(argv=None):
     ap.add_argument("--out", default="universe.json")
     a = ap.parse_args(argv)
 
-    doc = json.load(open(a.members))
+    doc = json.load(open(a.members, encoding="utf-8"))
     bars = None
     if a.bars:
         import backtest
@@ -189,7 +189,7 @@ def main(argv=None):
     rules = {"max_symbols": a.max_symbols} if a.max_symbols else None
     kept, excluded, meta = screen(doc, bars, a.as_of, rules)
     payload = dict(meta, symbols=kept, excluded_detail=excluded)
-    with open(os.path.join(BASE, a.out), "w") as f:
+    with open(os.path.join(BASE, a.out), "w", encoding="utf-8") as f:
         json.dump(payload, f, indent=2)
 
     print(f"UNIVERSE  {meta['index'] or 'unnamed'} @ {meta['membership_snapshot'] or 'undated'}"

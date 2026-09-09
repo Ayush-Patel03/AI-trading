@@ -108,7 +108,7 @@ def _load(path, default=None):
     p = path if os.path.isabs(path) else os.path.join(BASE, path)
     if not os.path.exists(p):
         return default
-    with open(p) as fh:
+    with open(p, encoding="utf-8") as fh:
         text = fh.read().strip()
     return json.loads(text) if text else default
 
@@ -403,7 +403,7 @@ def main():
         "it logged would be a fill no real account could have gotten. Alerts here are "
         "acted on by the next decision slot. Quiet runs write nothing at all.")
     out = a.out or os.path.join(BASE, f"watch_journal_next-{a.desk}.json")
-    with open(out, "w") as fh:
+    with open(out, "w", encoding="utf-8") as fh:
         json.dump(journal, fh, indent=2)
 
     crit = [al for al in entry["alerts"] if al["severity"] == "critical"]
