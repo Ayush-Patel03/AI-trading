@@ -234,6 +234,48 @@ def _rows(raw):
     return raw or []
 
 
+def quote_extras(raw):
+    """{TICKER: {price, prev_close, ext_price}} from a get_equity_quotes response.
+
+    TWO ROW SHAPES, both accepted. The connector originally returned flat rows carrying
+    `symbol` and `last_trade_price` at the top level. It now nests the live fields under
+    `quote`, pairs them with an official `close` block, and renames the extended-hours
+    print to `last_non_reg_trade_price`. The flat reader found no top-level `symbol`,
+    skipped every row, and left quote_extra EMPTY — so the section-9.2 session overrides
+    silently did nothing and gap_pct fell back to `prior_bar` on a live scan. It did not
+    raise, which is why it went unnoticed until 2026-09-09.
+
+    Reading both shapes is deliberate: the flat form is still what the archived fixtures
+    and any older captured payload carry, and a reader that only understood the new shape
+    would break replaying those.
+
+    A row that has not traded, or whose state is not active, contributes nothing: the
+    caller then keeps the honest bar-derived value instead of a price no venue printed.
+    """
+    out = {}
+    for r in _rows(raw):
+        if not isinstance(r, dict):
+            continue
+        q = r["quote"] if isinstance(r.get("quote"), dict) else r
+        close = r["close"] if isinstance(r.get("close"), dict) else {}
+        sym = q.get("symbol") or r.get("symbol") or close.get("symbol")
+        if not sym:
+            continue
+        if q.get("has_traded") is False:
+            continue
+        if q.get("state") is not None and q.get("state") != "active":
+            continue
+        out[str(sym).upper()] = {
+            "price": _f(q.get("last_trade_price")),
+            "prev_close": (_f(q.get("adjusted_previous_close"))
+                           or _f(q.get("previous_close"))
+                           or _f(close.get("price"))),
+            "ext_price": (_f(q.get("last_non_reg_trade_price"))
+                          or _f(q.get("last_extended_hours_trade_price"))),
+        }
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--bars", required=True,
@@ -277,15 +319,7 @@ def main():
 
     quote_extra = {}
     if a.quotes:
-        for r in _rows(json.load(open(a.quotes))):
-            if isinstance(r, dict) and r.get("symbol"):
-                s = r["symbol"].upper()
-                quote_extra[s] = {
-                    "price": _f(r.get("last_trade_price")),
-                    "prev_close": (_f(r.get("adjusted_previous_close"))
-                                   or _f(r.get("previous_close"))),
-                    "ext_price": _f(r.get("last_extended_hours_trade_price")),
-                }
+        quote_extra = quote_extras(json.load(open(a.quotes)))
 
     out = {}
     for res in results:

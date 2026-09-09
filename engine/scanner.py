@@ -32,6 +32,14 @@ import json, os, sys
 from datetime import date, datetime
 
 import config
+# The board's macro banner must describe the gate the MANAGER actually applies, so it
+# imports that definition rather than restating it. Before 2026-09-09 this file bannered
+# EVERY same-day release as freezing entries; pm.py gates on six, inside a 120-minute
+# window. The board therefore contradicted the manager on every run that carried an
+# ISM/JOLTS/ADP/Beige Book print — verified 2026-09-01 (five releases) and 2026-09-09
+# (six). Importing pm is safe: it has no import-time side effects and does not import
+# this module.
+from pm import _is_high_impact as is_high_impact
 
 BASE = os.environ.get("SCAN_DIR") or os.path.dirname(os.path.abspath(__file__))
 if BASE not in sys.path:
@@ -545,8 +553,22 @@ def verdict(score, setup):
         return "Hold", "No clear edge here right now"
     return "Avoid", "Fails on multiple criteria"
 
+def scan_date_of(meta):
+    """The run's date. SCAN.md's documented scan_data.json contract names `date`, while
+    this module has always read `scan_date`; a caller that followed the doc got
+    KeyError: 'scan_date' on the first call. Accept either, prefer the explicit one, and
+    keep the key normalised so everything downstream (tape rows, archive records) still
+    sees `scan_date`.
+    """
+    d = meta.get("scan_date") or meta.get("date")
+    if not d:
+        raise KeyError("meta.scan_date (or meta.date) is required")
+    meta["scan_date"] = str(d)
+    return str(d)
+
+
 def scan(data):
-    today = datetime.strptime(data["meta"]["scan_date"], "%Y-%m-%d").date()
+    today = datetime.strptime(scan_date_of(data["meta"]), "%Y-%m-%d").date()
     mult, regime_label, regime_notes = score_regime(data["regime"])
 
     # Prior scans from earlier slots today: [{slot, time, regime_label, avg, scores:{TKR:score}}]
@@ -688,10 +710,17 @@ def scan(data):
             continue
         dd = (d_ev - today).days
         if dd == 0:
-            notable.insert(0, f"MACRO TODAY: {ev.get('name', 'scheduled release')}"
-                              f"{' at ' + str(ev['time_et']) + ' ET' if ev.get('time_et') else ''}"
-                              " — the manager places no new entries ahead of it; existing "
-                              "positions are managed normally")
+            label = (f"{ev.get('name', 'scheduled release')}"
+                     f"{' at ' + str(ev['time_et']) + ' ET' if ev.get('time_et') else ''}")
+            if is_high_impact(ev.get("name")):
+                notable.insert(0, f"MACRO TODAY: {label}"
+                                  " — the manager places no new entries inside its"
+                                  " lookahead window; existing positions are managed"
+                                  " normally")
+            else:
+                notable.append(f"MACRO TODAY: {label} — reported, NOT gating:"
+                               " the manager's entry gate covers only FOMC, CPI, PCE,"
+                               " payrolls, GDP and Powell")
         elif dd == 1:
             notable.append(f"MACRO TOMORROW: {ev.get('name', 'scheduled release')} on {ev['date']}"
                            " — overnight holds carry tape-wide event risk")

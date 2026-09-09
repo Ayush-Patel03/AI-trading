@@ -257,3 +257,76 @@ def test_a_thin_row_is_not_sized_on_a_normalised_score(scanner, scan_data):
 
     nvda = next(p for p in props if p["ticker"] == "NVDA")
     assert nvda["blocked"] is False, "a fully-evidenced row is unaffected"
+
+
+# --- meta.scan_date and the macro banner (live defects, 2026-09-09) -----------------
+
+def test_scan_date_accepts_the_documented_key(scanner, scan_data):
+    # SCAN.md's contract names `date`; the module only ever read `scan_date`, so a caller
+    # who followed the doc got KeyError on the first call.
+    meta = {"date": "2026-09-09"}
+    assert scanner.scan_date_of(meta) == "2026-09-09"
+    assert meta["scan_date"] == "2026-09-09", "must normalise for everything downstream"
+
+
+def test_scan_date_prefers_the_explicit_key(scanner):
+    assert scanner.scan_date_of({"scan_date": "2026-09-09", "date": "2026-01-01"}) == "2026-09-09"
+
+
+def test_a_scan_with_neither_key_is_refused(scanner):
+    with pytest.raises(KeyError):
+        scanner.scan_date_of({"slot": "midday"})
+
+
+def test_a_scan_carrying_only_date_scores(scanner, scan_data):
+    scan_data["meta"].pop("scan_date", None)
+    scan_data["meta"]["date"] = "2026-09-09"
+    out = scanner.scan(scan_data)
+    assert out["results"], "the run must complete on the documented contract"
+
+
+def _banner(scanner, scan_data, events):
+    scan_data["meta"]["scan_date"] = "2026-09-09"
+    scan_data["meta"]["macro_events"] = events
+    return " | ".join(scanner.scan(scan_data)["notable"])
+
+
+def test_a_high_impact_release_is_bannered_as_gating(scanner, scan_data):
+    txt = _banner(scanner, scan_data,
+                  [{"date": "2026-09-09", "name": "CPI (Aug)", "time_et": "08:30"}])
+    assert "MACRO TODAY: CPI (Aug)" in txt
+    assert "no new entries" in txt
+
+
+def test_a_non_gating_release_is_reported_and_labelled_not_gating(scanner, scan_data):
+    # This is the defect: the board claimed five releases froze entries on 2026-09-01 and
+    # six on 2026-09-09, while the manager reported every one of them as not gating.
+    txt = _banner(scanner, scan_data,
+                  [{"date": "2026-09-09", "name": "ISM Manufacturing PMI", "time_et": "10:00"}])
+    assert "NOT gating" in txt
+    assert "no new entries" not in txt
+
+
+def test_adp_is_not_read_as_payrolls(scanner, scan_data):
+    txt = _banner(scanner, scan_data,
+                  [{"date": "2026-09-09", "name": "ADP National Employment"}])
+    assert "NOT gating" in txt
+
+
+def test_the_board_and_the_manager_agree_on_every_release(scanner, scan_data):
+    # One definition, imported from pm.py. If these ever disagree the board is lying
+    # about the manager, which is the whole defect.
+    import pm
+    for name in ("FOMC Rate Decision", "CPI (Aug)", "Core PCE", "Nonfarm Payrolls",
+                 "GDP (Q2 second estimate)", "Powell speaks",
+                 "ISM Services PMI", "JOLTS Job Openings", "Beige Book",
+                 "Initial Jobless Claims", "ADP National Employment"):
+        txt = _banner(scanner, scan_data, [{"date": "2026-09-09", "name": name}])
+        gated_on_board = "no new entries" in txt
+        assert gated_on_board is pm._is_high_impact(name), name
+
+
+def test_tomorrows_release_is_still_noted_for_the_overnight(scanner, scan_data):
+    txt = _banner(scanner, scan_data,
+                  [{"date": "2026-09-10", "name": "ISM Services PMI"}])
+    assert "MACRO TOMORROW" in txt
