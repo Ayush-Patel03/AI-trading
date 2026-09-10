@@ -4,6 +4,7 @@ backtest.py
 broker_policy.py
 config.py
 desks.json
+earnings_quality.py
 filings.py
 fills.py
 guardrails.py
@@ -30,4 +31,5 @@ technicals.py
 universe.py
 universe_history.py
 validate.py
+veto.py
 watch.py

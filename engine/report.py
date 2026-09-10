@@ -29,6 +29,7 @@ gates; forcing those into a gate they are not would make the counterfactual lie:
 | `kill_switch` | `Daily loss −3.10% breached the 3% kill switch`, `HALT: daily loss … kill-switch limit — no new entries` |
 | `halt` | any other `halt` / `HALT:` the day carries as `halt_reason` |
 | `macro_gate` | `macro gate: no new entries ahead of CPI at 08:30 ET` |
+| `veto` | `veto: short report by Hindenburg Research on 2026-09-08 (2 session(s) ago, …) — no new entry; a held position is never sold on this, its stop is what sells` (P-03, veto.py: also high-severity negative news inside 5 sessions and a halt today) |
 | `scan_stale` | `scan is dated …, not today — entries frozen`, `scan is 331 minutes old — over the 240-minute freshness limit — entries frozen`, `no scan results available this run` |
 | `spread` | `bid/ask spread 1.19% of price, over the 1.0% entry limit — too expensive …` |
 | `price_drift` | `price drifted +12.0% since the scan — rescored at the next scan …` |
@@ -108,13 +109,16 @@ MIN_N = 30
 NOT_A_SAMPLE = "not a sample"
 
 RULES = ("sector_cap", "house_symbol_cap", "house_sector_cap", "spread", "price_drift",
-         "scan_stale", "macro_gate", "broker_policy", "ladder", "house_exposure",
+         "scan_stale", "macro_gate", "veto", "broker_policy", "ladder", "house_exposure",
          "earnings_gate", "min_notional", "max_entries", "kill_switch", "halt", "coverage",
          "stop_policy", "slot", "desk_mandate", "working_order", "once_per_session", "deadband",
          "other")
 
 # Precedence order. Each entry: (rule, compiled pattern). The first match wins.
 _RULES = [
+    # P-03 first: a veto reason quotes a halt, a headline or a report title, any of which
+    # could name another rule's words.
+    ("veto", r"^veto:"),
     ("house_symbol_cap", r"house cap:.*single-name house limit"),
     ("house_sector_cap", r"house cap:.*sector house limit"),
     ("house_exposure", r"house exposure"),

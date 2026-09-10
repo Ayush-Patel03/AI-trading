@@ -43,6 +43,9 @@ from pm import _is_high_impact as is_high_impact
 # P-02 / E16: the 10-K/10-Q text-change signal ("Lazy Prices"). Pure functions over a staged
 # file; no import-time side effects and it imports nothing from the engine.
 import filings
+# P-03: the deny-list override (short reports, negative news, halts). Applied AFTER scoring,
+# only when the feed was staged; see veto.py and scan()'s `veto_feed` argument.
+import veto as veto_mod
 
 BASE = os.environ.get("SCAN_DIR") or os.path.dirname(os.path.abspath(__file__))
 if BASE not in sys.path:
@@ -50,6 +53,11 @@ if BASE not in sys.path:
 
 PILLAR_MAX = {"trend": 25, "momentum": 15, "fundamentals": 20,
               "catalyst": 20, "intelligence": 20}
+# P-06: the earnings-quality feature keys (earnings_quality.FEATURE_KEYS, restated here so
+# this module does not import that one — it is a data dependency, like sentiment.py).
+EARNINGS_QUALITY_KEYS = ("sue", "ear_3d", "reg_residual", "earnings_agreement",
+                         "days_since_earnings")
+EARNINGS_QUALITY_FILE = "earnings_quality.json"
 FULL_SCALE = sum(PILLAR_MAX.values())          # 100
 MIN_COVERAGE_FOR_STRONG = 70.0                 # % of the evidence base
 
@@ -636,7 +644,8 @@ def attach_filings(rows, staged, today):
             "threshold": (staged.get("_meta") or {}).get("threshold", filings.CHANGER_THRESHOLD)}
 
 
-def scan(data, *, insider_signal=None, filings_signal=None):
+def scan(data, *, insider_signal=None, filings_signal=None, veto_feed=None,
+         earnings_quality=None):
     """Score one scan_data.json document.
 
     Every optional input is a staged file the scheduled task may or may not have put in
@@ -652,6 +661,17 @@ def scan(data, *, insider_signal=None, filings_signal=None):
     It is an explicit argument rather than a file read here so that a backtest replay —
     which calls scan() per historical date — cannot pick up today's staged file by
     accident; __main__ loads it for the live path.
+
+    `veto_feed` (P-03): what veto.load() returned, or None. With a feed, vetoed rows are
+    overridden to Avoid AFTER scoring — scores and pillars untouched, the override logged
+    in NOTABLE and meta.veto. None means no override anywhere; the output is byte-identical
+    to a scan that never had the argument. The veto pass runs last, after every feature
+    block is on the row, so it sees the final row.
+
+    `earnings_quality` (P-06): {TICKER: {sue, ear_3d, reg_residual, earnings_agreement,
+    days_since_earnings}} from earnings_quality.py, or None. Merged into each row's
+    `features` dict — logged, scored by nothing. A ticker absent from the map gets every
+    key null when the map was supplied, and nothing at all when it was not.
     """
     today = datetime.strptime(scan_date_of(data["meta"]), "%Y-%m-%d").date()
     mult, regime_label, regime_notes = score_regime(data["regime"])
@@ -750,10 +770,27 @@ def scan(data, *, insider_signal=None, filings_signal=None):
             feats = dict(rows[-1].get("features") or {})
             feats.update(insider_features(insider_sig, tk))
             rows[-1]["features"] = feats
+        # P-06: the earnings-quality features ride in the same dict, same rule — logged on
+        # the row, read by ic.py --by-feature, scored by nothing. Only when the map exists.
+        if isinstance(earnings_quality, dict):
+            eq = earnings_quality.get(tk) or {}
+            feats = dict(rows[-1].get("features") or {})
+            feats.update({k: eq.get(k) for k in EARNINGS_QUALITY_KEYS})
+            rows[-1]["features"] = feats
 
     # P-02: filing text-change features, when the staged file is present. Rows only;
     # nothing above reads them.
     filings_meta = attach_filings(rows, filings_signal, today)
+
+    # P-03: the veto override. A separate pass, after every pillar is scored, every verdict
+    # struck and every feature block laid on the row, and only with a staged feed. It
+    # changes a verdict, never a score, so a vetoed name still ranks where it scored — with
+    # "Avoid" written across it and the reason on the row, in NOTABLE and in meta.veto.
+    # Without the feed nothing here runs. Keep this the LAST pass over the rows: it must
+    # see the final row.
+    vetoed = []
+    if veto_feed is not None:
+        vetoed = veto_mod.apply_to_rows(rows, today, veto_feed)
 
     # Score trail across today's slots, with this scan appended as the final point
     prior_top5 = set()
@@ -781,6 +818,11 @@ def scan(data, *, insider_signal=None, filings_signal=None):
     }]
 
     notable = []
+    for r in rows:
+        if r.get("veto"):
+            notable.append(f'VETO: {r["ticker"]} — ' + "; ".join(r["veto_reasons"]) +
+                           f' — verdict overridden to Avoid (scored {r["score"]:.0f}, '
+                           f'{r["pre_veto_verdict"]}); the manager refuses the entry')
     for r in rows:
         if r["score"] >= 75:
             notable.append(f'{r["ticker"]} scores {r["score"]:.0f} ({r["verdict"]}, {r["setup"]})')
@@ -870,6 +912,16 @@ def scan(data, *, insider_signal=None, filings_signal=None):
         }
         for w in (sm.get("warnings") or []):
             warns.append("INSIDERS: " + str(w))
+    if veto_feed is not None:
+        vm = veto_feed.get("_meta") or {}
+        meta["veto"] = {"applied": vetoed, "checked": len(rows),
+                        "feed_counts": vm.get("counts"), "feed_path": vm.get("path"),
+                        "feed_as_of": veto_feed.get("as_of")}
+    if isinstance(earnings_quality, dict):
+        meta["earnings_quality"] = {
+            "symbols_with_data": sorted(t for t in earnings_quality
+                                        if t in data["candidates"]),
+            "keys": list(EARNINGS_QUALITY_KEYS)}
     # Which commit of the engine produced this scan. Written by the clone step as
     # $SCAN_DIR/engine_sha; None when the engine was not run from a repo.
     meta["engine_sha"] = config.engine_sha()
@@ -890,11 +942,25 @@ if __name__ == "__main__":
     src = sys.argv[1] if len(sys.argv) > 1 else os.path.join(BASE, "scan_data.json")
     # Every optional staged file lives in the run directory ($SCAN_DIR); each is None when
     # the scheduled task did not stage it, and the rows then carry none of its features.
+    # Absent means "not run", not "clean".
     # P-01: insiders_signal.json.  P-02: filings_signal.json.
     staged_insiders = load_insider_signal(BASE)
     staged_filings = filings.load_staged(BASE)
+    # P-03: veto.json.  P-06: earnings_quality.json.
+    feed = veto_mod.load(BASE)
+    eq_path = os.path.join(BASE, EARNINGS_QUALITY_FILE)
+    eq_map = None
+    if os.path.exists(eq_path):
+        try:
+            eq_map = json.load(open(eq_path, encoding="utf-8"))
+            eq_map = {str(k).upper(): v for k, v in eq_map.items()
+                      if isinstance(v, dict)} if isinstance(eq_map, dict) else None
+        except (OSError, json.JSONDecodeError) as exc:
+            print(f"note: {EARNINGS_QUALITY_FILE} unreadable ({exc}) — earnings-quality "
+                  "features not attached", file=sys.stderr)
     out = scan(json.load(open(src, encoding="utf-8")),
-               insider_signal=staged_insiders, filings_signal=staged_filings)
+               insider_signal=staged_insiders, filings_signal=staged_filings,
+               veto_feed=feed, earnings_quality=eq_map)
     # Every run owns its own file names. The unstamped scan_results.json stays as the
     # "latest" copy the rest of the pipeline reads; the stamped copy is the one that is
     # still here after the next slot runs. The input is snapshotted too, so a board can
@@ -940,6 +1006,18 @@ if __name__ == "__main__":
               f"10-K/10-Q change score, {fm['n_changers']} changer(s) at threshold {fm['threshold']}")
     else:
         print("FILINGS: filings_signal.json not staged — no filing features attached")
+    em = out["meta"].get("earnings_quality")
+    if em:
+        print(f"EARNINGS QUALITY (E22/E23, not scored): {len(em['symbols_with_data'])} of "
+              f"{len(out['results'])} rows carry {', '.join(em['keys'])}")
+    else:
+        print(f"EARNINGS QUALITY: {EARNINGS_QUALITY_FILE} not staged — no earnings-quality features attached")
+    if feed is not None:
+        print(f"VETO FEED: {feed['_meta']['counts']} — overrode "
+              f"{len(out['meta']['veto']['applied'])} row(s): "
+              f"{', '.join(out['meta']['veto']['applied']) or 'none'}")
+    else:
+        print("VETO FEED: not staged — no override applied")
     print()
     print(f"REGIME: {out['regime']['label']} (x{out['regime']['multiplier']})   "
           f"coverage avg {out['meta']['coverage_avg']:.0f}%\n")

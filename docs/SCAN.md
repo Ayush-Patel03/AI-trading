@@ -247,6 +247,26 @@ that fell off the window. The audit found `scan-index.json` empty after nine run
 existed, the prompts never called it. They do now, and **the archive is what section 11's
 validation reads** — without it the model can never be tested.
 
+### 3c. Two more staged files — `veto.json`, `earnings_quality.json` (P-03 / P-06, 2026-09-10)
+
+Both optional, both read from `$SCAN_DIR` by `scanner.py` without a flag, both documented in
+`docs/COLLECTION.md` §8 and `docs/DATA.md` §1a–1b.
+
+* **`veto.json`** — short reports (publishers in `docs/veto-publishers.md`), high-severity
+  negative news, halts. When present, `scanner.py` scores every row exactly as before and
+  then overrides a vetoed row's verdict to **Avoid** in a separate pass: `veto: true`,
+  `veto_reasons`, `pre_veto_verdict` on the row, a `VETO:` line in NOTABLE, `meta.veto` with
+  the tickers applied and the feed's counts. Every other row gets `veto: false` — checked and
+  clean is not the same as never checked. The score is untouched; the ranking does not move.
+  The manager reads the file again and refuses the entry (PM.md, "The veto"). When absent the
+  board is byte-identical to a scan without the module — the golden test pins it — and the
+  console says `VETO FEED: not staged`.
+* **`earnings_quality.json`** — from `earnings_quality.py` (run after `technicals.py`, same
+  bars file, SPY included). Five keys merged into each row's `features` dict — `sue`,
+  `ear_3d`, `reg_residual`, `earnings_agreement`, `days_since_earnings` — null for a symbol
+  the file does not cover. Same rule as section 3a: logged, scored by nothing, read by
+  `ic.py --by-feature`. `meta.earnings_quality` lists the symbols that had data.
+
 ### The hand-off to the Portfolio Manager
 
 **The moment `scanner.py` succeeds, `project_write` `scan_results.json` verbatim to

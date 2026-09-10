@@ -578,6 +578,102 @@ large-cap universe is read faster than the paper's all-CRSP sample. If it passes
 a `pm.py` entry gate refusing changers for 60 sessions after `filed`, reported through
 `report.py` like every other gate (§6c). If it fails, the features stay logged and nothing
 else changes.
+## 6f. E22 / E23 — earnings quality: the non-fundamental gap and the agreement gate (P-06, 2026-09-10)
+
+**The question.** The catalyst pillar knows *when* a name reports; it knows nothing about
+what the last report *said*, or how the tape took it. `engine/earnings_quality.py` puts
+five more keys into the same `features` dict as §6b, from a staged `earnings_history.json`
+(`get_earnings_results`, trailing eight quarters per symbol — `docs/DATA.md` §1b) and the
+bars file. Scored by nothing; `ic.py --by-feature` reads them like every other feature.
+
+| key | formula | paper | expected sign |
+|---|---|---|---|
+| `sue` | latest (EPS actual − estimate) / sample std of the last ≤8 surprises; null under 4 quarters | Bernard & Thomas 1989 (PEAD) | **+** over 21–63 sessions |
+| `ear_3d` | Σ over t−1, t, t+1 of (stock daily return − SPY daily return); t = first session on/after the report date, +1 session for an after-close print | Chan, Jegadeesh & Lakonishok 1996 | **+** (drift continues) |
+| `reg_residual` | `ear_3d` − pooled cross-sectional OLS fit of `ear_3d` on `sue` (with intercept) across the run's names; null under 5 names | Ben-Rephael, Da & Israelsen — the "non-fundamental gap" | **−** over 21 sessions (reverses ~1%) |
+| `earnings_agreement` | +1 when `sue` ≥ 1.0 **and** `ear_3d` ≥ 2%; −1 when both ≤ the negatives; 0 otherwise; null when either is null | Chan, Jegadeesh & Lakonishok 1996 | **+** (the +1 bucket beats the 0 and −1 buckets) |
+| `days_since_earnings` | weekdays since the latest reported quarter's report date | — | (conditioning variable) |
+
+The two experiments:
+
+**E22 — REG as a 21-day reversal screen.** The part of the announcement move the surprise
+does not explain is the part that reverses. If `reg_residual` ranks the 21-session forward
+return *negatively* on the hold-out, a name in the top quintile of REG is a candidate to
+refuse (or size down) for a month after its print, whatever its momentum says; a name in
+the bottom quintile gapped less than its surprise warranted and is the PEAD buy.
+
+**E23 — EAR × SUE agreement gate.** Chan, Jegadeesh & Lakonishok's finding is that the
+drift is strongest when the earnings surprise and the price reaction *agree* — high SUE
+with a high abnormal return — and weakest, or absent, when they disagree. If the +1 bucket
+of `earnings_agreement` beats the 0 and −1 buckets on the hold-out, the gate is a
+post-earnings entry filter: enter a name inside `days_since_earnings ≤ 21` only when the
+two agree.
+
+### Inputs the run needs
+
+Beyond §6b's bars (SPY included): `earnings_history.json` for every name the replay scores,
+covering every quarter from 8 quarters before the first replay date. The connector serves
+only the trailing eight, so **a two-year replay needs the history collected once and kept**
+— `experiments/earnings_history.json`, appended each quarter, never re-fetched from scratch,
+because a re-fetch loses the oldest quarters. `backtest.py` does not yet call
+`earnings_quality.build()` per replay date; until it does, the recipes below read the **live
+archive** (`claude/scans/*.json` records, which carry the features from the day they were
+scored), which is survivorship-free and point-in-time by construction, and simply short.
+Wiring the per-date computation into `backtest.py` is the next P-06 step; the flag will be
+`--earnings-history experiments/earnings_history.json` and the records will then carry the
+same five keys.
+
+### The E22 recipe
+
+```bash
+# the live archive: every scan record since P-06 landed, one observation per (date, symbol)
+python3 engine/ic.py --records claude/scans/ --bars bars_all.json --horizons 5,10,21 \
+    --by-feature --md ic_e22.md --json ic_e22.json
+# read the reg_residual row at the 21-session horizon: the sign must be NEGATIVE, the
+# Newey–West t under 3 says "not yet", and the quintile spread's 90% interval must exclude 0
+# then the counterfactual, once backtest.py carries the keys (in-sample first, hold-out once):
+python3 engine/backtest.py --bars bars_all.json --start 2024-08-21 --end 2025-08-20 --every 5 \
+    --sector-map sector_map.json --universe-history experiments/universe_sp500.json \
+    --earnings-history experiments/earnings_history.json \
+    --out-records records/e22_in/ --ledger experiments/ledger.jsonl --experiment-id E22 \
+    --hypothesis "reg_residual ranks 21d forward returns negatively: the non-fundamental part of the earnings gap reverses" \
+    --config-diff '{"features": ["reg_residual"], "gate": "none"}'
+python3 engine/ic.py --records records/e22_in/ --bars bars_all.json --horizons 5,10,21 \
+    --by-feature --md ic_e22_in.md --json ic_e22_in.json
+```
+
+Read `reg_residual` against `ear_3d` side by side: if `ear_3d` is **+** and `reg_residual`
+is **−** at 21 sessions, the decomposition is doing its job — the fundamental part drifts,
+the non-fundamental part reverses. If both carry the same sign, the regression is not
+separating anything and the cross-section was too thin (check `n` per date; under 5 names
+the residual is null by construction, and 5–10 is barely a fit).
+
+### The E23 recipe
+
+```bash
+python3 engine/ic.py --records claude/scans/ --bars bars_all.json --horizons 10,21,42 \
+    --by-feature --md ic_e23.md --json ic_e23.json
+# earnings_agreement is a three-valued feature, so its "quintile" spread is the +1 bucket
+# minus the −1 bucket; the IC row is the rank correlation over the three levels. Split the
+# observations file on days_since_earnings <= 21 (the ic.json observations carry it) and
+# re-run on that half: the gate is only ever applied inside the post-announcement month.
+python3 - <<'PY'
+import json
+o = json.load(open("ic_e23.json"))
+obs = [x for x in o["observations"]
+       if (x.get("features") or {}).get("days_since_earnings") is not None
+       and x["features"]["days_since_earnings"] <= 21]
+json.dump({"observations": obs}, open("ic_e23_post.json", "w"))
+PY
+python3 engine/ic.py --records ic_e23_post.json --horizons 10,21,42 --by-feature \
+    --md ic_e23_post.md --json ic_e23_post.json
+```
+
+What promotes it: on the hold-out, the +1 bucket's mean forward return over 21 and 42
+sessions above the 0 bucket's with an interval clear of zero, **and** `sue` alone weaker than
+the agreement bucket (otherwise the gate adds nothing over PEAD). Then a ledger row
+(`--experiment-id E23`) before any pillar reads it. Both features carry the SUE look-ahead
+`docs/DATA.md` §1b describes — say so in the write-up.
 
 ---
 
