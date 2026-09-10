@@ -98,6 +98,17 @@ ADDED 2026-09-10
     working buys — and cools off for five sessions, after which entries come back at half
     size until the HWM is regained. A −2% session is a soft daily level: no new entries for
     the rest of the day. Exits stay live at every rung. The 3% kill is untouched.
+  * K-06 — SHADOW FILLS and the execution-cost budget (fills.py). The booked fill model above
+    is unchanged and its P&L is byte-identical with the model off. Alongside every booked
+    fill — entry, exit, trim, rebalance, flatten — the book now records what the same order
+    would have paid against the quote (a buy at the ask plus k half-spreads plus a size
+    add-on, a sale at the bid less the same), the signed gap in dollars (positive = the paper
+    book flattered itself), and the implementation shortfall against the decision-time mid.
+    The decision mid for an entry is captured when the order is PLACED (entry_pass) and
+    carried on the order; for every same-run sale it is the mid of the quote the sale fired
+    on. book["shadow"] accumulates the gap; state carries equity_shadow = equity − cum gap and
+    the year-to-date cost against PM_RULES["cost_budget_bps_per_year"]. PM.md § "Shadow
+    fills and execution cost".
 
 Paths resolve from SCAN_DIR, else from this file's own directory.
 """
@@ -108,6 +119,7 @@ sys.path.insert(0, BASE)
 
 import archive
 import broker_policy
+import fills as fills_mod
 import ladder as ladder_mod
 import portfolio as pf_mod
 from portfolio import RULES, build_proposals
@@ -156,6 +168,21 @@ PM_RULES = {
         ],
         "reentry_size_mult": 0.5,       # after the cool-off, until the HWM is regained
     },
+    # K-06 — the shadow fill model. Records, never books: the booked price and P&L are
+    # untouched whether this is on or off. Semantics in fills.shadow_fill() and PM.md
+    # § "Shadow fills and execution cost". A desk's pm_rules may override the whole block.
+    "shadow": {
+        "enabled": True,
+        "k_by_slot": {"pre-market": 1.0, "opening-range": 1.0, "midday": 0.0,
+                      "power-hour": 1.0, "sentinel": 0.5, "ad-hoc": 0.5},
+        "add_on_bps_large_cap": 2.0,
+        "add_on_bps_small_cap": 15.0,
+        "small_cap_adv_usd": 10e6,
+        "gap_through_stops": True,
+    },
+    # K-06 — execution-cost budget per desk: implementation shortfall × notional, summed over
+    # the year and divided by average equity, may use this many bps. Over 100% is a warning.
+    "cost_budget_bps_per_year": 200,
 }
 
 SLOT_ORDER = {"pre-market": 0, "opening-range": 1, "midday": 2, "power-hour": 3, "ad-hoc": 4,
@@ -310,14 +337,20 @@ def quotes_to_prices(payload, now, max_age_min=30):
         # Bid/ask spread as a percentage of price. On a thin name this is the largest
         # cost the book pays; the entry pass refuses names over max_spread_pct.
         spread_pct = None
+        bid = ask = None
         try:
             bid, ask = float(q.get("bid_price") or 0), float(q.get("ask_price") or 0)
             if bid > 0 and ask > bid:
                 spread_pct = round((ask - bid) / ((ask + bid) / 2) * 100.0, 3)
         except (TypeError, ValueError):
             spread_pct = None
+        # K-06: the raw touch travels with the price so the shadow fill can be priced
+        # against the quote the decision saw. None unless both sides are usable.
+        if not (isinstance(bid, float) and isinstance(ask, float) and bid > 0 and ask >= bid):
+            bid = ask = None
         out[sym] = {"price": best_px, "as_of": best_ts.isoformat().replace("+00:00", "Z"),
-                    "age_min": round(age, 1), "spread_pct": spread_pct}
+                    "age_min": round(age, 1), "spread_pct": spread_pct,
+                    "bid": bid, "ask": ask}
     return out, rejected
 
 
@@ -385,6 +418,8 @@ def build_price_book(scan, prices_override, book, scan_stale):
                       "as_of": (v.get("as_of") if isinstance(v, dict) else None),
                       "fresh": True,
                       "spread_pct": (v.get("spread_pct") if isinstance(v, dict) else None),
+                      "bid": (v.get("bid") if isinstance(v, dict) else None),
+                      "ask": (v.get("ask") if isinstance(v, dict) else None),
                       "gics": (pb.get(tk) or {}).get("gics"),
                       "industry": (pb.get(tk) or {}).get("industry")}
     for p in book.get("positions", []):
@@ -592,7 +627,35 @@ def short_basis(basis, kind=None):
     return kind or "—"
 
 
-def _apply_buy(book, sym, shares, price, meta, today, jrn, reason):
+# ------------------------------------------------------------------ K-06 shadow fills
+def _shadow_rules():
+    """The active shadow model, or None when it is switched off. Off means OFF: no key is
+    written anywhere, so the book and the journal are byte-identical to the pre-K-06 engine."""
+    r = PM_RULES.get("shadow")
+    return r if isinstance(r, dict) and r.get("enabled") else None
+
+
+def _shadow_record(book, pb, sym, side, shares, booked, today, jrn, mid=None, cap=None,
+                   adv=None):
+    """The per-fill shadow record for a fill that has just been booked, or None when the
+    model is off. `mid` is the DECISION-TIME mid — for an entry it was captured at placement
+    and travels on the order; for a same-run sale the mid of the quote the sale fired on is
+    the decision mid, because the decision and the fill are the same run. `cap` bounds the
+    touch (the exit path passes min(last, stop) for a broken stop). With no two-sided quote
+    the shadow IS the booked price, basis "no-quote"."""
+    rules = _shadow_rules()
+    if rules is None:
+        return None
+    q = pb.get(sym) or {}
+    bid, ask = q.get("bid"), q.get("ask")
+    if mid is None:
+        mid = fills_mod.decision_mid(bid, ask)
+    shadow = fills_mod.shadow_fill(side, bid, ask, booked, jrn["slot"], rules, adv_usd=adv,
+                                   cap=cap)
+    return fills_mod.record_shadow(book, side, shares, booked, shadow, mid, today)
+
+
+def _apply_buy(book, sym, shares, price, meta, today, jrn, reason, shadow=None):
     cost = shares * price
     book["cash"] = round(book["cash"] - cost, 6)
     pos = next((p for p in book["positions"] if p["symbol"] == sym), None)
@@ -622,12 +685,18 @@ def _apply_buy(book, sym, shares, price, meta, today, jrn, reason):
         })
         pos = book["positions"][-1]
     _policy().record_buy(book, pos, shares, today, price)
-    jrn["decisions"].append({"action": "fill-buy", "symbol": sym, "shares": round(shares, 6),
-                            "price": round(price, 4), "reason": reason,
-                            "detail": f"${cost:,.2f} filled at the resting limit"})
+    rec = {"action": "fill-buy", "symbol": sym, "shares": round(shares, 6),
+           "price": round(price, 4), "reason": reason,
+           "detail": f"${cost:,.2f} filled at the resting limit"}
+    if shadow:
+        rec.update(shadow)
+    jrn["decisions"].append(rec)
 
 
-def _apply_sell(book, sym, shares, price, today, jrn, reason, detail):
+def _apply_sell(book, sym, shares, price, today, jrn, reason, detail, shadow=None):
+    """Book a sale. `shadow` is a callable (shares -> per-fill shadow record) or None — a
+    callable because the shares actually sold are clamped to the position HERE, and the
+    shadow gap must be measured on the shares that moved."""
     pos = next((p for p in book["positions"] if p["symbol"] == sym), None)
     if not pos:
         return
@@ -642,18 +711,27 @@ def _apply_sell(book, sym, shares, price, today, jrn, reason, detail):
     intraday = pos.get("intraday_shares", 0.0)
     if intraday > 0 and shares > 0:
         pos["intraday_shares"] = _round_shares(intraday - min(shares, intraday))
-    book.setdefault("closed_trades", []).append({
+    closed = {
         "symbol": sym, "shares": round(shares, 6), "entry": pos["avg_cost"],
         "exit": round(price, 4), "opened": pos.get("opened"), "closed": today.isoformat(),
         "closed_slot": jrn["slot"], "pnl": round(pnl, 2),
         "pnl_pct": round((price / pos["avg_cost"] - 1) * 100, 2) if pos["avg_cost"] else 0.0,
-        "reason": reason, "detail": detail})
+        "reason": reason, "detail": detail}
+    # K-06: the shadow is measured AFTER realized_pnl is booked, so gap_share_of_realized
+    # on the book reflects this sale; it is measured on the clamped share count.
+    srec = shadow(shares) if shadow else None
+    if srec:
+        closed.update(srec)
+    book.setdefault("closed_trades", []).append(closed)
     pos["shares"] = _round_shares(pos["shares"] - shares)
     if pos["shares"] <= 0 or pos["shares"] * price < 0.01:
         book["positions"] = [p for p in book["positions"] if p["symbol"] != sym]
-    jrn["decisions"].append({"action": "fill-sell", "symbol": sym, "shares": round(shares, 6),
-                            "price": round(price, 4), "reason": reason,
-                            "detail": f"{detail} — realised ${pnl:+,.2f}"})
+    rec = {"action": "fill-sell", "symbol": sym, "shares": round(shares, 6),
+           "price": round(price, 4), "reason": reason,
+           "detail": f"{detail} — realised ${pnl:+,.2f}"}
+    if srec:
+        rec.update(srec)
+    jrn["decisions"].append(rec)
 
 
 # ------------------------------------------------------------------ 1. fills
@@ -688,15 +766,24 @@ def simulate_fills(book, pb, today, run_key, jrn, scan_by_tk):
                 o["status"] = "filled"
                 o["fill_price"] = o["limit_price"]
                 o["closed"] = jrn["ts"]
+                # K-06: the decision mid was captured when the order was PLACED and rides
+                # on the order; the shadow price is what a marketable buy pays against
+                # THIS slot's quote. Both None-safe when the model is off.
                 _apply_buy(book, o["symbol"], o["shares"], o["limit_price"], o.get("meta", {}),
-                           today, jrn, o.get("reason", "entry"))
+                           today, jrn, o.get("reason", "entry"),
+                           shadow=_shadow_record(book, pb, o["symbol"], "buy", o["shares"],
+                                                 o["limit_price"], today, jrn,
+                                                 mid=o.get("decision_mid"),
+                                                 adv=(o.get("meta") or {}).get("adv_usd")))
         else:  # sell limit resting at a target
             if px >= o["limit_price"]:
                 o["status"] = "filled"
                 o["fill_price"] = o["limit_price"]
                 o["closed"] = jrn["ts"]
                 _apply_sell(book, o["symbol"], o["shares"], o["limit_price"], today, jrn,
-                            o.get("kind", "target"), o.get("reason", "resting target"))
+                            o.get("kind", "target"), o.get("reason", "resting target"),
+                            shadow=lambda n, _s=o["symbol"], _p=o["limit_price"]:
+                            _shadow_record(book, pb, _s, "sell", n, _p, today, jrn))
     book["working_orders"] = [o for o in book.get("working_orders", []) if o.get("status") == "working"]
 
 
@@ -798,8 +885,11 @@ def ladder_pass(book, pb, today, marked, jrn, day_pnl_pct):
                 f"UNPROTECTED: {sym} — the ladder halt wanted it flat and the {_policy().name} "
                 "policy refused the sale. Close it by hand if you disagree.")
             continue
-        _apply_sell(book, sym, sellable, round(px * slip, 4), today, jrn, "flatten",
-                    f"Ladder halt: {st['dd_pct']:.2f}% under the ${st['hwm']:,.2f} high-water mark")
+        booked = round(px * slip, 4)
+        _apply_sell(book, sym, sellable, booked, today, jrn, "flatten",
+                    f"Ladder halt: {st['dd_pct']:.2f}% under the ${st['hwm']:,.2f} high-water mark",
+                    shadow=lambda n, _s=sym, _b=booked:
+                    _shadow_record(book, pb, _s, "sell", n, _b, today, jrn))
     after = mark_book(book, pb)
     rec = ladder_mod.halt_record(st, today, after["equity"], rules)
     book["ladder_halt"] = rec
@@ -899,7 +989,17 @@ def exit_pass(book, pb, scan_by_tk, today, equity, jrn):
                                    "reason": f"{action} sized to ${sellable * px:.2f}, under the "
                                              f"${RULES['min_notional']:.2f} broker minimum"})
             continue
-        _apply_sell(book, sym, sellable, round(px * slip, 4), today, jrn, action, detail)
+        booked = round(px * slip, 4)
+        # K-06: a broken stop's shadow touch is capped at min(last, stop) — never the
+        # stop price, and never a stale bid sitting above the print. A stop is not
+        # resting at the broker; the honest witness is the tape.
+        cap = None
+        if action == "stop" and (_shadow_rules() or {}).get("gap_through_stops", True):
+            cap = min(px, float(pos["stop"]))
+        _apply_sell(book, sym, sellable, booked, today, jrn, action, detail,
+                    shadow=lambda n, _s=sym, _b=booked, _c=cap, _row=r:
+                    _shadow_record(book, pb, _s, "sell", n, _b, today, jrn, cap=_c,
+                                   adv=fills_mod.adv_usd(_row)))
         if action == "trim":
             live = next((p for p in book["positions"] if p["symbol"] == sym), None)
             if live:
@@ -951,9 +1051,12 @@ def rebalance_pass(book, pb, today, equity, jrn, house=None):
                                    "reason": "Over the position cap but not trimmable — "
                                              + (note or "blocked")})
             continue
-        _apply_sell(book, pos["symbol"], sellable, round(px * slip, 4), today, jrn, "rebalance",
+        booked = round(px * slip, 4)
+        _apply_sell(book, pos["symbol"], sellable, booked, today, jrn, "rebalance",
                     f"Position was {pct:.1f}% of equity, over the "
-                    f"{RULES['max_position_pct']:.0f}% cap")
+                    f"{RULES['max_position_pct']:.0f}% cap",
+                    shadow=lambda n, _s=pos["symbol"], _b=booked:
+                    _shadow_record(book, pb, _s, "sell", n, _b, today, jrn))
         # Book the rebalance on the surviving position, not on the stale loop variable —
         # _apply_sell drops a position it closes out entirely.
         live = next((p for p in book["positions"] if p["symbol"] == pos["symbol"]), None)
@@ -1283,11 +1386,23 @@ def entry_pass(book, scan, pb, today, marked, jrn, scan_stale, house=None, ladde
                      "ladder_mult": ladder_mult, "unscaled_shares": full_shares},
             "warnings": p["warnings"],
         }
+        # K-06: THE DECISION-TIME MID. An entry is decided here and filled on a later slot,
+        # so the mid of the quote this decision was taken on is captured now, carried on
+        # the order, and read back by simulate_fills() when the resting limit fills. None
+        # when the price came from the scan rather than a two-sided broker quote. Written
+        # only with the model on, so the off path stays byte-identical.
+        if _shadow_rules() is not None:
+            q = pb.get(p["ticker"]) or {}
+            order["decision_mid"] = fills_mod.decision_mid(q.get("bid"), q.get("ask"))
+            order["meta"]["adv_usd"] = fills_mod.adv_usd(next(
+                (row for row in clean if row.get("ticker") == p["ticker"]), None))
         book["working_orders"].append(order)
         placed.append(order)
         house_apply(house, p["ticker"], p["gics"], notional)
         jrn["decisions"].append({"action": "place-buy", "symbol": p["ticker"],
                                  "shares": p["shares"], "price": limit,
+                                 **({"decision_mid": order["decision_mid"]}
+                                    if "decision_mid" in order else {}),
                                  "reason": order["reason"],
                                  "detail": f"${order['notional']:,.2f}, stop {p['stop']:,.2f}, "
                                            f"target {p['target']:,.2f}, risking "
@@ -1432,6 +1547,26 @@ def run(book, scan, prices_override, slot, now_iso, mode, policy_name=None):
         jrn["warnings"].append("Unpriced positions this run: " + ", ".join(marked["unpriced"]) +
                                " — they carry no live stop until a price is available.")
 
+    # K-06: the shadow ledger and the cost budget. Only with the model on — the off path
+    # writes no key at all. book["shadow"] is refreshed here so gap_share_of_realized_pct
+    # reflects this run's realised P&L even on a run that booked no fill.
+    shadow_state = None
+    if _shadow_rules() is not None:
+        book.setdefault("shadow", {"cum_gap_usd": 0.0, "n_fills": 0,
+                                   "gap_share_of_realized_pct": None, "by_year": {}})
+        book["shadow"].update(fills_mod.shadow_summary(book))
+        budget = fills_mod.cost_budget_status(book, today, PM_RULES)
+        shadow_state = dict(fills_mod.shadow_summary(book), cost_budget=budget,
+                            equity_shadow=round(marked["equity"] - book["shadow"]["cum_gap_usd"], 2))
+        if (budget.get("share_used_pct") or 0) > 100:
+            jrn["warnings"].append(
+                f"EXECUTION COST BUDGET EXCEEDED: {budget['ytd_cost_bps']:.1f} bp of average "
+                f"equity spent on implementation shortfall in {budget['year']}, against a "
+                f"{budget['budget_bps']:.0f} bp/year budget ({budget['share_used_pct']:.0f}% "
+                "used). The desk is paying more to trade than its budget allows — trade less, "
+                "or trade wider names at quieter slots.")
+        jrn["shadow"] = shadow_state
+
     jrn.update({"equity": marked["equity"], "cash": marked["cash"],
                 "invested": marked["invested"], "realized_pnl": round(book["realized_pnl"], 2),
                 "halted": bool(book["day"].get("halted")),
@@ -1471,7 +1606,14 @@ def run(book, scan, prices_override, slot, now_iso, mode, policy_name=None):
                  "ladder": ladder,
                  # K-01: broker_policy, day_trades_used, day_trade_limit, pdt_applies and
                  # whatever else the regime reports (deficits, settlement, GFVs).
-                 **POLICY.state(book, today, marked["equity"])},
+                 **POLICY.state(book, today, marked["equity"]),
+                 # K-06: equity_shadow = equity − cumulative shadow gap, the shadow summary
+                 # and the year-to-date cost budget. Absent entirely with the model off.
+                 **({"equity_shadow": shadow_state["equity_shadow"],
+                     "shadow": {k: shadow_state[k] for k in
+                                ("cum_gap_usd", "n_fills", "gap_share_of_realized_pct")},
+                     "cost_budget": shadow_state["cost_budget"]}
+                    if shadow_state else {})},
         "positions": [dict(p, market_value=round((pb.get(p["symbol"], {}).get("price")
                                                   or p["avg_cost"]) * p["shares"], 2),
                            price=pb.get(p["symbol"], {}).get("price"),
@@ -1822,6 +1964,15 @@ def main():
     print(f"day P&L {b['daily_pnl_pct']:+.2f}%   realised ${b['realized_pnl']:+,.2f}   "
           f"total {b['total_return_pct']:+.2f}%   {regime}"
           + ("   *HALTED*" if b["halted"] else ""))
+    if b.get("shadow") is not None:
+        sh, cb = b["shadow"], b.get("cost_budget") or {}
+        share = sh.get("gap_share_of_realized_pct")
+        print(f"shadow gap ${sh['cum_gap_usd']:,.2f} "
+              + (f"({share:.1f}% of realized)" if share is not None
+                 else "(n/a % of realized — nothing realised yet)"), end="")
+        print(f"   equity_shadow ${b['equity_shadow']:,.2f}   {sh['n_fills']} shadow fill(s)   "
+              f"exec cost {cb.get('ytd_cost_bps', 0):.1f}/{cb.get('budget_bps', 0):.0f} bp "
+              f"({cb.get('share_used_pct') or 0:.0f}% of budget)")
     lad = b.get("ladder") or {}
     if lad.get("rung", 0) > 0 or lad.get("entries_blocked") or lad.get("reentry_active"):
         print(f"LADDER rung {lad.get('rung', 0)}   drawdown {lad.get('dd_pct', 0):.2f}% from "

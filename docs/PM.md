@@ -310,6 +310,109 @@ for going live on its own.
 
 ---
 
+## 3b. Shadow fills and execution cost (K-06, added 2026-09-10)
+
+The booked fill model above is unchanged, and its output is byte-identical to what it was
+before this section existed — `tests/test_shadow_fills.py` proves it against a frozen
+pre-change output. What changed is that the book now carries a **second price next to
+every fill**, and a running total of the difference.
+
+### What a shadow fill is
+
+Every booked fill — an entry filling at its resting limit, a stop, a thesis exit, a target
+scale-out, a trim, a rebalance, a ladder flatten — gets a `shadow_price`: what a marketable
+order of that size would have paid **against the quote the engine actually saw**.
+
+    buy   →  ask + k × half_spread + add_on
+    sell  →  bid − k × half_spread − add_on
+
+- `half_spread` is (ask − bid) / 2 from the broker quote the run was priced on.
+- `k` is how many half-spreads beyond the touch the order pays, **by slot**
+  (`PM_RULES["shadow"]["k_by_slot"]`): 1.0 at pre-market, opening-range and power-hour,
+  where the spread is wide and the tape is moving; 0.0 at midday, where a marketable order
+  on a liquid name really does fill at the touch; 0.5 for the sentinel and ad-hoc runs.
+- `add_on` is the size/impact cost the spread does not carry, in bps of the mid, by
+  liquidity tier: **2 bp** for a large cap, **15 bp** for a name under $10m of dollar ADV
+  (`small_cap_adv_usd`). The tier comes from the candidate's `adv_usd`, else
+  `avg_volume_20d × price`, else `volume × price`; when none is known the name is treated as
+  large and the basis string says so. The guess errs toward the smaller cost on purpose —
+  a tier nobody measured must not manufacture a penalty.
+- **Gap through a stop** (`gap_through_stops: True`): a stop's shadow touch is capped at
+  min(last, stop). A stop is not resting at the broker (section 5); when the tape has
+  printed through it, the print is the witness — never the stop price, and never a stale
+  bid sitting above the print.
+- **No two-sided quote** (the price came from the scan, or the quote was crossed): the
+  shadow *is* the booked price, basis `no-quote`, gap zero. A missing quote records
+  nothing rather than inventing something.
+
+### Why never fill at mid
+
+A model that fills at the mid is claiming the desk earns half the spread on every trade.
+Nobody paying for liquidity earns the spread. A marketable order crosses it: the buyer
+pays the ask, the seller hits the bid, and on a moving tape or a thin book the fill is
+worse than the touch, not better. Half-spread guide, as a fraction of price:
+
+| Tier | Half-spread | What it means on a $1,000 fill |
+|---|---|---|
+| Mega-cap (AAPL, NVDA, MSFT) | 0.5–2 bp | 5–20 cents |
+| S&P 500 average | 2–5 bp | 20–50 cents |
+| Russell 2000 | 10–40 bp | $1–$4 |
+
+The flat 0.25% (25 bp) exit haircut is therefore **pessimistic** on a mega-cap at midday
+and **optimistic** on a small cap at the open — and the whole point of the shadow ledger is
+to find out which of those the book has actually been doing. On 2026-09-10's frozen
+sequence (three large-cap midday fills) the shadow came in *inside* the booked haircut:
+`cum_gap_usd` was negative. That is a finding about the book, not a reason to loosen it.
+
+### What is recorded
+
+Per fill, on the journal decision and (for sales) on the `closed_trades` record:
+
+- `shadow_price` — the price above.
+- `shadow_gap_usd` — `(booked − shadow) × shares` for a sale, `(shadow − booked) × shares`
+  for a buy. **Positive means the paper book flattered itself**, in either direction.
+- `implementation_shortfall_bps` — `|shadow_fill − decision mid| / mid × 1e4`, where the
+  decision mid is `(bid + ask) / 2` **at the time of the decision**. For an entry that is
+  the quote the order was *placed* on; `entry_pass` writes it onto the working order as
+  `decision_mid`, and `simulate_fills` reads it back when the resting limit fills on a
+  later slot. For every same-run sale the decision and the fill share one quote. `null`
+  when there was no two-sided quote. The shortfall is measured on the *shadow* fill, not
+  the booked one: it is the execution cost a real desk would report, and the booked
+  haircut is a bookkeeping convention, not a cost.
+- `shadow_basis` — the formula in words, so a board can never show a number without its
+  provenance (`ask + 1×half-spread + 2bp (large cap)`, or `no-quote`).
+
+Book level, `book["shadow"]`: `cum_gap_usd`, `n_fills`, `gap_share_of_realized_pct`
+(cumulative gap as a percentage of |realised P&L|, null while nothing is realised) and a
+per-year cost accumulator. State and the journal carry the same summary plus
+**`equity_shadow` = equity − cum_gap_usd** — the equity the book would show if it had paid
+the shadow price on every fill. The console prints `shadow gap $x (y% of realized)` on
+every run.
+
+### The execution-cost budget
+
+`PM_RULES["cost_budget_bps_per_year"] = 200` per desk. `fills.cost_budget_status(book,
+today)` returns `ytd_cost_bps` = Σ(shortfall × notional) over the calendar year ÷ average
+equity (the mean of the year's equity-curve points) × 1e4, the `budget_bps`, and
+`share_used_pct`. Over 100% the run warns `EXECUTION COST BUDGET EXCEEDED` — the desk is
+paying more to trade than its edge is likely worth, and the answer is to trade less or
+trade wider names at quieter slots, not to lower the budget. 200 bp/year is deliberately
+tight for a book that turns over as often as this one; if it binds, that is information.
+
+### The plan
+
+The book keeps booking at the old model until the shadow gap is *understood*: a few weeks
+of `gap_share_of_realized_pct` across all three desks, split by slot and by tier, so the
+switch is made on a measurement rather than on a feeling. Then, on a session boundary,
+with a doctrine note here and a line in the journal, `pm.py` switches its booked fill to
+the shadow price and the pre-switch equity curve is labelled as such on every board. Not
+before: a silent change to the cost model makes yesterday's curve and today's incomparable
+for a reason nobody can see. To switch the *recording* off — never the reason to do it —
+set `PM_RULES["shadow"]["enabled"] = False`; the engine then writes exactly the pre-K-06
+bytes.
+
+---
+
 ## 4. Day-trade / broker policy — the regime the book trades under
 
 Until 2026-09-10 the manager carried one regime, hard-wired: the FINRA pattern-day-trader
@@ -732,12 +835,16 @@ For the manager this matters in three places:
 - **The correlation multiplier is a sector-overlap proxy**, not computed from returns.
   Never present it as a correlation.
 - **No options, no crypto, no shorts.** Long equity only.
-- **Slippage is a flat 0.25%** on exits. It is a placeholder, not a measurement.
+- **Slippage is a flat 0.25%** on exits. It is a placeholder, not a measurement — but since
+  K-06 (section 3b) every fill also carries a shadow price against the real quote and the
+  book accumulates the gap, so the size of the placeholder's error is now measured rather
+  than guessed. The booked number is unchanged until that measurement says how to change it.
 - **Targets fill at market, not at the target** — see section 3. The behaviour is unchanged
   and deliberate; what changed on 2026-09-02 is that the doctrine and the code now say so in
   the same words.
 - **Quotes are single-venue last prints.** Fine for a $50 book; on a thin name the bid/ask
-  spread is a bigger cost than anything the model reasons about, and nothing here measures it.
+  spread is a bigger cost than anything the model reasons about. The spread gate refuses
+  entries over 1% and the shadow ledger (section 3b) now prices every fill against it.
 - **The manager cannot act between slots.** Everything it knows is up to four hours old
   by the time the next run corrects it.
 - ~~**Scan Desk's portfolio panel does not know about the paper book** (audit STATE-01).~~
