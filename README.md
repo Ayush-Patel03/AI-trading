@@ -30,6 +30,7 @@ health record — lives in a private claude.ai project and never appears here.
 | `engine/backtest.py` | replays the scoring model over historical bars into `validate.py`'s own record format |
 | `engine/fills.py` | the honest cost model — bid, ask, and gaps through a stop. Wired into nothing yet |
 | `engine/universe.py` | screens a stated index membership instead of retail attention. Wired into nothing yet |
+| `engine/ic.py`, `ledger.py` | per-date rank IC with a Newey–West t-stat, and the append-only trial ledger (`experiments/ledger.jsonl`) |
 | `engine/history.py`, `validate.py` | the score trail and the weekly validation |
 | `engine/sentiment.py` | retail sentiment parsers (ApeWisdom, StockTwits, Reddit) |
 | `engine/render*.py` | the HTML boards |

@@ -169,6 +169,89 @@ means nothing.
 
 ---
 
+## 6a. Trial ledger and IC
+
+**Why the trial count matters.** Every configuration tried against the same two years of
+bars spends some of the evidence, whether or not anyone wrote it down. Bailey & López de
+Prado ("The deflated Sharpe ratio", 2014) put a number on it: with roughly two years of data,
+about **seven** independently tried configurations are enough for the *best* of them to show
+an in-sample Sharpe of 1 from pure noise. Harvey, Liu & Zhu ("…and the cross-section of
+expected returns", 2016) set the bar for a new factor at **t ≥ 3, on a hold-out**, precisely
+because so many have already been tried. Neither correction can be applied if nobody knows
+how many trials there were. `ledger.py` exists to keep that one number honest, and it is
+append-only for the same reason: a trial that was run and then deleted still spent the
+evidence. The ledger already stands at **4** (§ backfill below), so the next trial is number
+5, and by the seventh an in-sample pass is what noise looks like.
+
+**The ledger.** `experiments/ledger.jsonl`, one JSON object per line, written by
+`engine/ledger.py` and by `backtest.py --ledger`. Row schema:
+
+| key | |
+|---|---|
+| `id` | `"E10"`, or auto `"X-<yyyymmdd>-<n>"` |
+| `hypothesis` | one sentence: what this trial claims |
+| `config_diff` | dict or string: what differs from the incumbent |
+| `harness_cmd` | the argv that produced it |
+| `window` | `{"start", "end"}` |
+| `universe` | `{"name", "n_symbols"}` (`n_symbols` may be null) |
+| `n` | observations |
+| `horizons` | e.g. `[5, 10, 20]` |
+| `in_sample` | metrics dict — from `backtest.py`, the `ic.py` score table per horizon |
+| `out_of_sample` | dict, or **null until a hold-out has been measured** |
+| `n_trials_to_date` | prior trial rows + 1 — the multiple-testing counter |
+| `decision` | null until a human sets one |
+| `date` | ISO date |
+| `engine_sha` | `config.engine_sha()`, may be null |
+
+A decision is a separate row — `{"kind": "decision", "ref": <id>, "decision": …}` —
+appended with `--set-decision`; decision rows do not count as trials, and readers fold the
+latest one onto its trial.
+
+```bash
+python3 engine/ledger.py --path experiments/ledger.jsonl --list
+python3 engine/ledger.py --path experiments/ledger.jsonl --set-decision E10 "not promoted — …"
+
+# a counted run: the row is appended after the records are written, and the run prints
+# "trial N of the ledger". Without --ledger the run says it was NOT counted.
+python3 engine/backtest.py --bars bars_all.json --start 2024-08-21 --end 2026-08-28 \
+    --every 5 --out-records records/ --ledger experiments/ledger.jsonl \
+    --experiment-id E10 --hypothesis "…" --config-diff '{"features": ["ret_12_7"]}'
+```
+
+**Backfill.** Rows 1–4 were backfilled by hand from `claude/reviews/backtest-2026-09-10.md`
+(the run predates the ledger): the 2026-09-10 core backtest and its three slices (ex-ETFs,
+ex-semis, per-horizon), each counted as a trial because each was a look at the same data.
+`experiments/README.md` says so next to the file.
+
+**`ic.py` — the per-date rank IC.** `validate.py` pools every (date, ticker) observation
+into one Spearman; that stays, but a pooled correlation over 6,800 rows from 100 dates
+treats each row as independent and they are not. `ic.py` computes, per horizon:
+
+- the **IC**: Spearman(score, forward return) *within each date's cross-section*; its mean,
+  its standard deviation, and its **t-statistic with a Newey–West (Bartlett) variance, lag =
+  horizon**, because forward windows overlap and consecutive ICs are autocorrelated (the
+  formula is in the module docstring);
+- the **pooled Spearman**, so the number `validate.py` prints is alongside for comparison;
+- the **quantile spread**: top minus bottom quintile (terciles when the median cross-section
+  is under 10 names) per date, averaged, with a **block-bootstrap 90% interval** (block =
+  horizon, fixed seed, so the same input gives the same interval);
+- `--by-feature`: the same table for every numeric feature a row carries (a `features` dict
+  if present, else the unscored fields `validate.FIELDS` tracks). This is where the
+  window-split experiment lives: which input ranks returns in-sample, and does it still on
+  the hold-out.
+
+```bash
+python3 engine/ic.py --records records/ --bars bars_all.json --horizons 5,10,20 \
+    --by-feature --md ic.md --json ic.json
+# ic.json carries the observations, so it is itself a valid --records input (no --bars needed)
+```
+
+It reads exactly the records `backtest.py` writes, through `validate.py`'s own loaders. Same
+caveats as everything above: it describes a replay, on a survivor universe, and forecasts
+nothing. A spread whose 90% interval straddles zero is not a spread.
+
+---
+
 ## 7. Where this sits in the plan
 
 Phase 2 of the roadmap (`claude/health/2026-09-02-system-review-and-roadmap.md`) is *prove the
