@@ -21,7 +21,10 @@ FIX = pathlib.Path(__file__).resolve().parent / "fixtures"
 
 # Keys K-07 adds. Everything else must be byte-identical to the pre-change engine.
 NEW_KEYS = {"stop_policy", "initial_risk", "initial_risk_usd", "sessions_held", "highest_close",
-            "trail_level", "live_would_refuse", "live_guardrails", "stop_params"}
+            "trail_level", "live_would_refuse", "live_guardrails", "stop_params",
+            # K-04 (after this golden was frozen): the desk VaR / stress block and its rules.
+            # Additive — reported, never gating with enforce off — so it is stripped here.
+            "risk", "var"}
 
 
 @pytest.fixture

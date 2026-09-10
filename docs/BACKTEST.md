@@ -441,7 +441,7 @@ the books and the bars, and it writes nothing but its own `--md` / `--json`.
 
 1. *Refusals taxonomy.* `report.classify(reason)` maps every `skipped` reason string the
    engine emits to one rule — `sector_cap`, `house_symbol_cap`, `house_sector_cap`, `spread`,
-   `price_drift`, `scan_stale`, `macro_gate`, `broker_policy`, `ladder`, `house_exposure`,
+   `price_drift`, `scan_stale`, `macro_gate`, `broker_policy`, `ladder`, `house_exposure`, `var_stress`,
    `earnings_gate`, `min_notional`, `max_entries`, `kill_switch`, `halt`, `coverage`, plus
    `stop_policy`, `slot`, `desk_mandate`, `working_order`, `once_per_session`, `deadband` for
    what the journal says that is not a gate, and `other` with the raw text kept. The mapping

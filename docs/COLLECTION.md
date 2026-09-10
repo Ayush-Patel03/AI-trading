@@ -129,14 +129,18 @@ fields. Do not merge them.
 | ApeWisdom WSB | `apewisdom.io/api/v1.0/filter/wallstreetbets/page/1` | **PAGE 1 ONLY** — see below |
 | StockTwits trending | `api.stocktwits.com/api/2/trending/symbols.json` | live to the minute |
 | StockTwits gauge | `stocktwits.com/symbol/<T>` (HTML) | live; transcribe score + label |
-| Reddit raw | `arctic-shift.photon-reddit.com/api/posts/search?subreddit=<sub>&limit=100&sort=desc` | **`sort=desc` MANDATORY** |
+| StockTwits symbol stream (optional, P-04) | `api.stocktwits.com/api/2/streams/symbol/<T>.json` → `st_symbol_<T>.json` | **bull share ONLY**, never attention — see §3b |
+| Google Trends (optional, P-04) | any route that yields a dated interest series → `trends.json` | reported, not scored — see §3b |
 
 ### NEVER fetch these
 
-- **`api.stocktwits.com/api/2/streams/symbol/<T>.json`** — cached with a variable TTL.
-  Measured on 2026-09-01: NVDA's newest message was **50 hours old**, TSLA 31h, a small
-  cap 10h, while `trending.json` was current to the minute. A scan polling symbol
-  streams scores weekend chatter as today's. `sentiment.py` refuses this payload shape.
+- **`api.stocktwits.com/api/2/streams/symbol/<T>.json` as an ATTENTION input** — cached
+  with a variable TTL. Measured on 2026-09-01: NVDA's newest message was **50 hours old**,
+  TSLA 31h, a small cap 10h, while `trending.json` was current to the minute. A scan
+  polling symbol streams scores weekend chatter as today's. `sentiment.py` still refuses
+  this payload shape under `--stocktwits-trending`. Since P-04 the same payload, staged as
+  `st_symbol_<T>.json`, is read for one different thing — the crowd's stated Bullish /
+  Bearish split — and reported WITH the age of its newest message (§3b).
 - **ApeWisdom page 2 and beyond.** Ranks recompute between HTTP requests, so page 2
   re-emits page-1 tickers with different numbers (AXON came back as rank 99 with 9
   upvotes *and* rank 101 with 10). Concatenating pages double-counts.
@@ -149,20 +153,79 @@ fields. Do not merge them.
   (all blocked or rate-limited), **Twitter/X and every Nitter mirror** (robots-blocked
   at the fetcher, before auth — a paid key would not help).
 
-### Arctic Shift — the Reddit route that works
+### Reddit — gone (P-04, 2026-09-10)
 
-Reddit's own hosts are blocked by **our egress allowlist**, not by Reddit:
-`reddit.com/robots.txt` is itself proxy-rejected, and WebFetch would have had to read
-that file to report a robots block. Arctic Shift is the Pushshift successor, keyless,
-~120k req/hour, and returns raw post AND comment bodies — the first route to a
-sentiment score this system computes itself rather than renting.
+The Arctic Shift route (`arctic-shift.photon-reddit.com`) turned out to be a periodic dump,
+not a feed, and Reddit's own API needs an approval this account does not have. The
+`--reddit` flag, `reddit_posts.json` and the `reddit_*` keys are removed; nothing the scanner
+scored ever read them. `docs/scan-sources.md` keeps the one-paragraph record.
 
-Verified 2026-09-01 15:13 UTC: newest r/stocks post was **24 minutes old**.
+## 3b. Attention fade — the optional files (P-04, 2026-09-10)
 
-- `sort=desc` is mandatory. Without it the default ordering returns ~55-day-old
-  records and looks like a coverage gap.
-- Server-side `query=` full-text search returns HTTP 500. Filter tickers locally.
-- Comments: `/api/comments/search` with the same parameters.
+`sentiment.py` now measures whether retail attention is ARRIVING or LEAVING, not just how
+much there is. Two of the inputs are optional files a slot may stage; the third is state the
+runner carries between scans. Everything here is REPORTED, NOT SCORED: the scanner's pillar
+arithmetic reads the same keys it always did, and the new fields ride on each candidate's
+`retail` block and its `features` dict for the sign test in `ic.py --by-feature`.
+
+**`st_symbol_<SYM>.json`** — one file per name, the RAW public symbol-stream response,
+file name upper-case (`st_symbol_NVDA.json`). The symbol is taken from the FILE NAME, never
+from the payload, so a stream staged under the wrong name is visible as the operator's
+error. Exact shape read (every other key is ignored):
+
+```json
+{"symbol": {"id": 1, "symbol": "NVDA"},
+ "messages": [
+   {"id": 1001, "created_at": "2026-09-10T14:03:11Z",
+    "entities": {"sentiment": {"basic": "Bullish"}}},
+   {"id": 1002, "created_at": "2026-09-10T13:58:40Z",
+    "entities": {"sentiment": {"basic": "Bearish"}}},
+   {"id": 1003, "created_at": "2026-09-10T13:51:02Z",
+    "entities": {"sentiment": null}}
+ ]}
+```
+
+`entities.sentiment.basic` is `"Bullish"`, `"Bearish"` or absent/null (untagged). Output per
+name: `st_bull_pct` = Bullish / (Bullish + Bearish) × 100, **null when no message is tagged**
+(never 50), `st_bull_n`, `st_bear_n`, `st_msgs`, `st_newest_utc`, `st_stream_age_min` and
+`st_stream_stale` (newest message over 24 h old — warned, still reported). Stage one for
+each finalist when the slot has budget; missing files mean the keys are simply absent.
+
+**`trends.json`** — a Google Trends interest series per symbol, from whatever route was
+available (there is no keyless API; a hand-transcribed series is fine). Exact shape:
+
+```json
+{"NVDA": [{"date": "2026-08-20", "value": 48},
+          {"date": "2026-08-21", "value": 51},
+          {"date": "2026-09-10", "value": 90}],
+ "MU":   [{"date": "2026-09-09", "value": 12}]}
+```
+
+`date` is `YYYY-MM-DD` (longer ISO strings are truncated), `value` a number. The newest
+point is "today"; `trends_z` is its z-score against the trailing 20 points before it (sample
+std), **null under 5 prior points or a flat series**; `trends_latest`, `trends_date`,
+`trends_mean`, `trends_n` ride alongside.
+
+**`archive/attention_history.json`** — NOT a collection input. `sentiment.py` maintains it
+under `$SCAN_DIR` (`--attention-history`, default `archive/attention_history.json`; `''`
+disables): the last 20 scans' ApeWisdom mention and upvote count per symbol, keyed by
+scan hour so a re-run inside the hour replaces itself. The runner stages it from
+`C:\ai-trading-state\archive\` before the scan and writes it back after, the same round trip
+as `followed.json`. Shape, for the record:
+
+```json
+{"_meta": {"window": 20, "min_history": 5, "spike_z": 2.0, "updated": "2026-09-10T16:30:00+00:00"},
+ "symbols": {"NVDA": [{"ts": "2026-09-09T16:30:00+00:00", "mentions": 300, "upvotes": 700},
+                      {"ts": "2026-09-10T16:30:00+00:00", "mentions": 412, "upvotes": 900}]}}
+```
+
+From it, per ApeWisdom name: `attention_count` (today's mentions), `attention_z` (today
+against the trailing 20 PRIOR scans' mean / sample std — **null under 5 prior scans or a flat
+history**), `attention_spike` (`attention_z > 2`; null when the z is), `attention_rank_pct`
+(percentile of today's mentions across the whole page-1 feed, 100 = most mentioned),
+`attention_mean_20`, `attention_history_n`. A name on the history but off today's page 1 is
+recorded at 0 so a fade shows as one. The first scan seeds the file and every z is null; the
+sixth scan is the first with a number.
 
 ---
 
@@ -174,7 +237,8 @@ python3 sentiment.py \
     --apewisdom apewisdom.json \
     --stocktwits-trending st_trending.json \
     --stocktwits-gauges st_gauges.json \
-    --reddit reddit_posts.json \
+    --stocktwits-symbols \                # every st_symbol_<SYM>.json in $SCAN_DIR (optional)
+    --trends trends.json \                # optional
     --watchlists rh_watchlists.json \
     --quotes quotes_min.json \
     --options-scan options_scan.json \
@@ -202,7 +266,7 @@ the Intelligence pillar simply drops out of the denominator.
 | `rank_24h_ago: 0` sentinel | → None, no rank delta computed |
 | `mentions_24h_ago: null` or `0` | flagged `wsb_new_entrant`, **no** fake % change, no divide-by-zero |
 | Corrupt upvotes (HIMS 3 mentions / **9001** upvotes; BAX **-1**) | clamped to 500/mention, floored at 0; reported |
-| English-word tickers (IT ranked 20th, ALL 45th on 2026-09-01) | stop-list; ambiguous-but-real names (DTE, KEY, ALL...) kept **only** when a second feed corroborates |
+| English-word tickers (IT ranked 20th, ALL 45th on 2026-09-01) | ambiguous-but-real names (DTE, KEY, ALL, IT...) kept **only** when a second feed corroborates; the wider stop-list gated the (removed) Reddit text path |
 | Crypto pairs in StockTwits trending (JASMY.X) | excluded from equity sentiment |
 | `trending_score` does not sort the ranks | list position preserved verbatim; neither used as the ranking key |
 | Thin-chain put/call ratios | gated, kept as `put_call_ratio_illiquid` with a reason |
@@ -225,7 +289,7 @@ else) — and a reader can now see the difference.
 
 **Corroboration is REPORTED, NOT SCORED.** Per README section 11, no new data point
 enters the scoring model until the Saturday validation shows it ranks forward returns
-better than what is already scored. Corroboration, `reddit_tone`, `put_call_ratio`,
+better than what is already scored. Corroboration, `attention_z`, `st_bull_pct`, `put_call_ratio`,
 `iv_hv_ratio` and `expected_move_pct` all join relative strength in that queue. What
 DID change the scores is the bug fixes above — those are corrections, not features.
 

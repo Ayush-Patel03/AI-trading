@@ -26,20 +26,37 @@ numbers that no second source confirms. So attention here is scored on CORROBORA
 — how many independent feeds name a ticker — and each vendor's raw counts are carried
 as evidence rather than as the signal.
 
-BANNED INPUT. api.stocktwits.com/api/2/streams/symbol/<T>.json is cached with a
-variable TTL and was measured 50 hours stale for NVDA, 31h for TSLA and 10h for a
-small cap while the trending endpoint was live to the minute. This module refuses
-that payload shape outright rather than trusting a caller to remember. The
+THE STOCKTWITS SYMBOL STREAM. api.stocktwits.com/api/2/streams/symbol/<T>.json is
+cached with a variable TTL and was measured 50 hours stale for NVDA, 31h for TSLA and
+10h for a small cap while the trending endpoint was live to the minute. It is still
+REFUSED as a trending / attention input. What it IS good for is the crowd's stated
+direction: every message carries entities.sentiment.basic (Bullish / Bearish / null)
+and a created_at, so a staged `st_symbol_<SYM>.json` yields a bull share and the age
+of its newest message — reported with that age, never as attention. The
 stocktwits.com/symbol/<T> HTML gauge is a different thing and is fine.
 
-Reddit post/comment text arrives from Arctic Shift (the Pushshift successor), which
-returns raw bodies rather than a vendor's aggregate. Its mention counts and lexicon
-tone are REPORTED, NOT SCORED, until validate.py shows they rank forward returns —
-the same rule relative strength is under.
+ATTENTION FADE (P-04, 2026-09-10). The retail feeds were read as levels: "412 mentions,
+rank 1". A level says nothing about whether attention is arriving or leaving, and the
+research base (Appendix G) expects attention SPIKES to fade over the next two to four
+weeks — a negative sign at that horizon. So this module keeps a rolling
+`attention_history.json` in the archive directory — the last 20 scans' mention and
+upvote count per symbol — and emits, per candidate:
+  attention_z         (today's mentions − trailing-20-scan mean) / trailing std
+  attention_spike     attention_z > 2
+  attention_rank_pct  percentile of today's mentions across every name on the feed
+  st_bull_pct         Bullish / (Bullish + Bearish) from a staged symbol stream
+  trends_z            the same z on a Google Trends series when trends.json is staged
+They are written into each candidate's `retail` block AND its `features` dict, so they
+ride into the scan snapshot and the backtest records where the sign test runs. NOT
+SCORED: scanner.py's pillar arithmetic reads the same keys it always did.
+
+Reddit is gone. The Arctic Shift route was a monthly dump, not a feed, and the Reddit
+API needs approval this account does not have (Appendix B); docs/scan-sources.md keeps
+the note. Nothing in the pipeline named a Reddit field the scanner scored.
 
 Paths resolve from SCAN_DIR, else this file's directory. No path is hardcoded.
 """
-import argparse, json, os, re, sys
+import argparse, glob, json, math, os, re, sys
 from datetime import datetime, timezone
 
 BASE = os.environ.get("SCAN_DIR") or os.path.dirname(os.path.abspath(__file__))
@@ -47,7 +64,8 @@ BASE = os.environ.get("SCAN_DIR") or os.path.dirname(os.path.abspath(__file__))
 # --------------------------------------------------------------- stop-list
 # Tickers that are also ordinary English words, conjunctions or units. A mention
 # counter with no stop-list scores prose. Everything here was observed in a live
-# ApeWisdom top-150 on 2026-09-01 except where noted as pre-emptive.
+# ApeWisdom top-150 on 2026-09-01 except where noted as pre-emptive. A name on this
+# list is kept only when two independent feeds name it (build()).
 STOP_TICKERS = {
     "A","ALL","AM","AN","AND","ANY","ARE","AS","AT","BE","BIG","BY","CAN","CC","DAY",
     "DC","DD","DE","DK","DO","EOD","ES","EU","EV","FOR","GO","GP","HAS","HE","IG","IN",
@@ -56,18 +74,22 @@ STOP_TICKERS = {
     "WE","WELL","YOU","AI","CEO","CFO","ETF","FDA","GDP","IMO","IPO","IRA","LOL","NFA",
     "OTM","ITM","PE","RH","ROI","SEC","TLDR","YOLO","DTE","EPS","ATH","FOMO","HODL",
 }
+# With the Reddit text path gone (P-04) nothing reads STOP_TICKERS; it stays so a future
+# text feed does not have to rediscover the list. build() gates on AMBIGUOUS_BUT_REAL only,
+# exactly as it did before, so the set of names the scanner scores is unchanged.
 # Names that are legitimately traded AND common words. Keep them, but only when the
 # mention arrives cashtagged ($DTE) or the ticker is corroborated by another feed.
 AMBIGUOUS_BUT_REAL = {"DTE","ALL","KEY","IT","ON","PR","ES","IP","DAY","LOVE","GO","UP"}
 
 MAX_UPVOTES_PER_MENTION = 500   # HIMS reported 9001 upvotes on 3 mentions
-CASHTAG = re.compile(r"\$([A-Z]{1,5})\b")
-BARE_TICKER = re.compile(r"\b([A-Z]{2,5})\b")
 
-BULL_WORDS = {"calls","long","buy","bought","bullish","moon","rip","squeeze","breakout",
-              "up","green","rally","beat","upgrade","strong","pump","yolo","hold","hodl"}
-BEAR_WORDS = {"puts","short","sell","sold","bearish","crash","dump","drop","down","red",
-              "miss","downgrade","weak","bag","bagholder","rug","tank","bubble"}
+# Attention fade (P-04).
+ATTENTION_HISTORY = os.path.join("archive", "attention_history.json")   # under BASE
+ATTENTION_WINDOW = 20           # trailing scans in the mean / std
+ATTENTION_MIN_HISTORY = 5       # fewer prior scans than this and the z is null
+ATTENTION_SPIKE_Z = 2.0         # attention_spike = attention_z > this
+ST_STREAM_STALE_HOURS = 24      # a symbol stream whose newest message is older is flagged
+ST_STREAM_FILE = "st_symbol_*.json"
 
 
 def isnum(v):
@@ -213,61 +235,214 @@ def parse_stocktwits_gauges(payload, warnings):
     return out
 
 
-# --------------------------------------------------------------- Arctic Shift
-def parse_reddit_posts(payload, warnings, max_age_hours=36, now=None):
-    """Raw Reddit posts/comments -> per-ticker mention counts and a lexicon tone.
+# --------------------------------------------------------------- StockTwits symbol streams
+def _parse_ts(v):
+    """ISO 8601 (StockTwits writes 2026-09-10T14:03:11Z) -> aware UTC datetime, or None."""
+    if not isinstance(v, str) or not v.strip():
+        return None
+    t = v.strip()
+    if t.endswith("Z"):
+        t = t[:-1] + "+00:00"
+    try:
+        d = datetime.fromisoformat(t)
+    except ValueError:
+        return None
+    return d if d.tzinfo else d.replace(tzinfo=timezone.utc)
 
-    REPORTED, NOT SCORED. The tone is a bag-of-words count, not a model, and it is
-    carried so validate.py can test whether it ranks forward returns before anything
-    depends on it.
+
+def parse_stocktwits_symbol_stream(payload, warnings, symbol=None, now=None):
+    """One staged `st_symbol_<SYM>.json` (the public symbol stream) -> the crowd's stated
+    direction. {"st_bull_pct", "st_bull_n", "st_bear_n", "st_msgs", "st_newest_utc",
+    "st_stream_age_min", "st_stream_stale"} or None when the payload carries no messages.
+
+    The stream is REFUSED as an attention input (parse_stocktwits_trending) because its
+    cache is stale by a variable amount. The bull share is a different claim — "of the
+    people who tagged a direction, how many said Bullish" — and it is reported WITH the
+    age of the newest message so a stale stream is visible, never a fresh-looking number.
     """
-    rows = _rows(payload, "data", "posts", "results")
-    if not rows:
-        return {}, None
-    now = now or datetime.now(timezone.utc)
-    counts, bull, bear, newest = {}, {}, {}, None
-    stale = 0
-    for r in rows:
-        ts = r.get("created_utc")
-        if isnum(ts):
-            when = datetime.fromtimestamp(ts, timezone.utc)
-            newest = when if newest is None else max(newest, when)
-            if (now - when).total_seconds() > max_age_hours * 3600:
-                stale += 1
-                continue
-        text = " ".join(str(r.get(k) or "") for k in ("title", "selftext", "body"))
-        if not text.strip():
+    if not isinstance(payload, dict):
+        return None
+    msgs = payload.get("messages")
+    if not isinstance(msgs, list):
+        return None
+    sym = symbol
+    if not sym:
+        sp = payload.get("symbol")
+        sym = _sym(sp, "symbol") if isinstance(sp, dict) else (sp.upper() if isinstance(sp, str) else None)
+    bull = bear = 0
+    newest = None
+    for m in msgs:
+        if not isinstance(m, dict):
             continue
-        words = set(w.lower() for w in re.findall(r"[a-zA-Z]+", text))
-        b_, s_ = len(words & BULL_WORDS), len(words & BEAR_WORDS)
-        # Cashtags are unambiguous; bare uppercase words need the stop-list.
-        tickers = set(CASHTAG.findall(text))
-        for t in BARE_TICKER.findall(text):
-            if t not in STOP_TICKERS:
-                tickers.add(t)
-        for t in tickers:
-            if t in STOP_TICKERS:
-                continue
-            counts[t] = counts.get(t, 0) + 1
-            bull[t] = bull.get(t, 0) + b_
-            bear[t] = bear.get(t, 0) + s_
+        ent = m.get("entities") if isinstance(m.get("entities"), dict) else {}
+        sent = ent.get("sentiment") if isinstance(ent.get("sentiment"), dict) else {}
+        basic = str(sent.get("basic") or "").strip().lower()
+        if basic == "bullish":
+            bull += 1
+        elif basic == "bearish":
+            bear += 1
+        ts = _parse_ts(m.get("created_at"))
+        if ts is not None:
+            newest = ts if newest is None else max(newest, ts)
+    now = now or datetime.now(timezone.utc)
+    age_min = round((now - newest).total_seconds() / 60.0, 1) if newest else None
+    stale = bool(age_min is not None and age_min > ST_STREAM_STALE_HOURS * 60)
     if stale:
-        warnings.append(f"Dropped {stale} Reddit item(s) older than {max_age_hours}h. "
-                        "If most items were dropped, the `sort=desc` parameter is missing.")
-    if newest is not None:
-        age_min = (now - newest).total_seconds() / 60.0
-        if age_min > 180:
-            warnings.append(f"Newest Reddit item is {age_min:.0f} minutes old — the feed "
-                            "may be stalled or `sort=desc` was omitted.")
+        warnings.append(f"StockTwits symbol stream for {sym or '?'} is {age_min / 60:.0f}h old "
+                        f"(newest message {newest.isoformat(timespec='minutes')}) — its bull "
+                        "share describes an older crowd, not today's.")
+    tagged = bull + bear
+    return {"st_bull_pct": round(bull / tagged * 100.0, 1) if tagged else None,
+            "st_bull_n": bull, "st_bear_n": bear, "st_msgs": len(msgs),
+            "st_newest_utc": newest.isoformat(timespec="seconds") if newest else None,
+            "st_stream_age_min": age_min, "st_stream_stale": stale}
+
+
+def parse_stocktwits_symbol_streams(payloads, warnings, now=None):
+    """{SYM: payload} -> {SYM: parse_stocktwits_symbol_stream(...)}, empties dropped."""
     out = {}
-    for t, n in counts.items():
-        b_, s_ = bull.get(t, 0), bear.get(t, 0)
-        tone = None
-        if b_ + s_ >= 3:
-            tone = round((b_ - s_) / (b_ + s_), 2)
-        out[t] = {"reddit_raw_mentions": n, "reddit_tone": tone,
-                  "reddit_bull_hits": b_, "reddit_bear_hits": s_}
-    return out, newest
+    for sym, payload in (payloads or {}).items():
+        row = parse_stocktwits_symbol_stream(payload, warnings, symbol=str(sym).upper(), now=now)
+        if row:
+            out[str(sym).upper()] = row
+    return out
+
+
+def load_symbol_streams(pattern=ST_STREAM_FILE, base=None):
+    """Every `st_symbol_<SYM>.json` under `base` -> {SYM: payload}. The symbol is the
+    file name's, not the payload's: a stream staged under the wrong name is the
+    operator's error to see, not one to paper over."""
+    base = base or BASE
+    out = {}
+    for path in sorted(glob.glob(os.path.join(base, pattern))):
+        name = os.path.basename(path)
+        stem = name[len("st_symbol_"):-len(".json")] if name.startswith("st_symbol_") \
+            and name.endswith(".json") else os.path.splitext(name)[0]
+        if not stem:
+            continue
+        payload = _load(path)
+        if payload is not None:
+            out[stem.upper()] = payload
+    return out
+
+
+# --------------------------------------------------------------- Google Trends
+def parse_trends(payload, warnings, window=ATTENTION_WINDOW, min_history=ATTENTION_MIN_HISTORY):
+    """{symbol: [{date, value}, ...]} -> {SYM: {trends_latest, trends_date, trends_mean,
+    trends_z, trends_n}}. The z is today's value against the trailing `window` points
+    before it — the same construction attention_z uses on mentions, on a series that
+    carries its own dates. Null with fewer than `min_history` prior points."""
+    if not isinstance(payload, dict):
+        return {}
+    out = {}
+    for sym, series in payload.items():
+        if not isinstance(series, list):
+            continue
+        pts = []
+        for r in series:
+            if not isinstance(r, dict):
+                continue
+            v = r.get("value")
+            if isnum(v) and isinstance(r.get("date"), str):
+                pts.append((r["date"][:10], float(v)))
+        if not pts:
+            continue
+        pts.sort()
+        latest_date, latest = pts[-1]
+        prior = [v for _, v in pts[:-1]][-window:]
+        z, mean = zscore(latest, prior, min_history)
+        out[str(sym).upper()] = {"trends_latest": latest, "trends_date": latest_date,
+                                 "trends_mean": round(mean, 2) if mean is not None else None,
+                                 "trends_z": z, "trends_n": len(prior)}
+    return out
+
+
+# --------------------------------------------------------------- attention history
+def zscore(value, prior, min_history=ATTENTION_MIN_HISTORY):
+    """(z, mean) of `value` against `prior` (sample std). (None, mean) when there are
+    fewer than `min_history` prior points or they do not vary — a z over a flat history
+    is not a large number, it is undefined."""
+    if not isnum(value) or len(prior) < min_history:
+        return None, (sum(prior) / len(prior) if prior else None)
+    n = len(prior)
+    mean = sum(prior) / n
+    var = sum((x - mean) ** 2 for x in prior) / (n - 1) if n > 1 else 0.0
+    if var <= 0:
+        return None, mean
+    return round((value - mean) / math.sqrt(var), 3), mean
+
+
+def load_attention_history(path=None):
+    """The rolling history: {"_meta": {...}, "symbols": {SYM: [{ts, mentions, upvotes}]}}.
+    Missing or unreadable -> an empty one (the first scan has no history, by definition)."""
+    p = path if path is None or os.path.isabs(path) else os.path.join(BASE, path)
+    doc = _load(p) if p else None
+    if not isinstance(doc, dict) or not isinstance(doc.get("symbols"), dict):
+        return {"_meta": {"window": ATTENTION_WINDOW, "updated": None}, "symbols": {}}
+    return doc
+
+
+def attention_features(aw, history, now=None, window=ATTENTION_WINDOW,
+                       min_history=ATTENTION_MIN_HISTORY, spike_z=ATTENTION_SPIKE_Z):
+    """Per-symbol attention features from today's ApeWisdom rows and the rolling history.
+
+    Returns ({SYM: {attention_count, attention_upvotes, attention_z, attention_spike,
+                    attention_rank_pct, attention_mean_20, attention_history_n}},
+             updated_history).
+    The z compares today's mention count with the trailing `window` PRIOR scans of the
+    same symbol; the rank is today's percentile across every name on the feed (100 =
+    the most mentioned). A symbol on the history but off today's page 1 is recorded at
+    0 today — it fell below the page's floor — so a fade shows as one. A symbol whose
+    stored history is all zeros is dropped from the file so it cannot grow without bound.
+    Pure: the caller decides whether to write `updated_history` back.
+    """
+    now = now or datetime.now(timezone.utc)
+    ts = now.isoformat(timespec="seconds")
+    key = ts[:13]                       # date + hour: a re-run inside the hour replaces itself
+    hist = {s: list(v) for s, v in (history or {}).get("symbols", {}).items() if isinstance(v, list)}
+    out = {}
+    if not aw:
+        return out, {"_meta": {"window": window, "updated": (history or {}).get("_meta", {}).get("updated")},
+                     "symbols": hist}
+    counts = {s: (a.get("mentions") if isnum(a.get("mentions")) else 0) for s, a in aw.items()}
+    n = len(counts)
+    ordered = sorted(counts.values())
+    for sym in sorted(set(counts) | set(hist)):
+        today = counts.get(sym, 0)
+        upv = (aw.get(sym) or {}).get("upvotes")
+        prior_rows = [r for r in hist.get(sym, []) if isinstance(r, dict)
+                      and str(r.get("ts", ""))[:13] != key]
+        prior = [float(r["mentions"]) for r in prior_rows[-window:] if isnum(r.get("mentions"))]
+        z, mean = zscore(today, prior, min_history)
+        if sym in counts:
+            below = sum(1 for v in ordered if v < today)
+            rank_pct = round(below / (n - 1) * 100.0, 1) if n > 1 else 100.0
+            out[sym] = {"attention_count": today,
+                        "attention_upvotes": upv if isnum(upv) else None,
+                        "attention_z": z,
+                        "attention_spike": (z > spike_z) if z is not None else None,
+                        "attention_rank_pct": rank_pct,
+                        "attention_mean_20": round(mean, 2) if mean is not None else None,
+                        "attention_history_n": len(prior)}
+        rows = prior_rows + [{"ts": ts, "mentions": today,
+                              "upvotes": upv if isnum(upv) else None}]
+        rows = rows[-window:]
+        if any(isnum(r.get("mentions")) and r["mentions"] > 0 for r in rows):
+            hist[sym] = rows
+        else:
+            hist.pop(sym, None)
+    return out, {"_meta": {"window": window, "updated": ts, "min_history": min_history,
+                           "spike_z": spike_z}, "symbols": hist}
+
+
+def write_attention_history(doc, path=None):
+    p = path if os.path.isabs(path) else os.path.join(BASE, path)
+    d = os.path.dirname(p)
+    if d:
+        os.makedirs(d, exist_ok=True)
+    with open(p, "w", encoding="utf-8") as fh:
+        json.dump(doc, fh, indent=1, sort_keys=True)
+    return p
 
 
 # --------------------------------------------------------------- options positioning
@@ -421,29 +596,40 @@ def parse_watchlists(payload, warnings, quotes=None):
 
 
 # --------------------------------------------------------------- merge
-SOURCE_KEYS = ("apewisdom", "stocktwits_trending", "reddit_raw", "rh_watchlist")
+SOURCE_KEYS = ("apewisdom", "stocktwits_trending", "rh_watchlist")
 
-def build(apewisdom=None, st_trending=None, st_gauges=None, reddit=None,
-          watchlists=None, quotes=None, options_scan=None, earnings_days=None, now=None):
+def build(apewisdom=None, st_trending=None, st_gauges=None, watchlists=None, quotes=None,
+          options_scan=None, earnings_days=None, now=None, st_symbol_streams=None,
+          trends=None, attention_history=None):
+    """Every source in, one normalised map out. Pure: nothing here reads or writes a
+    file. Returns the sentiment.json document; the updated attention history rides on
+    it as `_attention_history` for the caller to write back (main() does, and strips it
+    from the file it writes)."""
     warnings = []
+    now = now or datetime.now(timezone.utc)
     aw = parse_apewisdom(apewisdom, warnings)
     stt = parse_stocktwits_trending(st_trending, warnings)
     stg = parse_stocktwits_gauges(st_gauges, warnings)
-    rd, reddit_newest = parse_reddit_posts(reddit, warnings, now=now)
+    sts = parse_stocktwits_symbol_streams(st_symbol_streams, warnings, now=now)
+    tr = parse_trends(trends, warnings)
     wl, wl_dropped = parse_watchlists(watchlists, warnings, quotes)
     opt = parse_options_scan(dig_result(options_scan) if options_scan else None, warnings)
     earnings_days = earnings_days if isinstance(earnings_days, dict) else {}
+    att, hist_next = attention_features(aw, attention_history, now=now)
 
-    tickers = sorted(set(aw) | set(stt) | set(stg) | set(rd) | set(wl) | set(opt))
+    tickers = sorted(set(aw) | set(stt) | set(stg) | set(sts) | set(tr) | set(wl) | set(opt))
     out = {}
     for tk in tickers:
-        a, t, g, r, w = aw.get(tk), stt.get(tk), stg.get(tk), rd.get(tk), wl.get(tk)
-        o = opt.get(tk)
+        a, t, g, w = aw.get(tk), stt.get(tk), stg.get(tk), wl.get(tk)
+        o, s_, r_ = opt.get(tk), sts.get(tk), tr.get(tk)
         present = [name for name, v in
                    (("apewisdom", a), ("stocktwits_trending", t),
-                    ("reddit_raw", r), ("rh_watchlist", w), ("options_scan", o)) if v]
+                    ("rh_watchlist", w), ("options_scan", o)) if v]
         # An ambiguous English-word ticker only counts when a second, independent
-        # feed also names it. One vendor's prose match is not a finding.
+        # feed also names it. One vendor's prose match is not a finding. (This is the
+        # SAME gate as before P-04: the wider STOP_TICKERS list gated the Reddit text
+        # path only and is kept for the day a text feed returns — widening it to the
+        # vendor aggregates would change which names the scanner scores.)
         if tk in AMBIGUOUS_BUT_REAL and len(present) < 2:
             continue
 
@@ -464,8 +650,10 @@ def build(apewisdom=None, st_trending=None, st_gauges=None, reddit=None,
             row["stocktwits_trending"] = True
         if g:
             row.update({k: v for k, v in g.items() if v is not None})
-        if r:
-            row.update(r)
+        if s_:
+            row.update(s_)
+        if r_:
+            row.update(r_)
         if w:
             row.update(w)
         if o:
@@ -476,20 +664,33 @@ def build(apewisdom=None, st_trending=None, st_gauges=None, reddit=None,
                 row["expected_move_basis"] = (
                     "derived from the scan's implied volatility, NOT a straddle quote — "
                     "implied_move_pct stays null until get_option_quotes is enabled")
+        # P-04: the attention-fade features. Null keys are written on purpose when the
+        # history is too short: "not measured yet" must stay distinguishable from 0.
+        if a:
+            row.update(att.get(tk) or {k: None for k in ATTENTION_KEYS})
         out[tk] = row
 
     ranked = sorted(out.items(),
                     key=lambda kv: (kv[1]["sources_count"],
                                     kv[1].get("wsb_mentions") or 0), reverse=True)
+    spikes = sorted(tk for tk, v in out.items() if v.get("attention_spike"))
+    if spikes:
+        warnings.append("ATTENTION SPIKE (z > 2 vs the trailing 20 scans) on " + ", ".join(spikes)
+                        + " — the research base expects a spike to fade over 2-4 weeks; "
+                          "reported, not scored.")
+    n_hist = sum(1 for v in att.values() if v.get("attention_z") is not None)
     meta = {
-        "generated_at": (now or datetime.now(timezone.utc)).isoformat(timespec="seconds"),
+        "generated_at": now.isoformat(timespec="seconds"),
         "sources_present": {k: bool(v) for k, v in
                             (("apewisdom", aw), ("stocktwits_trending", stt),
-                             ("stocktwits_gauges", stg), ("reddit_raw", rd),
-                             ("rh_watchlists", wl), ("options_scan", opt))},
+                             ("stocktwits_gauges", stg), ("stocktwits_symbol_streams", sts),
+                             ("trends", tr), ("rh_watchlists", wl), ("options_scan", opt))},
         "ticker_count": len(out),
         "corroborated_count": sum(1 for v in out.values() if v["corroborated"]),
-        "reddit_newest_utc": reddit_newest.isoformat(timespec="seconds") if reddit_newest else None,
+        "attention": {"scans_in_history": max((len(v) for v in hist_next["symbols"].values()),
+                                              default=0),
+                      "symbols_with_z": n_hist, "spikes": spikes,
+                      "window": ATTENTION_WINDOW, "min_history": ATTENTION_MIN_HISTORY},
         "watchlist_excluded": wl_dropped,
         # Neither ApeWisdom nor StockTwits stamps its payload. This is the honest
         # statement of that, carried into the board rather than assumed away.
@@ -498,7 +699,8 @@ def build(apewisdom=None, st_trending=None, st_gauges=None, reddit=None,
     }
     return {"_meta": meta, "tickers": out,
             "top_by_corroboration": [k for k, _ in ranked[:25]],
-            "universe": sorted(wl)}
+            "universe": sorted(wl),
+            "_attention_history": hist_next}
 
 
 # --------------------------------------------------------------- merge into scan_data
@@ -511,15 +713,26 @@ SCANNER_RETAIL_KEYS = ("wsb_mentions", "wsb_mentions_24h_ago", "wsb_rank",
 # Carried through for the board and for validate.py. REPORTED, NOT SCORED: per the
 # README section 11 rule, no new data point enters the scoring model until the
 # Saturday validation shows it ranks forward returns better than what is scored now.
+# P-04 — the attention-fade features. Written into the candidate's `retail` block like
+# every reported key, AND into its `features` dict so scanner.py logs them on the row,
+# archive.py keeps them in the compact record and the snapshot / backtest records carry
+# them for ic.py --by-feature (the S-09 sign test). Scored by nothing.
+ATTENTION_KEYS = ("attention_count", "attention_upvotes", "attention_z", "attention_spike",
+                  "attention_rank_pct", "attention_mean_20", "attention_history_n")
+ST_STREAM_KEYS = ("st_bull_pct", "st_bull_n", "st_bear_n", "st_msgs", "st_newest_utc",
+                  "st_stream_age_min", "st_stream_stale")
+TRENDS_KEYS = ("trends_latest", "trends_date", "trends_mean", "trends_z", "trends_n")
+FEATURE_KEYS = ("attention_z", "attention_spike", "attention_rank_pct", "attention_count",
+                "st_bull_pct", "trends_z")
 REPORTED_KEYS = ("sources", "sources_count", "corroborated", "wsb_upvotes",
                  "wsb_rank_24h_ago", "wsb_rank_delta", "wsb_mention_change_pct",
                  "wsb_new_entrant", "stocktwits_trending_position",
-                 "stocktwits_watchlist_count", "reddit_raw_mentions", "reddit_tone",
-                 "reddit_bull_hits", "reddit_bear_hits", "rh_lists", "rh_best_position",
+                 "stocktwits_watchlist_count", "rh_lists", "rh_best_position",
                  "iv", "hv", "iv_hv_ratio", "put_call_ratio", "put_call_ratio_illiquid",
                  "put_call_basis", "options_volume", "options_open_interest",
                  "relative_options_volume", "call_volume", "put_volume",
-                 "expected_move_pct", "expected_move_basis")
+                 "expected_move_pct", "expected_move_basis") + ATTENTION_KEYS + ST_STREAM_KEYS \
+                + TRENDS_KEYS
 
 
 def merge_into_scan_data(scan_data, sent):
@@ -554,6 +767,15 @@ def merge_into_scan_data(scan_data, sent):
                 retail[k] = row[k]
         retail["sentiment_checked"] = True
         c["retail"] = retail
+        # P-04: the attention features ride on the candidate's `features` dict too —
+        # merged into whatever technicals.py already put there, never replacing it.
+        # Null when not measured (short history, no stream, no trends), so a record
+        # says "unmeasured" rather than omitting the key; a bool spike is stored as 0/1.
+        feats = c.get("features") if isinstance(c.get("features"), dict) else {}
+        for k in FEATURE_KEYS:
+            v = row.get(k)
+            feats[k] = (int(v) if isinstance(v, bool) else v)
+        c["features"] = feats
         merged.append(tk)
         if not row.get("corroborated"):
             uncorroborated.append(tk)
@@ -575,7 +797,7 @@ def merge_into_scan_data(scan_data, sent):
     meta["data_warnings"] = warns
     meta["sentiment_meta"] = {k: sm.get(k) for k in
                               ("generated_at", "sources_present", "ticker_count",
-                               "corroborated_count", "reddit_newest_utc")}
+                               "corroborated_count", "attention")}
     return scan_data, {"merged": merged, "no_data": none_found,
                        "uncorroborated": uncorroborated}
 
@@ -598,7 +820,18 @@ def main(argv=None):
     ap.add_argument("--apewisdom", help="raw ApeWisdom page-1 payload (page 1 ONLY)")
     ap.add_argument("--stocktwits-trending", dest="stt")
     ap.add_argument("--stocktwits-gauges", dest="stg")
-    ap.add_argument("--reddit", help="raw Arctic Shift posts payload (sort=desc)")
+    ap.add_argument("--stocktwits-symbols", dest="sts", metavar="GLOB", nargs="?",
+                    const=ST_STREAM_FILE,
+                    help=f"staged StockTwits symbol streams, one file per name "
+                         f"(default pattern {ST_STREAM_FILE}, resolved under SCAN_DIR); "
+                         "read for the bull share only, never for attention")
+    ap.add_argument("--trends", help='{"NVDA": [{"date": "2026-09-01", "value": 63}, ...]} '
+                                     "from Google Trends, when available")
+    ap.add_argument("--attention-history", dest="hist", default=ATTENTION_HISTORY,
+                    help="rolling per-symbol mention history the attention z is measured "
+                         "against; read before, written after (default archive/"
+                         "attention_history.json under SCAN_DIR). '' disables it.")
+    ap.add_argument("--now", help="ISO timestamp override (UTC) for a deterministic run")
     ap.add_argument("--watchlists", help='{"Trending stocks": ["WMT", ...], ...}')
     ap.add_argument("--options-scan", dest="opts",
                     help="raw run_scan response for the Options activity scan")
@@ -610,9 +843,16 @@ def main(argv=None):
                     help="scan_data.json to populate with retail blocks, written in place")
     a = ap.parse_args(argv)
 
+    now = _parse_ts(a.now) if a.now else None
+    history = load_attention_history(a.hist) if a.hist else None
     res = build(_load(a.apewisdom), _load(a.stt), _load(a.stg),
-                _load(a.reddit), _load(a.watchlists), _load(a.quotes),
-                options_scan=_load(a.opts), earnings_days=_load(a.edays))
+                _load(a.watchlists), _load(a.quotes),
+                options_scan=_load(a.opts), earnings_days=_load(a.edays), now=now,
+                st_symbol_streams=load_symbol_streams(a.sts) if a.sts else None,
+                trends=_load(a.trends), attention_history=history)
+    hist_next = res.pop("_attention_history", None)
+    if a.hist and hist_next is not None and res["_meta"]["sources_present"].get("apewisdom"):
+        write_attention_history(hist_next, a.hist)
     out = a.out if os.path.isabs(a.out) else os.path.join(BASE, a.out)
     with open(out, "w", encoding="utf-8") as fh:
         json.dump(res, fh, indent=2)
@@ -621,8 +861,11 @@ def main(argv=None):
     live = [k for k, v in m["sources_present"].items() if v]
     print(f"sentiment.json  <-  {', '.join(live) if live else 'NO SOURCES'}")
     print(f"{m['ticker_count']} tickers, {m['corroborated_count']} corroborated by 2+ feeds")
-    if m["reddit_newest_utc"]:
-        print(f"newest Reddit item: {m['reddit_newest_utc']}")
+    att = m.get("attention") or {}
+    print(f"attention: {att.get('scans_in_history', 0)} scan(s) of history, "
+          f"{att.get('symbols_with_z', 0)} name(s) with a z-score"
+          + (f", SPIKES: {', '.join(att['spikes'])}" if att.get("spikes") else "")
+          + ("" if a.hist else "  (history disabled)"))
     for w in m["warnings"]:
         print("  ! " + w)
     if a.merge_into:

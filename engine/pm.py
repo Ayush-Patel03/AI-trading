@@ -119,6 +119,18 @@ ADDED 2026-09-10
     PM_RULES["house_exposure"] carries the thresholds; `enforce` is False by default, so
     the block is REPORTED and gates nothing. With enforce on a breach refuses NEW ENTRIES
     house-wide; exits are never touched in either mode.
+  * K-04 — HISTORICAL VaR AND STRESS WINDOWS (var.py). The ladder reacts to a loss after
+    it happens; this says how much THIS desk's book stands to lose on an ordinary bad day
+    (1-day 99% historical-simulation VaR and CVaR over up to two years of the held names'
+    shared daily returns) and what it would have done through 2020-03-16, 2022, 2024-08-05
+    and 2025-04-03/04 — each name's own bars when they reach that far, else β_252 × the
+    benchmark's window return, labelled proxy — plus the 2025-04-09 squeeze as the
+    short-side number. Computed once per run on the post-exit marked positions when
+    bars.json is staged, null with a reason otherwise; written to state["risk"], the
+    journal's `risk` block, the heartbeat (var_pct, worst_stress) and so the coverage row.
+    PM_RULES["var"] carries the thresholds; `enforce` is False by default. With enforce on
+    a VaR over 3% of desk equity or a worst stress over 2 × the 8% halt refuses NEW
+    ENTRIES on the desk; exits are never touched in either mode.
   * K-07 — STOPS BY DESK TYPE (stops.py) and the LIVE GUARDRAILS (guardrails.py). One stop
     rule served three desks that are not the same trade. desks.json `rules.stop_policy` now
     selects fixed_atr (today's rule, the default — every existing desk is unchanged),
@@ -186,6 +198,7 @@ import orb as orb_mod
 import portfolio as pf_mod
 import rotation as rotation_mod
 import stops as stops_mod
+import var as var_mod
 from portfolio import RULES, build_proposals
 
 # ---- execution policy. Risk limits live in portfolio.RULES; these are order mechanics ----
@@ -229,6 +242,20 @@ PM_RULES = {
         "max_beta_w": 0.8,               # Σ w·β as a fraction of combined equity, needs bars
         "max_momentum_crowd_pct": 60.0,  # equity share in names up >50% over 12-1m, needs bars
         "rho_default": 0.3,              # cross-sector ρ for the no-bars sector proxy
+        "enforce": False,
+    },
+    # K-04 — historical-simulation VaR and the named stress windows (var.py), on THIS
+    # desk's marked positions, once per run, only when bars.json is staged (null with a
+    # reason otherwise). REPORTED by default: `enforce: False` means the numbers go to
+    # state["risk"], the journal and the coverage row and gate nothing. Set enforce True
+    # and a 1-day 99% VaR over max_var_pct_of_desk, or a worst long-side stress loss over
+    # max_stress_multiple_of_halt × halt_pct, refuses NEW entries on the desk; exits stay
+    # live. Semantics in var.py and PM.md § "VaR and stress".
+    "var": {
+        "alpha": 0.99,
+        "max_var_pct_of_desk": 3.0,
+        "max_stress_multiple_of_halt": 2.0,
+        "halt_pct": 8.0,
         "enforce": False,
     },
     # K-02 — the drawdown ladder, measured from the book's high-water mark. Lives here
@@ -759,6 +786,67 @@ def house_metrics(house, bars=None):
     except Exception as exc:                      # noqa: BLE001 — never fail the manager
         return {"error": f"{type(exc).__name__}: {exc}", "flags": [], "reasons": [],
                 "enforce": bool(rules.get("enforce")), "block_new_entries": False}
+
+
+def desk_risk(book, pb, equity, bars=None, benchmark="SPY"):
+    """K-04 — VaR and stress for THIS desk's marked positions, once per run.
+
+    Weights are position market value over desk equity (working buys are not exposure
+    until they fill). With bars staged, var.hs_var() runs a historical simulation over up
+    to two years of the held names' shared daily returns and var.stress() replays the
+    five named windows — each name's own bars when they reach that far, else β_252 × the
+    benchmark's window return, labelled proxy. Without bars both are null WITH A REASON:
+    an unmeasured VaR is reported as unmeasured, never as zero.
+
+    Returns {"var", "stress", "flags", "reasons", "enforce", "block_new_entries",
+             "worst_stress", "worst_stress_window", "rules", "bars"}. Never raises: any
+    failure lands in the block as an error string and gates nothing.
+    """
+    rules = dict(var_mod.DEFAULT_RULES, **(PM_RULES.get("var") or {}))
+    if bars is None:
+        bars = BARS.get("rows")
+    weights = {}
+    eq = float(equity) if equity and equity > 0 else 0.0
+    for p in (book or {}).get("positions", []):
+        q = (pb or {}).get(p.get("symbol")) or {}
+        px = q.get("price") if isinstance(q.get("price"), (int, float)) else p.get("avg_cost")
+        if eq > 0 and isinstance(px, (int, float)) and px > 0 and p.get("shares"):
+            weights[p["symbol"]] = weights.get(p["symbol"], 0.0) + px * p["shares"] / eq
+    base = {"rules": {k: rules.get(k) for k in var_mod.DEFAULT_RULES},
+            "bars": "staged" if bars is not None else "absent",
+            "weights_pct": {s: round(v * 100.0, 2) for s, v in
+                            sorted(weights.items(), key=lambda kv: -kv[1])}}
+    try:
+        if bars is None:
+            reason = "no bars.json staged this run"
+            v = {"var_pct": None, "cvar_pct": None, "n_days": 0, "window": None,
+                 "alpha": rules["alpha"], "horizon_days": 1, "reason": reason}
+            st = {}
+        elif not weights:
+            v = var_mod.hs_var({}, {}, alpha=rules["alpha"])
+            st = {}
+        else:
+            rets = house_mod.daily_returns(house_mod.close_series(bars))
+            feats, _, _ = house_mod.features_from_bars(bars, symbols=list(weights),
+                                                       benchmark=benchmark)
+            betas = {s: f.get("beta_252") for s, f in feats.items()}
+            v = var_mod.hs_var(weights, rets, alpha=rules["alpha"])
+            st = var_mod.stress(weights, rets, betas=betas, benchmark=benchmark)
+        verdict = var_mod.assess(v, st, rules)
+        return dict(base, var=v, stress=st, **verdict)
+    except Exception as exc:                      # noqa: BLE001 — never fail the manager
+        return dict(base, var={"var_pct": None, "cvar_pct": None, "n_days": 0, "window": None,
+                               "reason": f"{type(exc).__name__}: {exc}"},
+                    stress={}, flags=[], reasons=[], enforce=bool(rules.get("enforce")),
+                    block_new_entries=False, worst_stress=None, worst_stress_window=None,
+                    error=f"{type(exc).__name__}: {exc}")
+
+
+def risk_compact(risk):
+    """The journal / heartbeat summary of desk_risk() — var.compact plus nothing."""
+    if not risk:
+        return None
+    return var_mod.compact(risk.get("var"), risk.get("stress"), risk)
 
 
 def load_bars(path="bars.json"):
@@ -1768,7 +1856,8 @@ def live_guardrail_audit(props, rows_by_tk, pb, jrn):
 
 
 # ------------------------------------------------------------------ 5. entries
-def entry_pass(book, scan, pb, today, marked, jrn, scan_stale, house=None, ladder=None):
+def entry_pass(book, scan, pb, today, marked, jrn, scan_stale, house=None, ladder=None,
+               risk=None):
     # FILL-01: an entry placed at the last slot of the day can never be evaluated for a
     # fill — the paper model fills entries only on a LATER slot, and roll_day() expires
     # every day order before the next session's fill pass runs. Placing entries here
@@ -1815,6 +1904,16 @@ def entry_pass(book, scan, pb, today, marked, jrn, scan_stale, house=None, ladde
                                f"house exposure (enforced): {why} — no new entries house-wide "
                                "until the combined book is less crowded; exits unaffected"})
         jrn["warnings"].append("HOUSE EXPOSURE: " + why + ". New entries blocked; exits live.")
+        return []
+    # K-04: the VaR / stress gate. Same shape as K-03's: only NEW entries, only when
+    # PM_RULES["var"]["enforce"] is on, and only after the exit pass has already run.
+    if (risk or {}).get("block_new_entries"):
+        why = "; ".join(risk.get("reasons") or risk.get("flags") or ["VaR / stress"])
+        jrn["skipped"].append({"symbol": "*", "reason":
+                               f"VaR / stress (enforced): {why} — no new entries on this desk "
+                               "until the book's loss distribution is inside the limits; "
+                               "exits unaffected"})
+        jrn["warnings"].append("VAR / STRESS: " + why + ". New entries blocked; exits live.")
         return []
     if not scan or not scan.get("results"):
         jrn["skipped"].append({"symbol": "*", "reason": "no scan results available this run"})
@@ -2196,7 +2295,8 @@ def load_orb_inputs(bars_5m_path="bars_5m.json", scan_path="scan_results.json",
     return ORB
 
 
-def orb_entry_pass(book, pb, today, now, marked, jrn, house=None, ladder=None):
+def orb_entry_pass(book, pb, today, now, marked, jrn, house=None, ladder=None,
+                   risk=None):
     """D-03 — the 09:35 sentinel's entry pass for an ORB desk.
 
     Ranks the scan universe plus the held names by opening RVOL (orb.screen), sizes the
@@ -2236,6 +2336,12 @@ def orb_entry_pass(book, pb, today, now, marked, jrn, house=None, ladder=None):
     if exposure.get("block_new_entries"):
         why = "; ".join(exposure.get("reasons") or exposure.get("flags") or ["house exposure"])
         jrn["skipped"].append({"symbol": "*", "reason": f"house exposure (enforced): {why}"})
+        return []
+    # K-04: the VaR / stress gate, the same way entry_pass honours it — only new entries,
+    # only when PM_RULES["var"]["enforce"] is on; the exit pass has already run.
+    if (risk or {}).get("block_new_entries"):
+        why = "; ".join(risk.get("reasons") or risk.get("flags") or ["VaR / stress"])
+        jrn["skipped"].append({"symbol": "*", "reason": f"VaR / stress (enforced): {why}"})
         return []
     ladder_mult = float((ladder or {}).get("entry_size_mult", 1.0))
     universe = ORB.get("universe") or []
@@ -2392,6 +2498,15 @@ def run(book, scan, prices_override, slot, now_iso, mode, policy_name=None):
     # heartbeat and the console line instead.
     if house is not None:
         house["exposure"] = house_metrics(house)
+    # K-04. Once per run, on THIS desk's post-exit positions, every slot including the
+    # sentinel. Null with a reason when no bars are staged. Reported unless enforce is on;
+    # the entry passes (entry_pass, orb_entry_pass) read risk["block_new_entries"] and
+    # nothing else does. As with K-03,
+    # a reported-only flag raises no journal warning (archive.should_publish would publish
+    # a board every slot on a standing flag); it lives in the state, the journal's risk
+    # block, the heartbeat and the console line.
+    marked = mark_book(book, pb)
+    risk = desk_risk(book, pb, marked["equity"])
 
     if sentinel:
         # Exits only. Rebalancing and entries are slot decisions; the sentinel exists so
@@ -2401,13 +2516,14 @@ def run(book, scan, prices_override, slot, now_iso, mode, policy_name=None):
             # D-03: the one exception — the ORB desk's entries ARE a sentinel decision,
             # at 09:35 and at no other hour (orb_entry_pass gates on the clock).
             marked = mark_book(book, pb)
-            placed = orb_entry_pass(book, pb, today, now, marked, jrn, house, ladder)
+            placed = orb_entry_pass(book, pb, today, now, marked, jrn, house, ladder, risk)
     else:
         marked = mark_book(book, pb)
         rebalance_pass(book, pb, today, marked["equity"], jrn, house)
 
         marked = mark_book(book, pb)
-        placed = entry_pass(book, scan, pb, today, marked, jrn, scan_stale, house, ladder)
+        placed = entry_pass(book, scan, pb, today, marked, jrn, scan_stale, house, ladder,
+                            risk)
 
     marked = mark_book(book, pb)
     open_eq = book["day"].get("open_equity") or marked["equity"]
@@ -2460,6 +2576,8 @@ def run(book, scan, prices_override, slot, now_iso, mode, policy_name=None):
                      # K-03 — the compact exposure summary, same fields as the coverage row.
                      "exposure": house_mod.compact(house.get("exposure"))}
                     if house else None)
+    # K-04 — the compact VaR / stress summary, same fields as the heartbeat carries.
+    jrn["risk"] = risk_compact(risk)
 
     if marked["unpriced"]:
         jrn["warnings"].append("Unpriced positions this run: " + ", ".join(marked["unpriced"]) +
@@ -2553,6 +2671,9 @@ def run(book, scan, prices_override, slot, now_iso, mode, policy_name=None):
         "journal": jrn, "rules": RULES, "pm_rules": PM_RULES,
         "broker_policy": {"name": POLICY.name, "describe": POLICY.describe()},
         "house": house,
+        # K-04: {"var": hs_var block, "stress": {window: ...}, flags, reasons, enforce,
+        # block_new_entries, worst_stress, worst_stress_window, rules, bars, weights_pct}.
+        "risk": risk,
         "scan_as_of": jrn["scan_as_of"], "scan_stale": scan_stale,
         "orders_to_place": placed if mode == "live" else [],
     }
@@ -2616,7 +2737,7 @@ def load_peers(desks_path, this_desk, this_book_file):
 
 
 def write_heartbeat(base, sfx, desk, slot, ts, book, quiet, decisions=0, warnings=0,
-                    reason=None, exposure=None):
+                    reason=None, exposure=None, risk=None):
     """COVER-01 — proof that this desk was looked at.
 
     A QUIET sentinel writes no book revision and no journal entry, by design (PM.md §12):
@@ -2648,6 +2769,12 @@ def write_heartbeat(base, sfx, desk, slot, ts, book, quiet, decisions=0, warning
         # copies it onto the coverage row; a consumer that ignores it loses nothing. None
         # when the house was not measured this run (flat book short-circuit, no peers).
         "exposure": exposure,
+        # K-04 — this desk's 1-day VaR (% of desk equity) and its worst long-side stress
+        # window P&L (%), from risk_compact(). Both null, never 0, when no bars were
+        # staged or the book was flat. The runner copies them onto the desk's coverage row.
+        "var_pct": (risk or {}).get("var_pct"),
+        "worst_stress": (risk or {}).get("worst_stress"),
+        "worst_stress_window": (risk or {}).get("worst_stress_window"),
     }
     path = os.path.join(base, f"pm_heartbeat{sfx}.json")
     with open(path, "w", encoding="utf-8") as f:
@@ -2854,10 +2981,13 @@ def main():
     # K-03 — the compact exposure summary rides on every heartbeat, quiet or not, so the
     # coverage row carries it even on a run that wrote nothing else.
     exposure = house_mod.compact((state.get("house") or {}).get("exposure"))
+    # K-04 — the desk's VaR / stress summary rides on the heartbeat the same way.
+    risk_summary = risk_compact(state.get("risk"))
     if args.slot == SENTINEL and not jrn["decisions"] and not jrn["warnings"]:
         b = state["book"]
         write_heartbeat(BASE, sfx, DESK["name"], args.slot, jrn["ts"], book, quiet=True,
-                        reason="every stop checked, nothing fired", exposure=exposure)
+                        reason="every stop checked, nothing fired", exposure=exposure,
+                        risk=risk_summary)
         # D-02: an options book carries `structures`, not `positions` / `working_orders`.
         n_pos = len(book.get("positions") or book.get("structures") or [])
         noun = "structure(s)" if DESK.get("kind") == "options" else "position(s)"
@@ -2866,11 +2996,12 @@ def main():
               "order(s), every stop checked, nothing fired. Nothing written — do not "
               "project_write the book or the journal, do not publish.")
         print(house_mod.console_line((state.get("house") or {}).get("exposure")))
+        print(var_mod.console_line(risk_summary))
         return
 
     write_heartbeat(BASE, sfx, DESK["name"], args.slot, jrn["ts"], book, quiet=False,
                     decisions=len(jrn["decisions"]), warnings=len(jrn["warnings"]),
-                    exposure=exposure)
+                    exposure=exposure, risk=risk_summary)
 
     # The journal is loaded BEFORE the writes now, because the archive decision needs the
     # previous run's fingerprint and render_pm.py reads that decision out of pm_state.json.
@@ -2983,6 +3114,7 @@ def main():
                 f"{h['caps']['sector_pct']:.0f}%/sector"
               + ("" if PM_RULES.get("house_caps_enabled", True) else "  [ADVISORY ONLY]"))
         print(house_mod.console_line(h.get("exposure")))
+    print(var_mod.console_line(risk_summary))
     if not jrn["decisions"]:
         print("\nNo action this slot.")
     else:

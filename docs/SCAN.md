@@ -64,7 +64,7 @@ Analyst consensus rating and mean price target (they appear only inside `get_equ
 short float, beta, PEG, debt/equity, ROE, forward P/E, **GICS sector labels** (the connector's
 taxonomy is its own — NVDA is "Electronic Technology", not "information_technology"; the
 scanner's own `Sector` column returns numeric codes, so this still needs the scrape), and retail
-sentiment (ApeWisdom, StockTwits, Arctic Shift). Section 2 governs every one of those fetches.
+sentiment (ApeWisdom, StockTwits; Google Trends when a route is available). Section 2 governs every one of those fetches.
 
 ### Why this matters beyond speed
 
@@ -174,7 +174,7 @@ python3 technicals.py --bars <bars file path> --fundamentals fundamentals.json \
 # merge technicals.json into each candidate in scan_data.json
 # SENTIMENT (section 12): normalise the crowd + options payloads and merge them in.
 python3 sentiment.py --apewisdom apewisdom.json --stocktwits-trending st_trending.json \
-                     --stocktwits-gauges st_gauges.json --reddit reddit_posts.json \
+                     --stocktwits-gauges st_gauges.json --stocktwits-symbols --trends trends.json \
                      --watchlists rh_watchlists.json --quotes quotes_min.json \
                      --options-scan options_scan.json --earnings-days earnings_days.json \
                      --out sentiment.json --merge-into scan_data.json
@@ -278,7 +278,7 @@ may refuse to enter on.
 | Earnings calendar — whole market | 1 | 0 | 0 |
 | News — top 5 | 5 | 0 | 0 |
 | Analyst / short float / beta / PEG / GICS — scraped, 8 names | 0 | 8 | 8 |
-| Retail — ApeWisdom p1, StockTwits trending, gauges, Arctic Shift | 0 | 1 | 4 |
+| Retail — ApeWisdom p1, StockTwits trending, gauges; optional symbol streams + Trends (P-04) | 0 | 1 | 4 |
 | Options positioning — one saved scan (§12) | 1 | 0 | 0 |
 | Transcripts — midday only, ≤2 names | 0 | 2 | 4 |
 
@@ -376,9 +376,10 @@ fixture before being written back: `technicals.py` on legacy / intraday / pre-ma
 inputs, `pm.py` on pending-order sizing, power-hour entries, minute-level staleness, the
 concurrent-write guard and the broker-divergence warning, `scanner.py` on dict/string
 `price_sources`. `sentiment.py` (2026-09-01) passes 105 assertions: every ApeWisdom trap, the
-StockTwits stream refusal, the stop-list, Arctic Shift staleness, the watchlist filter, the
-options liquidity gate, the merge contract against `scanner.py`'s exact retail keys, and
-fourteen degraded-input variants.
+StockTwits stream refusal, the stop-list, the watchlist filter, the options liquidity gate,
+the merge contract against `scanner.py`'s exact retail keys, and fourteen degraded-input
+variants. `tests/test_sentiment.py` (P-04, 2026-09-10) pins the attention-fade features and
+proves the scan golden is byte-identical after the merge.
 
 ---
 
@@ -587,8 +588,9 @@ into `records/`, fetches bars for every ticker plus SPY (ten per call), runs thi
 weight, no data point promoted from reported to scored — without first showing up here with a
 correlation stronger than what is already scored. Relative strength (section 3) is the first
 candidate in that queue. As of 2026-09-01 it is joined by `corroborated` / `sources_count`,
-`reddit_tone`, `put_call_ratio`, `iv_hv_ratio` and `expected_move_pct` — all REPORTED, none
-scored. Everything here describes the paper record; it forecasts nothing.
+`put_call_ratio`, `iv_hv_ratio` and `expected_move_pct` — all REPORTED, none scored — and on
+2026-09-10 (P-04) by `attention_z` / `attention_spike` / `attention_rank_pct`, `st_bull_pct` and
+`trends_z`, which ride on each candidate's `features` for the `ic.py --by-feature` sign test. Everything here describes the paper record; it forecasts nothing.
 
 ---
 
@@ -604,8 +606,12 @@ any older instruction in a task prompt.** Read it with this file. The short vers
   which returns live IV, call/put volume, open interest and a put/call ratio market-wide. A
   ratio off a thin chain is a block trade, not sentiment — the liquidity gate is in code.
 - **Retail** is ApeWisdom **page 1 only**, StockTwits `trending/symbols.json` and the symbol
-  HTML gauge, and Arctic Shift for raw Reddit with `sort=desc`. **Never** the StockTwits
-  per-symbol JSON stream — measured 50 hours stale.
+  HTML gauge. **Never** the StockTwits per-symbol JSON stream as attention — measured 50 hours
+  stale; since P-04 (2026-09-10) it may be staged as `st_symbol_<SYM>.json` for the crowd's
+  Bullish/Bearish split only, reported with its age. Reddit is gone (COLLECTION.md §3). The
+  attention-FADE features (`attention_z` against a rolling 20-scan history the runner carries
+  in `archive/attention_history.json`, `attention_spike`, `attention_rank_pct`, optional
+  `trends_z` from `trends.json`) are documented in COLLECTION.md §3b — reported, not scored.
 - **`sentiment.py` handles every known trap in code** rather than relying on a prompt to
   remember it, and `--merge-into scan_data.json` writes the retail blocks in the exact shape
   `scanner.py` already reads.

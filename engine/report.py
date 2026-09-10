@@ -25,6 +25,7 @@ gates; forcing those into a gate they are not would make the counterfactual lie:
 | `house_symbol_cap` | `House cap: SYM would be $… over the N% single-name house limit` |
 | `house_sector_cap` | `House cap: SECTOR would be $… over the N% sector house limit` |
 | `house_exposure` | `house exposure (enforced): … — no new entries house-wide …` (K-03) |
+| `var_stress` | `VaR / stress (enforced): … — no new entries on this desk …` (K-04) |
 | `ladder` | `ladder rung N: drawdown …`, `ladder cool-off: …`, `soft daily level: …`, `re-entry after the … drawdown halt`, `Drawdown ladder halt — …`, `ladder flatten wanted to fire — no fresh price`, `ladder ×0.50 sized it to $… under the $… broker minimum` |
 | `kill_switch` | `Daily loss −3.10% breached the 3% kill switch`, `HALT: daily loss … kill-switch limit — no new entries` |
 | `halt` | any other `halt` / `HALT:` the day carries as `halt_reason` |
@@ -109,7 +110,7 @@ MIN_N = 30
 NOT_A_SAMPLE = "not a sample"
 
 RULES = ("sector_cap", "house_symbol_cap", "house_sector_cap", "spread", "price_drift",
-         "scan_stale", "macro_gate", "broker_policy", "ladder", "house_exposure",
+         "scan_stale", "macro_gate", "broker_policy", "ladder", "house_exposure", "var_stress",
          "earnings_gate", "min_notional", "max_entries", "kill_switch", "halt", "coverage",
          "stop_policy", "slot", "desk_mandate", "working_order", "once_per_session", "deadband",
          "rotation", "orb", "other")
@@ -122,6 +123,7 @@ _RULES = [
     ("house_symbol_cap", r"house cap:.*single-name house limit"),
     ("house_sector_cap", r"house cap:.*sector house limit"),
     ("house_exposure", r"house exposure"),
+    ("var_stress", r"var / stress"),
     ("ladder", r"ladder|soft daily level|re-entry after|drawdown"),
     ("kill_switch", r"kill.?switch|daily loss"),
     ("macro_gate", r"macro gate"),
