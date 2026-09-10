@@ -33,11 +33,17 @@ health record — lives in a private claude.ai project and never appears here.
 | `engine/history.py`, `validate.py` | the score trail and the weekly validation |
 | `engine/sentiment.py` | retail sentiment parsers (ApeWisdom, StockTwits, Reddit) |
 | `engine/render*.py` | the HTML boards |
+| `runner/` | the entry point on the box: `run.py` verifies a session's inputs, stages a run, runs the engine, writes the state repo back, commits. `selftest.py` proves it on the machine it is on. See `runner/README.md` |
 | `docs/` | the doctrine. `PM.md` governs; read it before changing anything in `engine/`. `BACKTEST.md` covers measuring the edge |
+| `docs/runbooks/` | one page per failure class — symptom, where it shows, the exact recovery, who may do it |
 
 ## How it runs
 
-Scheduled tasks clone this repo and execute it:
+On the box, a clone of `production` lives under `C:\ai-trading-runner\engine` and every
+scheduled slot is one call to `runner/run.py`, which stages the engine, the books from the
+private `ai-trading-state` clone and the session's verified inputs into a run directory —
+the same layout `tests/conftest.py` builds. Before the box, scheduled tasks cloned this repo
+into the session sandbox and executed it there:
 
 ```bash
 git clone --depth 1 --branch production https://github.com/Ayush-Patel03/AI-trading "$SCAN_DIR/repo"

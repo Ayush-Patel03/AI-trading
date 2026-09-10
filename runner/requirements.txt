@@ -1,0 +1,13 @@
+# runner/requirements.txt — installed once on the box with
+#     pip install --require-hashes -r runner\requirements.txt
+#
+# The engine and the runner are stdlib-only by rule (CI enforces it). The ONE thing the
+# box needs that a Linux container gets for free is a time-zone database: Windows ships
+# none, and without it `zoneinfo.ZoneInfo("America/New_York")` raises — which pm.py
+# catches and turns into "scan age unknown" and "macro gate off". Both gates would then
+# silently pass. `tzdata` is the IANA database as a pure-Python package.
+#
+# Pinned with its sha256 so --require-hashes refuses anything else. Bump deliberately:
+#     pip download tzdata --no-deps -d /tmp/tzd && pip hash /tmp/tzd/*.whl
+tzdata==2026.3 \
+    --hash=sha256:dc096730c87af6cab1b171c9d532be840741ff5d459015e7f6947bd7d7e54931
