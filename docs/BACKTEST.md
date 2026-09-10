@@ -334,6 +334,24 @@ Optionally a
 `turnover_20d` — a static snapshot, so the run's summary and every record carry the
 `TURNOVER IS APPROXIMATE` warning; rank it, never quote its level.
 
+**Fetching them.** `runner/fetch_bars.py` (Alpaca Basic, IEX feed, `adjustment=all`, stdlib
+only; key file at `C:\ai-trading-runner\alpaca.env`, never in a repo) writes `bars_all.json`
+in exactly the shape above, `bars_missing.json` for the names the source could not serve
+(read it before `n_members_without_bars`), and `sector_map.json` from a Symbol / GICS Sector
+CSV:
+
+```bash
+python3 runner/fetch_bars.py --universe experiments/universe_sp500.json --since 2024-08-21 \
+    --symbols SPY,XLK,XLF,XLV,XLY,XLP,XLE,XLI,XLB,XLU,XLRE,XLC \
+    --start 2023-08-01 --end today --keyfile /path/outside/the/repo/alpaca.env \
+    --out bars_all.json --missing-out bars_missing.json \
+    --sector-map-out sector_map.json --sectors-csv sp500_sectors.csv --resume
+```
+
+`--since` is the first replay date (every name that was a member from then on is fetched);
+`--start` is 252 sessions earlier. `--resume` makes a re-run after a network failure pick up
+where it stopped.
+
 ### The E10 recipe — window split, in-sample then hold-out
 
 ```bash

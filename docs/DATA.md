@@ -191,6 +191,10 @@ python3 engine/universe_history.py --in experiments/universe_sp500.json --member
 # bars call; include SPY, it sets the calendar.
 ```
 
+`runner/fetch_bars.py` does exactly that union (`--universe … --since <first replay date>`),
+fetches from Alpaca Basic, and writes the names that came back empty to `bars_missing.json`
+with `missing_former_members` split out — that file is the residual statement for the run.
+
 Then run the backtest with `--universe-history` and read `n_members_without_bars` before
 anything else in the summary.
 

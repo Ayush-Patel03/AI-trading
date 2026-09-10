@@ -81,6 +81,9 @@ One commit per invocation: `<slot> <desk> <date> <run_id> engine <sha>` (or `…
 
 ## How a session invokes it
 
+The rewritten scheduled-task prompts — one per slot, plus the dead-man's switch and the
+morning brief, with the switch-over order — are in `docs/runner/prompts/`.
+
 ```
 start_process("C:\\ai-trading-runner\\.venv\\Scripts\\python.exe C:\\ai-trading-runner\\engine\\runner\\run.py --slot midday --desk all --inputs C:\\ai-trading-inputs\\<run_id> --state C:\\ai-trading-state")
 ```
@@ -161,6 +164,19 @@ Compute the hash on the bytes you wrote. To confirm what landed on the box:
 one exception: it is written, not committed, and rides in the lock holder's commit), so the
 health check and the page can see that the slot did not happen. A run that cannot reach the runner at all cannot leave that
 row; the session must, per `docs/runbooks/runner-unreachable.md`.
+
+### `fetch_bars.py` — daily bars for the harness (not a slot)
+
+`runner/fetch_bars.py` fetches daily bars from Alpaca Market Data v2 (`feed=iex`,
+`adjustment=all`, 200 requests/min on Basic, paginated by `next_page_token`) for every name
+the membership file says was ever a member plus SPY and the sector ETFs, and writes
+`bars_all.json` in the one shape `backtest.py`, `ic.py`, `validate.py` and `technicals.py`
+read. Symbols the source cannot serve go to `bars_missing.json` — the residual survivorship
+statement (`docs/DATA.md` §3); `--sector-map-out` builds the `{SYMBOL: ETF}` map the E10
+recipe needs (`docs/BACKTEST.md` §6b). The Alpaca key lives at
+`C:\ai-trading-runner\alpaca.env` (two lines, `APCA_API_KEY_ID=…` / `APCA_API_SECRET_KEY=…`)
+— next to the venv, outside both repos, like `engine-config.json`; the program refuses a
+`--keyfile` inside the engine clone. Stdlib only; tests never touch the network.
 
 ### What the runner never does
 
