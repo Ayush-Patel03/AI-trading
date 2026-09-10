@@ -6,6 +6,8 @@ config.py
 desks.json
 fills.py
 history.py
+ic.py
+ledger.py
 mirror.py
 paper_mirror.py
 pm.py

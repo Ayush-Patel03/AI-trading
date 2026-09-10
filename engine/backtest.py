@@ -59,6 +59,17 @@ Usage
     python3 validate.py --records records/ --bars bars.json \
                         --horizons 5,10,20 --out validation.json --md validation.md
 
+THE TRIAL LEDGER
+----------------
+    python3 backtest.py ... --ledger [experiments/ledger.jsonl] \\
+                        --experiment-id E10 --hypothesis "..." [--config-diff '{...}']
+
+With `--ledger`, the run computes the per-date rank IC of what it just wrote (`ic.py`) and
+appends one row to the experiment ledger (`ledger.py`) with the in-sample metrics and the
+trial counter, then prints "trial N of the ledger". Without it the run is NOT counted and
+says so — every configuration tried on the same data spends evidence whether or not it was
+written down, so write it down. docs/BACKTEST.md, "Trial ledger and IC".
+
 Exit 0 wrote records. Exit 2 wrote nothing and said why.
 """
 import argparse
@@ -72,6 +83,8 @@ if BASE not in sys.path:
     sys.path.insert(0, BASE)
 
 import archive
+import ic
+import ledger
 import scanner
 import technicals
 
@@ -298,6 +311,16 @@ def main(argv=None):
     ap.add_argument("--financials", help="point-in-time fundamentals table (see load_financials)")
     ap.add_argument("--out-records", required=True)
     ap.add_argument("--summary")
+    # The trial ledger. `--ledger` alone uses the default path; omitted, the run is not
+    # counted and says so out loud.
+    ap.add_argument("--ledger", nargs="?", const=ledger.DEFAULT_PATH, default=None,
+                    metavar="FILE",
+                    help=f"append this run to the experiment ledger (default {ledger.DEFAULT_PATH})")
+    ap.add_argument("--experiment-id", help="ledger id, e.g. E10; auto X-<date>-<n> if omitted")
+    ap.add_argument("--hypothesis", help="one sentence: what this trial claims")
+    ap.add_argument("--config-diff", help="what differs from the incumbent (JSON or free text)")
+    ap.add_argument("--horizons", default="5,10,20",
+                    help="forward horizons in sessions for the ledger's IC summary")
     a = ap.parse_args(argv)
 
     bars = load_bars(a.bars)
@@ -352,7 +375,47 @@ def main(argv=None):
     print(f"  {SURVIVORSHIP}")
     print(f"  {MODEL_SUBSET}")
     print(f"  next: {summary['next']}")
+
+    if a.ledger:
+        row = ledger_row(a, argv, written, rows_total, len(bars) - 1)
+        row = ledger.append(a.ledger, row)
+        print(f"  LEDGER  trial {row['n_trials_to_date']} of the ledger ({a.ledger}) "
+              f"-> {row['id']}")
+        for h, m in (row["in_sample"] or {}).items():
+            print(f"    {h:>3}d  IC {m.get('ic_mean')}  t(NW) {m.get('ic_tstat_nw')}  "
+                  f"pooled rho {m.get('pooled_spearman')}  spread {m.get('spread_pct')}%")
+    else:
+        print("  LEDGER  not counted: no --ledger given. This trial spent evidence anyway; "
+              "re-run with --ledger to record it.")
     return 0
+
+
+def ledger_row(a, argv, written, rows_total, n_symbols):
+    """The ledger row for a finished run: the IC summary of what was just written."""
+    horizons = [int(x) for x in a.horizons.split(",") if x.strip()]
+    obs = ic.load_observations(a.out_records, a.bars, horizons) if written else []
+    ins = ic.in_sample_metrics(ic.summarise(obs, horizons)) if obs else {}
+    diff = a.config_diff
+    if isinstance(diff, str):
+        try:
+            diff = json.loads(diff)
+        except ValueError:
+            pass
+    cmd = ["backtest.py"] + list(argv if argv is not None else sys.argv[1:])
+    return {
+        "id": a.experiment_id,
+        "hypothesis": a.hypothesis,
+        "config_diff": diff,
+        "harness_cmd": cmd,
+        "window": {"start": a.start, "end": a.end},
+        "universe": {"name": os.path.basename(a.bars), "n_symbols": n_symbols},
+        "n": rows_total,
+        "horizons": horizons,
+        "in_sample": ins,
+        "out_of_sample": None,
+        "decision": None,
+        "replays": written,
+    }
 
 
 if __name__ == "__main__":
