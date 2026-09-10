@@ -19,6 +19,7 @@ portfolio.py
 render.py
 render_pm.py
 render_portfolio.py
+report.py
 scanner.py
 sentiment.py
 snapshots.py

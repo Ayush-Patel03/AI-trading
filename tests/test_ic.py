@@ -261,3 +261,131 @@ def test_backtest_without_ledger_says_it_was_not_counted(run_dir, capsys):
     import ledger
     assert ledger.count(str(ENGINE.parent / "experiments" / "ledger.jsonl")) == 4, \
         "a run without --ledger must not touch the repo's ledger"
+
+
+# ------------------------------------------------------------------ E2: --beta-residual
+def _beta_world(n_dates=20, n_syms=15, seed=11, noise=0.12):
+    """Forward returns that are EXACTLY beta × SPY plus a small independent signal.
+
+    SPY rises on every date (a directional sample). atr_pct is beta itself, so it ranks raw
+    returns perfectly and the residual not at all; rv_20d is the independent signal, so it
+    is diluted raw and clean on the residual; max_1m is noise both ways."""
+    rng = random.Random(seed)
+    obs = []
+    for d in range(n_dates):
+        date = f"2025-02-{d + 1:02d}"
+        spy = {5: rng.uniform(1.0, 3.0), 10: rng.uniform(2.0, 5.0)}
+        for s in range(n_syms):
+            beta = 0.5 + 1.5 * s / (n_syms - 1)
+            eps = {5: rng.gauss(0, noise), 10: rng.gauss(0, noise)}
+            obs.append({"date": date, "symbol": f"S{s}", "score": float(s),
+                        "fwd": {h: beta * spy[h] + eps[h] for h in (5, 10)},
+                        "spy_fwd": dict(spy),
+                        "features": {"beta_252": beta, "atr_pct": beta, "rv_20d": eps[5],
+                                     "max_1m": rng.random()}})
+    return obs
+
+
+def test_beta_residual_regresses_out_beta_times_spy(icm):
+    obs = _beta_world()
+    k, resid, n = icm.beta_residual(obs, 5)
+    assert n == 300 and len(resid) == 300
+    assert k == pytest.approx(1.0, abs=0.02), "fwd = beta × SPY exactly, so k ≈ 1"
+    # the residual is the noise, not the beta part
+    for o, r in zip([o for o in obs], resid):
+        assert r["fwd"][5] == pytest.approx(o["fwd"][5] - k * o["features"]["beta_252"] * o["spy_fwd"][5])
+        assert set(r["fwd"]) == {5}
+    # rows without beta or SPY are left out, never padded
+    obs2 = _beta_world(n_dates=2)
+    obs2[0]["features"].pop("beta_252")
+    obs2[1]["spy_fwd"] = {}
+    assert icm.beta_residual(obs2, 5)[2] == 28
+    assert icm.beta_residual(obs2[:2], 5) == (None, [], 0)
+
+
+def test_beta_residual_tables_answer_was_it_beta_by_inspection(icm):
+    res = icm.summarise_beta_residual(_beta_world(), horizons=[5, 10])
+    for h in ("5", "10"):
+        H = res["by_horizon"][h]
+        assert H["n"] == 300 and H["n_without_beta"] == 0 and H["n_without_spy"] == 0
+        assert H["slope"] == pytest.approx(1.0, abs=0.02)
+        f = H["features"]
+        assert set(f) == {"atr_pct", "rv_20d", "max_1m", "beta_252"}
+        # atr_pct WAS beta: perfect raw IC, nothing left on the residual
+        assert f["atr_pct"]["raw"]["ic_mean"] > 0.95
+        assert abs(f["atr_pct"]["residual"]["ic_mean"]) < 0.15
+        assert f["atr_pct"]["raw"]["ic_tstat_nw"] > 3
+        # the control row says the same
+        assert f["beta_252"]["raw"]["ic_mean"] > 0.95
+        assert abs(f["beta_252"]["residual"]["ic_mean"]) < 0.15
+        # both columns are computed on the same rows
+        assert f["atr_pct"]["raw"]["n"] == f["atr_pct"]["residual"]["n"] == 300
+    # rv_20d is the 5-session noise: diluted against the raw return, clean on the residual
+    f5 = res["by_horizon"]["5"]["features"]["rv_20d"]
+    assert f5["residual"]["ic_mean"] > 0.9
+    assert f5["residual"]["ic_mean"] > f5["raw"]["ic_mean"] + 0.3
+    # max_1m is noise both ways
+    m5 = res["by_horizon"]["5"]["features"]["max_1m"]
+    assert abs(m5["raw"]["ic_mean"]) < 0.2 and abs(m5["residual"]["ic_mean"]) < 0.2
+    md = icm.markdown_beta_residual(res)
+    assert "| atr_pct |" in md and "resid IC" in md and "n = 300" in md
+
+
+def test_spy_forward_comes_from_the_bars_through_validate(icm, tmp_path):
+    days = [f"2025-03-{i:02d}" for i in range(1, 28)]
+    syms = {f"S{i}": i for i in range(6)}
+    results = [{"symbol": s, "bars": [_bar(d, 100 + k * j) for j, d in enumerate(days)]}
+               for s, k in syms.items()]
+    results.append({"symbol": "SPY", "bars": [_bar(d, 200 + 2 * j) for j, d in enumerate(days)]})
+    (tmp_path / "bars.json").write_text(json.dumps({"data": {"results": results}}), encoding="utf-8")
+    recs = tmp_path / "records"
+    recs.mkdir()
+    for d in days[:8]:
+        rec = {"date": d, "slot": "Backtest", "time": "16:00",
+               "results": [{"ticker": s, "score": 10.0 * k, "price": 100.0 + k * days.index(d),
+                            "features": {"beta_252": 1.0, "atr_pct": float(k)}}
+                           for s, k in syms.items()]}
+        (recs / f"{d}-backtest.json").write_text(json.dumps(rec), encoding="utf-8")
+    obs = icm.load_observations(str(recs), str(tmp_path / "bars.json"), [5])
+    j = days.index(obs[0]["date"])
+    assert obs[0]["spy_fwd"][5] == pytest.approx(((200 + 2 * (j + 5)) / (200 + 2 * j) - 1) * 100)
+    # every observation on a date carries that date's SPY forward return
+    by_date = {}
+    for o in obs:
+        by_date.setdefault(o["date"], set()).add(round(o["spy_fwd"][5], 9))
+    assert all(len(v) == 1 for v in by_date.values())
+    res = icm.summarise_beta_residual(obs, [5])
+    assert res["by_horizon"]["5"]["n"] == 48
+    # without SPY in the bars there is no spy_fwd and the mode reports it, not guesses
+    results.pop()
+    (tmp_path / "bars2.json").write_text(json.dumps({"data": {"results": results}}), encoding="utf-8")
+    obs2 = icm.load_observations(str(recs), str(tmp_path / "bars2.json"), [5])
+    assert all(o["spy_fwd"] == {} for o in obs2)
+    H = icm.summarise_beta_residual(obs2, [5])["by_horizon"]["5"]
+    assert H["n"] == 0 and H["n_without_spy"] == 48 and H["slope"] is None
+
+
+def test_cli_beta_residual_round_trips_spy_fwd_through_json(icm, tmp_path, capsys):
+    obs = _beta_world(n_dates=6)
+    src = tmp_path / "obs.json"
+    src.write_text(json.dumps([{**o, "fwd": {str(k): v for k, v in o["fwd"].items()},
+                                "spy_fwd": {str(k): v for k, v in o["spy_fwd"].items()}}
+                               for o in obs]), encoding="utf-8")
+    out_json, out_md = tmp_path / "ic.json", tmp_path / "ic.md"
+    rc = icm.main(["--records", str(src), "--horizons", "5,10", "--beta-residual",
+                   "--json", str(out_json), "--md", str(out_md)])
+    assert rc == 0
+    res = json.loads(out_json.read_text(encoding="utf-8"))
+    assert res["beta_residual"]["by_horizon"]["5"]["features"]["atr_pct"]["raw"]["ic_mean"] > 0.95
+    assert res["observations"][0]["spy_fwd"] == {"5": obs[0]["spy_fwd"][5], "10": obs[0]["spy_fwd"][10]}
+    md = out_md.read_text(encoding="utf-8")
+    assert "# Rank IC" in md and "# E2 — was it beta?" in md
+    out = capsys.readouterr().out
+    assert "E2   5d" in out and "resid IC" in out
+    # and the json is itself a valid --records input for the same mode
+    rc2 = icm.main(["--records", str(out_json), "--horizons", "5", "--beta-residual"])
+    assert rc2 == 0
+    assert "E2   5d  n=90" in capsys.readouterr().out
+    # without --beta-residual nothing about it is written
+    rc3 = icm.main(["--records", str(src), "--horizons", "5", "--json", str(out_json)])
+    assert rc3 == 0 and "beta_residual" not in json.loads(out_json.read_text(encoding="utf-8"))

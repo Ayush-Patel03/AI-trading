@@ -920,6 +920,17 @@ is accumulating evidence for or against the model. It never touches the book, ne
 recommends going live, and appends one line per week to `claude/reviews/index.md`. This is
 the evidence the go-live checklist's second item requires.
 
+The numbers in that review come from `engine/report.py --md` (S-07, `docs/BACKTEST.md`
+§6c): stage the three `claude/pm-journal*.json` docs into a directory, the three
+`claude/paper-book*.json` into another, add a bars file with SPY, and run
+`python3 engine/report.py --journals journals/ --books books/ --bars bars.json
+--counterfactual --md review.md`. It gives the week's refusals by rule, week and desk, the
+E5 counterfactual per gate (did the names it refused underperform the names it admitted,
+with a bootstrap interval and n), closed-trade P&L by exit reason, desk, entry-score decile
+and setup, and each desk's return against exposure-adjusted SPY. It is read-only over the
+journals and books; every number carries its n, anything under 30 says *not a sample*, and
+it prints no win rate and no Sharpe. The review quotes it; it does not recompute it.
+
 **The 2026-09-01 one-off** (`trig_018y5gXv3gNafba2GULRoDaU`, 11:00 ET) verifies that the
 first morning under the rewritten prompts and engine actually completed: no `import archive`
 crash, `claude/latest-scan.json` written, scans inside ~40 minutes, PM entries carrying

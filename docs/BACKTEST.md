@@ -390,6 +390,90 @@ and let vol targeting handle it. If it survives, and survives `max_1m`, it is a 
 its own right and gets a ledger row of its own before anything is promoted. Either way the
 answer is one row: `--experiment-id E2`.
 
+Steps 1–3 are one flag (S-07). `ic.py --beta-residual` takes SPY's forward return on each
+observation date from the same bars (`validate.forward_returns` on SPY's closes), regresses
+`fwd_h` on `beta_252 × SPY_fwd_h` pooled through the origin (`technicals.ols`), and prints
+the IC of `atr_pct`, `rv_20d`, `max_1m` — and `beta_252` itself as the control — against
+the raw forward return and against the residual, side by side, per horizon:
+
+```bash
+python3 engine/ic.py --records records/e10_in/ --bars bars_all.json --horizons 5,10,20 \
+    --beta-residual --md ic_e2.md --json ic_e2.json
+# ic_e10_in.json (written with --bars) already carries spy_fwd per observation and works
+# as --records here without --bars
+```
+
+Read the two IC columns row by row: raw real and residual near zero means beta; the slope
+`k` printed per horizon should sit near 1 if `beta_252` is doing its job. The semis-regime
+dummy and the `max_1m` partial are not in the flag — split the observations file by hand
+and re-run, exactly as the turnover split above.
+
+---
+
+## 6c. E5 — gate counterfactuals (S-07, 2026-09-10)
+
+**The question.** Every gate in `pm.py` refuses names — the sector cap, the house caps, the
+spread and price-drift limits, the run cap, the broker policy — and each refusal is a claim
+that the name was better left alone. Nothing had ever checked. `engine/report.py` reads the
+PM journals (`claude/pm-journal*.json`) and asks, per gate: **did the names the gate refused
+underperform the names it admitted on the same dates?** It is read-only over the journals,
+the books and the bars, and it writes nothing but its own `--md` / `--json`.
+
+**What it does.**
+
+1. *Refusals taxonomy.* `report.classify(reason)` maps every `skipped` reason string the
+   engine emits to one rule — `sector_cap`, `house_symbol_cap`, `house_sector_cap`, `spread`,
+   `price_drift`, `scan_stale`, `macro_gate`, `broker_policy`, `ladder`, `house_exposure`,
+   `earnings_gate`, `min_notional`, `max_entries`, `kill_switch`, `halt`, `coverage`, plus
+   `stop_policy`, `slot`, `desk_mandate`, `working_order`, `once_per_session`, `deadband` for
+   what the journal says that is not a gate, and `other` with the raw text kept. The mapping
+   table is in the module docstring; `tests/test_report.py` harvests every reason literal
+   from `pm.py`, `portfolio.py`, `broker_policy.py` and `ladder.py` by AST and fails if one
+   lands in `other`, so a new refusal cannot be added without a rule. Counts come out by
+   rule, by ISO week and by desk. Each refusal has a side: `book` (a `*` gate — the journal
+   names no candidates, so it is counted but cannot be measured), `manage` (a holding the
+   exit pass wanted to sell and could not), `entry` (a named candidate). Only `entry`
+   refusals are measured.
+2. *The counterfactual.* Refused set = one (date, symbol) per rule; admitted set = the
+   `place-buy` decisions. Entry for both is the **next session's open** (its close when the
+   bar has no open); the forward return over h sessions is `validate.forward_returns`'
+   convention from that entry session. The difference is a per-date series (mean refused
+   minus mean admitted on each date that has both) and its 90% interval is
+   `ic.block_bootstrap_ci` with block = horizon — the quantile-spread machinery, because
+   forward windows on nearby dates overlap.
+3. *Attribution.* Closed-trade P&L by exit reason, by desk, by entry-score decile, by verdict
+   and by setup; score, setup and verdict are joined from the `place-buy` decision that
+   opened the trade, because closed trades do not carry them.
+4. *Benchmark.* Desk equity return over the window from the journal entries against SPY over
+   the same dates from the bars, and exposure-adjusted: average invested fraction × SPY is
+   what a passive position of the same average size would have earned.
+
+```bash
+# stage claude/pm-journal.json, claude/pm-journal-pullback.json, claude/pm-journal-momentum.json
+# into journals/ and the three claude/paper-book*.json into books/; bars.json must include
+# SPY and every refused and admitted symbol from the next session onward
+python3 engine/report.py --journals journals/ --books books/ --bars bars.json \
+    --counterfactual --horizons 5,10,20 --md review.md --json review.json
+# refusals + attribution only (no bars needed), from a date
+python3 engine/report.py --journals journals/ --books books/ --since 2026-09-08 --md review.md
+```
+
+**How to read the interval.** Per rule and horizon the table shows the refused mean and
+median, the admitted mean and median, each with its n, and the per-date difference with its
+90% interval and the number of dates behind it. Interval entirely **below zero**: the refused
+names did worse — the gate is doing its job. Entirely **above zero**: the refused names did
+better — the gate cost return and should be argued about, not loosened by reflex. Straddling
+zero: no evidence either way. Under 30 observations on either side the row says **not a
+sample** and the interval is decoration; the first few weeks will say that everywhere, and
+that is the honest answer. Book-wide gates (macro, stale scan, halts, the ladder, the broker
+policy's entry freeze) appear under *not measurable* with their counts — measuring them
+needs the scan archive's candidate lists on those dates, which is a later step.
+
+**The honesty budget.** Every number in `--md` carries its n beside it, anything under 30
+says *not a sample*, and there is no win rate and no Sharpe anywhere in the output — at this
+size neither is evidence and both flatter. It describes the paper record and forecasts
+nothing.
+
 ---
 
 ## 7. Where this sits in the plan

@@ -54,10 +54,31 @@ dict if the record has one, else the unscored fields `validate.FIELDS` already t
 (`rs_20d_vs_spy`, `atr_pct`, ...). This is where a window-split experiment (E10) lives: which
 input ranks returns in-sample, and does it still on the hold-out.
 
+BETA-RESIDUAL MODE (E2 — "was it beta?")
+-----------------------------------------
+`--beta-residual` answers the E2 question in docs/BACKTEST.md §6b by inspection. For every
+observation that carries `features.beta_252` and has SPY's forward return on the same date
+(computed from the bars exactly as the stock's is — `validate.forward_returns` on SPY's
+closes), the forward return is regressed on beta × SPY forward return, pooled, **through the
+origin** (`technicals.ols`, stdlib):
+
+    fwd_h(i) = k · beta_252(i) · SPY_fwd_h(date_i) + e_h(i)
+
+k is a free slope because beta_252 was estimated over a different window; with the
+market-model assumption k ≈ 1. The residual e_h is the part of the forward return the name's
+beta does not explain. The IC table is then computed twice for `atr_pct`, `rv_20d`,
+`max_1m` (and `beta_252` itself, as the control): against the RAW forward return and
+against the RESIDUAL, and printed side by side. A feature whose raw IC is real and whose
+residual IC is near zero was a beta proxy in a directional sample; one that survives the
+residual is a signal in its own right. Same Newey-West lag, same bootstrap block.
+
+The SPY forward return is written into `--json` as `spy_fwd` per observation, so an
+observations file produced with `--bars` is a valid `--records` input for this mode too.
+
 Usage
 -----
     python3 ic.py --records records/ --bars bars.json --horizons 5,10,20 \
-                  [--by-feature] [--md ic.md] [--json ic.json]
+                  [--by-feature] [--beta-residual] [--md ic.md] [--json ic.json]
 
 Everything here describes a replay. It forecasts nothing.
 """
@@ -73,8 +94,11 @@ if BASE not in sys.path:
     sys.path.insert(0, BASE)
 
 import validate
+import technicals
 
 DEFAULT_HORIZONS = (5, 10, 20)
+E2_FEATURES = ("atr_pct", "rv_20d", "max_1m", "beta_252")   # beta_252 is the control row
+BENCHMARK = "SPY"
 MIN_CROSS_SECTION = 5        # fewer names on a date than this and that date has no IC
 QUINTILE_MIN_N = 10          # median cross-section below this -> terciles
 BOOTSTRAP_DRAWS = 1000
@@ -204,7 +228,8 @@ def from_validate_obs(obs):
         if score is None:
             continue
         out.append({"date": o["date"], "symbol": o["ticker"], "score": score,
-                    "fwd": _normalise_fwd(o.get("fwd")), "features": _features_of(row)})
+                    "fwd": _normalise_fwd(o.get("fwd")), "features": _features_of(row),
+                    "spy_fwd": _normalise_fwd(o.get("spy_fwd"))})
     return out
 
 
@@ -223,8 +248,31 @@ def _from_precomputed(rows):
             if fv is not None:
                 feats[str(k)] = fv
         out.append({"date": r["date"], "symbol": sym, "score": score,
-                    "fwd": _normalise_fwd(r.get("fwd")), "features": feats})
+                    "fwd": _normalise_fwd(r.get("fwd")), "features": feats,
+                    "spy_fwd": _normalise_fwd(r.get("spy_fwd"))})
     return out
+
+
+def spy_forward(series, dates, horizons, benchmark=BENCHMARK):
+    """{date: {h: pct}} — the benchmark's forward return from each date's close, through
+    validate.forward_returns so it is measured exactly as the stocks' returns are."""
+    if not series.get(benchmark):
+        return {}
+    obs = [{"date": d, "ticker": benchmark, "row": {}} for d in sorted(set(dates))]
+    validate.forward_returns(obs, series, [int(h) for h in horizons])
+    return {o["date"]: _normalise_fwd(o["fwd"]) for o in obs}
+
+
+def attach_spy_forward(obs, series, horizons):
+    """Fill `spy_fwd` on every observation that lacks it, from the bars."""
+    need = sorted({o["date"] for o in obs if not o.get("spy_fwd")})
+    if not need:
+        return obs
+    sf = spy_forward(series, need, horizons)
+    for o in obs:
+        if not o.get("spy_fwd"):
+            o["spy_fwd"] = dict(sf.get(o["date"], {}))
+    return obs
 
 
 def load_observations(records, bars=None, horizons=DEFAULT_HORIZONS):
@@ -240,14 +288,16 @@ def load_observations(records, bars=None, horizons=DEFAULT_HORIZONS):
     raw = json.load(open(records, encoding="utf-8"))
     if isinstance(raw, dict):
         if isinstance(raw.get("observations"), list):
-            return _from_precomputed(raw["observations"])
+            obs = _from_precomputed(raw["observations"])
+            return attach_spy_forward(obs, validate.load_bars(bars), horizons) if bars else obs
         if raw.get("results") and raw.get("date"):
             return _with_forward([raw], bars, horizons)
         raise SystemExit(f"REFUSED: {records} is neither an archive record nor an observations file")
     if isinstance(raw, list):
         if raw and all(isinstance(r, dict) and r.get("results") for r in raw):
             return _with_forward(raw, bars, horizons)
-        return _from_precomputed(raw)
+        obs = _from_precomputed(raw)
+        return attach_spy_forward(obs, validate.load_bars(bars), horizons) if bars else obs
     raise SystemExit(f"REFUSED: cannot read observations from {records}")
 
 
@@ -257,7 +307,7 @@ def _with_forward(recs, bars, horizons):
                          "they can be measured from the closes, exactly as validate.py does.")
     series = validate.load_bars(bars)
     obs = validate.forward_returns(validate.observations(recs), series, list(horizons))
-    return from_validate_obs(obs)
+    return attach_spy_forward(from_validate_obs(obs), series, horizons)
 
 
 # ---------------------------------------------------------------- the table
@@ -369,6 +419,93 @@ def in_sample_metrics(summary):
     return out
 
 
+# ---------------------------------------------------------------- E2: beta residual
+def beta_residual(obs, h):
+    """Pooled OLS through the origin of fwd_h on beta_252 × SPY_fwd_h.
+
+    Returns (slope, residual observations, n): the observations are copies whose `fwd`
+    carries ONLY {h: residual}, so `ic_table` runs on them unchanged. Rows without
+    beta_252, a stock forward return or a SPY forward return at h are left out (they are
+    not padded), and n counts what stayed. (None, [], 0) when fewer than 3 rows remain or
+    the regressor is constant."""
+    rows = []
+    for o in obs:
+        y = o["fwd"].get(h)
+        b = o["features"].get("beta_252")
+        m = (o.get("spy_fwd") or {}).get(h)
+        if y is None or b is None or m is None:
+            continue
+        rows.append((o, y, b * m))
+    if len(rows) < 3:
+        return None, [], 0
+    fit = technicals.ols([r[1] for r in rows], [[r[2] for r in rows]], intercept=False)
+    if fit is None:
+        return None, [], 0
+    coef, _, resid = fit
+    out = [dict(o, fwd={h: e}) for (o, _, _), e in zip(rows, resid)]
+    return coef[0], out, len(rows)
+
+
+def summarise_beta_residual(obs, horizons=DEFAULT_HORIZONS, features=E2_FEATURES):
+    """Per horizon: the slope k, n, and for each feature the IC table against the raw
+    forward return and against the residual — on the SAME rows, so the two columns differ
+    only in what beta explains."""
+    horizons = [int(h) for h in horizons]
+    out = {"_what": ("E2: IC of each feature against the raw forward return and against the "
+                     "residual of fwd on beta_252 × SPY_fwd (pooled OLS through the origin). "
+                     "Raw IC real and residual IC near zero means the feature was beta. "
+                     "Describes a replay; forecasts nothing."),
+           "features": list(features), "horizons": horizons, "by_horizon": {}}
+    for h in horizons:
+        k, resid_obs, n = beta_residual(obs, h)
+        H = {"n": n, "slope": round(k, 4) if k is not None else None,
+             "n_without_beta": sum(1 for o in obs if o["features"].get("beta_252") is None),
+             "n_without_spy": sum(1 for o in obs if (o.get("spy_fwd") or {}).get(h) is None),
+             "features": {}}
+        keep = {(o["date"], o["symbol"]) for o in resid_obs}
+        raw_obs = [o for o in obs if (o["date"], o["symbol"]) in keep]
+        for name in features:
+            H["features"][name] = {"raw": ic_table(raw_obs, h, key=name),
+                                   "residual": ic_table(resid_obs, h, key=name)}
+        out["by_horizon"][str(h)] = H
+    return out
+
+
+def _side_line(name, raw, res):
+    rs, ss = raw.get("spread") or {}, res.get("spread") or {}
+    return (f"| {name} | {raw['n']} | {raw['n_dates']} | {_fmt(raw['ic_mean'])} | "
+            f"{_fmt(raw['ic_tstat_nw'], 2)} | {_fmt(rs.get('mean_pct'), 2)} | "
+            f"{_fmt(res['ic_mean'])} | {_fmt(res['ic_tstat_nw'], 2)} | "
+            f"{_fmt(ss.get('mean_pct'), 2)} |")
+
+
+def markdown_beta_residual(summary):
+    L = ["# E2 — was it beta? IC against raw forward returns and against the beta residual", ""]
+    L.append("For each horizon the forward return is regressed, pooled, through the origin, on "
+             "beta_252 × SPY forward return; the residual is what beta does not explain. Both "
+             "columns are computed on the same rows. A feature whose raw IC is real and whose "
+             "residual IC is near zero was a beta proxy; one that survives is a signal in its "
+             "own right. beta_252 itself is the control: its residual IC should be near zero.")
+    L.append("")
+    for h in summary["horizons"]:
+        H = summary["by_horizon"][str(h)]
+        L.append(f"## {h}-session horizon — n = {H['n']}, slope k = {_fmt(H['slope'], 3)}"
+                 + ("" if H["n"] >= 30 else "  ·  NOT ENOUGH DATA (under 30)"))
+        if H["n_without_beta"] or H["n_without_spy"]:
+            L.append(f"({H['n_without_beta']} row(s) without beta_252 and {H['n_without_spy']} "
+                     "without a SPY forward return were left out)")
+        L.append("")
+        L.append("| feature | n | dates | raw IC | raw t (NW) | raw spread % | "
+                 "resid IC | resid t (NW) | resid spread % |")
+        L.append("|---|---:|---:|---:|---:|---:|---:|---:|---:|")
+        for name, t in H["features"].items():
+            L.append(_side_line(name, t["raw"], t["residual"]))
+        L.append("")
+    L.append("**Reading it.** Compare the two IC columns row by row. Under 30 rows nothing "
+             "here is evidence either way. This describes a replay; it forecasts nothing.")
+    return "\n".join(L) + "\n"
+
+
 # ---------------------------------------------------------------- report
 def _fmt(v, dp=3, signed=True):
     if v is None:
@@ -424,6 +561,9 @@ def main(argv=None):
     ap.add_argument("--bars", help="get_equity_historicals output(s); required for archive records")
     ap.add_argument("--horizons", default=",".join(str(h) for h in DEFAULT_HORIZONS))
     ap.add_argument("--by-feature", action="store_true")
+    ap.add_argument("--beta-residual", action="store_true",
+                    help="E2: IC of atr_pct / rv_20d / max_1m against raw and beta-residual "
+                         "forward returns, side by side (needs beta_252 and SPY bars)")
     ap.add_argument("--md")
     ap.add_argument("--json")
     a = ap.parse_args(argv)
@@ -434,16 +574,23 @@ def main(argv=None):
         print(f"REFUSED: no scored observations in {a.records}", file=sys.stderr)
         return 2
     res = summarise(obs, horizons, by_feature=a.by_feature)
+    beta = summarise_beta_residual(obs, horizons) if a.beta_residual else None
+    if beta is not None:
+        res["beta_residual"] = beta
     if a.json:
         payload = dict(res)
         payload["observations"] = [{"date": o["date"], "symbol": o["symbol"], "score": o["score"],
                                     "fwd": {str(k): v for k, v in o["fwd"].items()},
-                                    "features": o["features"]} for o in obs]
+                                    "features": o["features"],
+                                    "spy_fwd": {str(k): v for k, v in (o.get("spy_fwd") or {}).items()}}
+                                   for o in obs]
         with open(a.json, "w", encoding="utf-8") as f:
             json.dump(payload, f, indent=2)
     if a.md:
         with open(a.md, "w", encoding="utf-8") as f:
             f.write(markdown(res))
+            if beta is not None:
+                f.write("\n" + markdown_beta_residual(beta))
     for h in horizons:
         t = res["score"][str(h)]
         sp = t["spread"]
@@ -452,6 +599,16 @@ def main(argv=None):
               f"spread={_fmt(sp['mean_pct'], 2)}% ({sp['label']})")
     if a.by_feature:
         print(f"  {len(res.get('features') or {})} feature(s) tabulated")
+    if beta is not None:
+        for h in horizons:
+            H = beta["by_horizon"][str(h)]
+            print(f"E2 {h:>3}d  n={H['n']:<5} k={_fmt(H['slope'], 3)}   "
+                  f"{'feature':<10} {'raw IC':>8} {'raw t':>7} | {'resid IC':>8} {'resid t':>7}")
+            for name, t in H["features"].items():
+                print(f"{'':>26}{name:<10} {_fmt(t['raw']['ic_mean']):>8} "
+                      f"{_fmt(t['raw']['ic_tstat_nw'], 2):>7} | "
+                      f"{_fmt(t['residual']['ic_mean']):>8} "
+                      f"{_fmt(t['residual']['ic_tstat_nw'], 2):>7}")
     if a.json or a.md:
         print("-> " + ", ".join(p for p in (a.json, a.md) if p))
     return 0
