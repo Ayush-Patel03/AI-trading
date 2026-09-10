@@ -46,6 +46,16 @@ https://docs.alpaca.markets/docs/about-market-data-api on 2026-09-10:
   ten characters are the session date). A symbol with no bars in the window is simply
   absent from `bars` — treated here as "not covered", never as "did not trade".
 
+INTRADAY BARS (D-03 / E24). `--timeframe 5Min` fetches 5-minute bars in the same file shape
+for `engine/orb.py --bars-5m` (the ORB replay) and stamps each result `interval "5minute"`,
+the Robinhood field the engine's loader checks. A 5-minute session is 78 regular-hours bars
+(IEX bars also cover the extended session; the ORB code keys on the 09:30 ET bucket and
+ignores the rest), so 20 symbols × 15 sessions is ~30,000 points and a batch pages three or
+four times — budget 250 requests for a 20-name universe over a year. `t` is the bar's left
+edge in RFC-3339 UTC; orb.py converts to America/New_York. IEX-ONLY VOLUME IS A FRACTION OF
+CONSOLIDATED VOLUME, and not a constant one: the opening-RVOL rank the replay computes from
+these bars is biased toward names whose IEX share was high that morning. docs/BACKTEST.md 6d.
+
 THE KEY FILE. Two lines, `APCA_API_KEY_ID=…` and `APCA_API_SECRET_KEY=…`, at
 `C:\\ai-trading-runner\\alpaca.env` — next to the venv, outside BOTH the engine clone and the
 state repo, exactly like `engine-config.json` (runner/README.md step 4). This program refuses
@@ -76,6 +86,10 @@ RATE_LIMIT_PER_MIN = 200    # Basic plan
 DEFAULT_BATCH = 20
 DEFAULT_SLEEP = 0.35        # ~170 requests/min, under the 200/min Basic limit
 MAX_TRIES = 6
+# D-03 / E24: the ORB desk's replay reads 5-minute bars in the same file shape. Alpaca's
+# timeframe → Robinhood's `interval` stamp on each result (None = daily, no stamp).
+TIMEFRAMES = {"1Day", "5Min"}
+INTERVALS = {"5Min": "5minute"}
 TIMEOUT_S = 60
 KEY_ENV = ("APCA_API_KEY_ID", "APCA_API_SECRET_KEY")
 SECTOR_ETFS = ("XLK", "XLF", "XLV", "XLY", "XLP", "XLE", "XLI", "XLB", "XLU", "XLRE", "XLC")
@@ -200,14 +214,14 @@ def _request(url, headers, log=print):
 
 
 def fetch_batch(symbols, start, end, key, secret, feed="iex", adjustment="all",
-                sleep_s=DEFAULT_SLEEP, log=print, base_url=ALPACA_URL):
+                sleep_s=DEFAULT_SLEEP, log=print, base_url=ALPACA_URL, timeframe="1Day"):
     """{SYMBOL: [alpaca bar, ...]} for one batch, following next_page_token to the end."""
     headers = {"APCA-API-KEY-ID": key, "APCA-API-SECRET-KEY": secret, "Accept": "application/json"}
     bars = {}
     token = None
     pages = 0
     while True:
-        params = {"symbols": ",".join(symbols), "timeframe": "1Day", "start": start, "end": end,
+        params = {"symbols": ",".join(symbols), "timeframe": timeframe, "start": start, "end": end,
                   "adjustment": adjustment, "feed": feed, "limit": PAGE_LIMIT, "sort": "asc"}
         if token:
             params["page_token"] = token
@@ -263,8 +277,12 @@ def load_existing(path):
 
 
 def write_bars(path, bars, meta):
-    """Atomic write of the one-block shape every loader accepts."""
-    results = [{"symbol": sym, "bars": bars[sym]} for sym in sorted(bars)]
+    """Atomic write of the one-block shape every loader accepts. An intraday timeframe is
+    stamped on every result as Robinhood's `interval` ("5minute") so orb.bars_by_symbol's
+    interval guard can tell the file from a daily one."""
+    interval = INTERVALS.get((meta or {}).get("timeframe") or "1Day")
+    results = [dict({"symbol": sym}, **({"interval": interval} if interval else {}),
+                    bars=bars[sym]) for sym in sorted(bars)]
     doc = {"meta": meta, "data": {"results": results}}
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
@@ -346,6 +364,9 @@ def main(argv=None):
     ap.add_argument("--keyfile", help="two-line APCA_API_KEY_ID=… / APCA_API_SECRET_KEY=… file, "
                                       "OUTSIDE the repo (C:\\ai-trading-runner\\alpaca.env)")
     ap.add_argument("--feed", default="iex", choices=["iex", "sip"])
+    ap.add_argument("--timeframe", default="1Day", choices=sorted(TIMEFRAMES),
+                    help="bar size: 1Day (the backtest's bars.json) or 5Min (the ORB desk's "
+                         "bars_5m.json — D-03 / E24; IEX-only volume, see docs/BACKTEST.md 6d)")
     ap.add_argument("--adjustment", default="all", choices=["raw", "split", "dividend", "all"])
     ap.add_argument("--batch", type=int, default=DEFAULT_BATCH, help="symbols per request")
     ap.add_argument("--sleep", type=float, default=DEFAULT_SLEEP, help="seconds between requests")
@@ -387,13 +408,14 @@ def main(argv=None):
             wanted = sorted(have)
     todo = [s for s in wanted if s not in have and (alt_symbol(s) or s) not in have]
     log(f"{len(wanted)} symbols wanted, {len(wanted) - len(todo)} already present, "
-        f"{len(todo)} to fetch ({start} → {end}, feed {a.feed}, adjustment {a.adjustment})")
+        f"{len(todo)} to fetch ({start} → {end}, {a.timeframe}, feed {a.feed}, "
+        f"adjustment {a.adjustment})")
 
     meta = {"source": a.source, "fetched_at": dt.datetime.now(dt.timezone.utc)
             .replace(microsecond=0).isoformat().replace("+00:00", "Z"),
             "feed": a.feed if a.source == "alpaca" else None,
             "adjustment": a.adjustment if a.source == "alpaca" else None,
-            "timeframe": "1Day", "start": start, "end": end,
+            "timeframe": a.timeframe, "start": start, "end": end,
             "universe": (a.universe and {"file": str(a.universe), "since": a.since,
                                          "name": (doc or {}).get("name")}) or None,
             "bar_shape": "robinhood get_equity_historicals: data.results[].bars[]"
@@ -408,7 +430,7 @@ def main(argv=None):
             try:
                 got, pages = fetch_batch(batch, start, end, key, secret, feed=a.feed,
                                          adjustment=a.adjustment, sleep_s=a.sleep, log=log,
-                                         base_url=a.base_url)
+                                         base_url=a.base_url, timeframe=a.timeframe)
             except FetchError as exc:
                 log(f"batch {i}/{len(batches)} FAILED: {exc} — writing what we have; re-run with --resume")
                 write_bars(a.out, have, dict(meta, partial=True, error=str(exc)))
@@ -431,7 +453,7 @@ def main(argv=None):
             try:
                 got, pages = fetch_batch([alt for _, alt in retry], start, end, key, secret,
                                          feed=a.feed, adjustment=a.adjustment, sleep_s=a.sleep,
-                                         log=log, base_url=a.base_url)
+                                         log=log, base_url=a.base_url, timeframe=a.timeframe)
                 requests_made += pages
                 for s, alt in retry:
                     if got.get(alt):

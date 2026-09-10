@@ -55,21 +55,31 @@
     },
     "orb": {
       "inactive": true,
-      "label": "ORB — opening-range breakout, intraday (E24) — INACTIVE TEMPLATE",
+      "label": "ORB — stocks-in-play opening-range breakout, intraday, long-only (E24) — INACTIVE TEMPLATE",
       "doc_book": "claude/paper-book-orb.json",
       "doc_journal": "claude/pm-journal-orb.json",
       "book": "paper_book_orb.json",
       "journal": "pm_journal_current_orb.json",
       "rules": {
         "stop_policy": "chandelier",
-        "stop_params": {"k_init": 0.1, "k_trail": 3.0, "max_sessions": 1, "target_r": null},
+        "stop_params": {"k_init": 0.1, "k_trail": 0.5, "max_sessions": 1, "target_r": null},
         "flatten_at_close": true,
-        "broker_policy": "intraday_margin"
+        "broker_policy": "intraday_margin",
+        "orb": {
+          "lookback_days": 14, "top_n": 20,
+          "min_price": 5.0, "min_adv_shares": 1000000, "min_atr": 0.5,
+          "stop_atr_mult": 0.1, "risk_pct": 1.0, "max_notional_pct": 25.0, "max_concurrent": 5,
+          "k_trail": 0.5, "breakout_tick": 0.01,
+          "entry_window_et": ["09:30", "10:00"], "valid_from_et": "09:35", "cancel_after_et": "10:30",
+          "flatten_at_et": "15:45",
+          "fill_k": 1.0, "fill_half_spread_bps": 5.0, "fractional": false
+        }
       },
-      "filter": {"setups": ["Momentum"]},
+      "pm_rules": {"max_new_entries_per_run": 5},
+      "filter": {},
       "publishes_board": false,
-      "_thesis": "Opening-range breakout (E24): enter on a break of the first bar's range in the direction of the gap, stop at 10% of ATR (the paper's stop, implemented as chandelier k_init 0.1), flatten at the close — never held overnight. Needs intraday bars and an entry slot the engine does not have yet.",
-      "_note": "Template only (E24). No book exists; pm.py refuses --desk orb without --allow-inactive. `flatten_at_close` closes every position at the power-hour slot; intraday_margin is required because every trade is a day trade."
+      "_thesis": "Stocks-in-play opening-range breakout (E24; Zarattini, Barbon & Aziz 2024). Each morning the 09:35 sentinel ranks the scan universe plus the held names by opening relative volume (the 09:30 bar's volume over the 14-session average of that same bucket), keeps price > $5, 14-day ADV > 1M shares and ATR14 > $0.50, takes the top 20 and goes LONG the names whose first candle closed green with a buy-stop just above the opening-range high, live until 10:30. Stop at 10% of ATR14 (chandelier k_init 0.1), sized for 1% of desk equity at risk under a 25% notional cap, at most 5 names, trailed 0.5x ATR under the highest 5-minute high (k_trail 0.5 is DESK-SPECIFIC — the chandelier default of 3.0 is a multi-day trail), flat at the 15:45 power-hour slot. LONG-ONLY: the paper's edge was long AND short; this account cannot short, so a weaker result than the paper's is the expectation, and every red-candle skip is journaled.",
+      "_note": "Template only (E24). No book exists; pm.py refuses --desk orb without --allow-inactive. The wiring is in engine/orb.py and pm.py (D-03): stop-buy fills against bars_5m.json, the 10:35 cancel, the 5-minute trail, flatten_at_close at power-hour; intraday_margin because every trade is a day trade and nothing counts them. Activate by removing `inactive`, creating the two project docs, adding the desk to runner/slots.json under sentinel and power-hour ONLY, and staging bars_5m.json at the sentinel (docs/PM.md section 18)."
     }
   }
 }

@@ -1375,7 +1375,9 @@ day trade). They are mandates written down with their exits so they can be wired
 desks that trade: `pm.py --desk rotation` exits 2 with the reason unless `--allow-inactive`
 is passed, **no book is created** for them, and the peer loader, the paper mirror and the
 runner's peer staging all skip them. Activating one is: remove `inactive`, create the two
-project docs, add the desk to `runner/slots.json`.
+project docs, add the desk to `runner/slots.json`. The `orb` template's wiring — its
+entries, fills, trail and flatten — is built (D-03) and described in section 18; it still
+ships inactive.
 
 ## 17. Live guardrails — doctrine, validators, and the paper-mode audit (K-07)
 
@@ -1439,3 +1441,141 @@ fixture the one proposal (SCHW, $557.94) clears every default ceiling and the au
 `tests/test_stops.py` proves the same run journals the refusal when the ceiling is lowered
 under it. `pm.py` never calls `live_mode_allowed`, `check_day` or `check_circuit` — a static
 test pins that.
+
+## 18. The ORB desk — stocks-in-play opening-range breakout (D-03, E24; added 2026-09-10)
+
+**Status: built, tested, INACTIVE.** `desks.json` still carries `orb` with `"inactive":
+true`; `pm.py --desk orb` exits 2 without `--allow-inactive`, no book exists, and no slot
+runs it. What changed is that the engine now knows how to run it: `engine/orb.py` and the
+D-03 branches in `pm.py`. Activation is a config change (below), not a code change.
+
+### The mandate
+
+Zarattini, Barbon & Aziz (2024) — the "stocks in play" opening-range breakout, Appendix E
+§1a of the research synthesis, plan §6. Each morning:
+
+1. **Rank** the scan universe plus the held names by **opening relative volume**: the volume
+   of the 09:30–09:35 bar divided by the 14-session average of *that same* 5-minute bucket
+   (`orb.opening_rvol`). A 09:35 bar the size of a session does not move the 09:30 baseline;
+   fewer than 5 prior sessions with the bucket is no baseline at all.
+2. **Filter**: opening-bar close > $5, 14-day ADV > 1M shares, ATR14 > $0.50. ATR14 and ADV14
+   come from `bars.json` (daily, strictly before today) when it is staged, else from the scan
+   row's `atr_14` / `avg_volume_20d`, and the row says which (`stats_source`). No stats
+   anywhere: rejected, never sized on a guess.
+3. **Top 20** by RVOL are the stocks in play (`orb.stocks_in_play`; `orb.screen` also returns
+   every rejected name with its reason, and the journal carries all of them).
+4. **Direction** from the first candle: close > open → long. Close < open → the paper goes
+   **short; this account cannot**, so the name is skipped and journaled (`red opening candle
+   — the paper shorts it; this account is long-only`). Doji → skipped.
+5. **Entry** = a buy-stop one tick (`breakout_tick` $0.01) above the opening-range high,
+   placed at the **09:35 sentinel and no other run** (`orb.in_entry_window`: 09:30–10:00
+   ET), live until **10:30** and cancelled unfilled by the 10:35 sentinel.
+6. **Stop** = entry − **0.10 × ATR14** (the paper's stop; `stop_policy: chandelier`,
+   `k_init 0.1`). **Size** for 1% of desk equity at risk on that distance, whole shares
+   (Robinhood takes no fractional stop orders), **capped at 25% of desk equity notional**
+   and at the cash available; the cap is journaled when it binds (`ORB notional cap binds:
+   1% risk sized 500 sh ($25,305); capped at 25% of equity = 24 sh …`). On a $5,000 book
+   at a 10%-of-ATR stop the cap binds on nearly every name — the risk actually carried is
+   then a fraction of 1%, and the journal line says exactly how much. At most **5 concurrent**
+   names (open positions plus working stop-buys); the desk's `pm_rules` raises
+   `max_new_entries_per_run` to 5 to match.
+7. **Management** — every hourly sentinel walks the 5-minute bars since its last visit
+   (`orb.manage_position`): a bar whose low reaches the stop is a hit, exited at
+   min(stop, that bar's open) — a gap through the stop exits at the open — otherwise the
+   highest 5-minute **high** ratchets a chandelier trail **0.5 × ATR14** below it, up only
+   (Chande & Kroll's chandelier hangs from the highest high; inside one bar the low is
+   tested before the high can raise the trail, because the order of prints within a bar is
+   unknown). **`k_trail 0.5` is a desk-specific parameter**: the `stops.py` chandelier
+   default is 3.0 × ATR under the highest close the book has seen, a multi-day momentum
+   trail; a trade that lives six hours trails six times tighter. The print still counts — a quote at or under the stop fires it
+   even when the bars said nothing — and with no bars staged the generic chandelier update
+   runs on the quote as it does for any other desk.
+8. **Exit at the close**: `flatten_at_close` at the power-hour slot closes every position
+   (`time` / "Flatten at close"), nothing is held overnight, and `max_sessions 1` closes
+   anything that somehow survived at the next session. The ORB desk's positions are never
+   exited on a scan score: the exit pass does not consult the scan row for them, and the
+   standard entry pass places nothing on this desk at any decision slot.
+9. **Broker policy** `intraday_margin`: every trade is a day trade and nothing counts them
+   (section 4); `day_trades_used` is reported and gates nothing.
+
+### The evidence, and the long-only caveat
+
+The paper reports the strategy on US equities 2016–2023 with the top-20 RVOL universe, the
+10%-of-ATR stop and the close as the exit, **long and short**. The short leg is a large part
+of that result: a universe selected on opening volume contains as many gap-downs as gap-ups,
+and the red-candle names are exactly the ones this desk skips. **The expectation for the
+long-only half is a weaker result than the paper's, not a reproduction of it**, and the
+skipped red candles are journaled so the weekly review can count what the missing leg
+would have traded. Nothing here has been measured on this system's data yet; the harness
+(`orb.replay`, docs/BACKTEST.md E24) exists so that it can be, and its data caveat is stated
+there: IEX-only 5-minute volume biases the RVOL rank, so the replay is a directional check.
+
+### What the engine does — the D-03 wiring in `pm.py`
+
+- **`DESK.rules.orb`** is the switch: every ORB branch is gated on `_orb_rules()`, which is
+  None for `swing`, `pullback` and `momentum`. Their behaviour is byte-identical (the K-06
+  and K-07 goldens still pass); `tests/test_orb.py` pins that none of the three carries an
+  `orb` block.
+- **Working orders of type `"stop-buy"`** carry `trigger_price` (and `limit_price` equal to
+  it, so reserved cash, the house tally, the margin projection and the board all read them
+  unchanged), `valid_from_et` 09:35, `cancel_after_et` 10:30, `meta.stop`, `meta.stop_policy
+  chandelier`, `meta.stop_params` and `meta.orb` (rank, rvol, or_high, or_low, direction,
+  adv14, atr14, whether the notional cap or cash bound the size, the unscaled shares).
+  `simulate_fills` works them against the 5-minute bars (`orb.check_stop_buy`): the first
+  completed bar from 09:35 whose **high reaches the trigger** fills at **max(trigger, that
+  bar's open) + the shadow haircut** — `fill_k` (1.0) half-spreads of the quote when there is
+  a two-sided one, `fill_half_spread_bps` (5) of price otherwise — never in the run that
+  placed it, and never on the 09:30 bar. Unfilled past 10:30: cancelled. No bars staged: the
+  quote stands in (a print at or through the trigger fills at the print plus the haircut)
+  and the journal says so. The fill bar is recorded on the position (`orb_entry_bar`,
+  `orb_managed_through`) so management walks only the bars after it.
+- **The exit pass** for an ORB position with bars: `orb.manage_position` on the bars after
+  `orb_managed_through`, the raise journaled as `raise-stop` ("orb: stop raised from 50.51
+  to 51.70 — chandelier trail: 0.5x ATR (1.00) under the $52.20 highest 5-min high"), a hit
+  booked as a `stop` at the bar's exit price less `exit_slippage_pct` with the detail saying
+  "A 5-min low broke the … stop — exit at … (the open, gap through | the stop)".
+  The anchor lives in `highest_high` on the position (the bars' highs, never the print);
+  the generic `highest_close` is kept at least that high so a bar-less visit — the quote
+  path through `stops.py` — trails from the same anchor and never lowers it.
+- **The 09:35 sentinel** (`orb_entry_pass`) honours every gate a standard entry honours —
+  the kill switch, the ladder (entries blocked, or the size multiplier), the broker policy's
+  entry gate, the house caps and the house-exposure block — and journals every name that
+  did not make it (`jrn["orb"]` carries the ranked list; `report.classify` maps the desk's
+  refusals to the `orb` rule). A flat ORB book at 09:35 is **not** a quiet sentinel: that is
+  its entry slot, and `main()` runs it.
+- **No `bars_5m.json`**: the desk logs `no intraday bars — no ORB today (bars_5m.json was not
+  staged)` as a skip and a warning, prints it, and enters nothing. Holdings are still managed
+  on the quote.
+
+### Inputs per slot, when the desk is active
+
+| Slot | Staged by the session | Read by the ORB desk |
+|---|---|---|
+| Pre-market scan (08:00) | `scan_data.json`, `bars.json` (daily, a year, SPY included) — as today | the scan universe (`scans/latest.json` → `scan_results.json`, staged by the runner for every slot) and the daily bars for ATR14 / ADV14 |
+| **09:35 sentinel** | `pm_quotes.json` for held + working names as today, **plus `bars_5m.json`** = raw `get_equity_historicals` at `interval "5minute"`, `bounds regular`, `start_time` 15 sessions back, for the scan universe + held names (10 symbols per call) | ranks, sizes, places the stop-buys |
+| 10:35 – 15:35 sentinels | `pm_quotes.json` as today, plus `bars_5m.json` for the held and working names (today's bars suffice: `start_time` today 09:30 UTC-equivalent) | fills the stop-buys, cancels the unfilled at 10:35, trails, fires stops on 5-minute lows |
+| Power-hour PM (15:45) | `pm_quotes.json` as today | `flatten_at_close` closes everything; the entry pass places nothing |
+| Other decision slots | — | not scheduled for this desk; if run, they manage holdings and place nothing |
+
+**Connector budget for a 20-name universe at 09:35**: 2 × `get_equity_historicals` (10
+symbols per call, 15 sessions × 78 bars ≈ 1,170 bars per symbol) + 1 × `get_equity_quotes`
+(20 per call) + `get_accounts` = **4 calls**. If the upstream bar cap refuses 15 sessions at
+5 minutes for 10 symbols, split the range in two (the file accepts a list of responses):
+6 calls. Every later sentinel is 1 historicals call (today only, ≤ 10 held + working names)
++ the quotes call.
+
+### Activation
+
+1. Remove `"inactive": true` from `desks.json` → `orb`.
+2. Create `claude/paper-book-orb.json` (a fresh $5,000 book, `broker_policy
+   intraday_margin`) and `claude/pm-journal-orb.json`; mirror them to
+   `C:\ai-trading-state\books\orb.json` and `journals\orb.json`.
+3. Add `"orb"` to `runner/slots.json` under the **sentinel** and **power-hour** desks only
+   (`bars_5m.json` is already an optional sentinel input).
+4. In `docs/runner/prompts/sentinel.md` the "WHEN THE ORB DESK IS ACTIVE" lines take effect
+   — the 09:35 session stages `bars_5m.json` for the universe; later sentinels for the held
+   and working names.
+5. Run `orb.replay` on real 5-minute history first (BACKTEST.md E24) and read it before
+   the desk trades a single paper dollar. The desk ships inactive because that has not
+   been done.
+
