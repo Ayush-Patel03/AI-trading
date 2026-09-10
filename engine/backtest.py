@@ -112,7 +112,37 @@ MODEL_SUBSET = (
     "they are ABSENT rather than guessed, and coverage normalisation scores what was there. "
     "This measures the trend-and-momentum core, not the whole model."
 )
+TURNOVER_STATIC = (
+    "TURNOVER IS APPROXIMATE: --shares-outstanding is today's share count applied to every "
+    "replay date, so turnover_20d carries a small look-ahead (buybacks and issuance since "
+    "the date). Rank it, do not quote its level."
+)
 MIN_BARS_TO_SCORE = 220          # ma_200 plus a little; below this a row is not scored
+
+
+def load_sector_map(path):
+    """{SYMBOL: SECTOR_ETF}, upper-cased; {} without a path."""
+    if not path:
+        return {}
+    raw = json.load(open(path, encoding="utf-8"))
+    if not isinstance(raw, dict):
+        raise SystemExit("REFUSED: --sector-map must be a {SYMBOL: ETF} object")
+    return {str(k).upper(): str(v).upper() for k, v in raw.items() if v}
+
+
+def load_shares(path):
+    """{SYMBOL: float shares outstanding}; {} without a path."""
+    if not path:
+        return {}
+    raw = json.load(open(path, encoding="utf-8"))
+    if not isinstance(raw, dict):
+        raise SystemExit("REFUSED: --shares-outstanding must be a {SYMBOL: shares} object")
+    out = {}
+    for k, v in raw.items():
+        fv = technicals._f(v)
+        if fv and fv > 0:
+            out[str(k).upper()] = fv
+    return out
 
 
 # ---------------------------------------------------------------- bars
@@ -193,8 +223,13 @@ def financials_asof(rows, as_of):
 
 
 # ---------------------------------------------------------------- one candidate
-def candidate(sym, bars, as_of, bench_tech=None, fin=None):
-    """The scan_data candidate block for one symbol on one date, from bars only."""
+def candidate(sym, bars, as_of, bench_tech=None, fin=None, bench_hist=None,
+              sector_hist=None, shares_outstanding=None):
+    """The scan_data candidate block for one symbol on one date, from bars only.
+
+    `bench_hist` / `sector_hist` are the benchmark's and the sector ETF's bars ALREADY cut
+    to as_of by the caller; the research features (technicals.features) are computed from
+    `hist` and those, so the no-look-ahead boundary is the same `upto` as everything else."""
     hist = upto(bars, as_of)
     if len(hist) < MIN_BARS_TO_SCORE:
         return None
@@ -207,6 +242,8 @@ def candidate(sym, bars, as_of, bench_tech=None, fin=None):
     price = technicals._f(last.get("close_price"))
     if not price or price <= 0:
         return None
+    feats = technicals.features(hist, spy_bars=bench_hist, sector_bars=sector_hist,
+                                shares_outstanding=shares_outstanding)
 
     c = {
         "name": sym,
@@ -225,6 +262,8 @@ def candidate(sym, bars, as_of, bench_tech=None, fin=None):
         # One price source, and it is a bar close. Not "confirmed" — the live scan means
         # something specific by that word and this is not it.
         "price_sources": 1,
+        # S-04: logged on every record for ic.py --by-feature; scanner.py scores none of it.
+        "features": feats,
     }
     if bench_tech:
         for n in (20, 60):
@@ -280,26 +319,39 @@ def allowed_on(membership, as_of):
 
 # ---------------------------------------------------------------- the replay
 def replay(bars, as_of, benchmark="SPY", financials=None, slot="Backtest", allowed=None,
-           universe_bias=None):
+           universe_bias=None, sector_map=None, shares_outstanding=None):
     """One historical scan. Returns the scanner's output, or None if nothing scored.
 
     `allowed` is the set of symbols that were index members on as_of (see `allowed_on`);
-    None means the whole bars file, which is the survivor universe and is labelled as such."""
+    None means the whole bars file, which is the survivor universe and is labelled as such.
+    `sector_map` is {SYMBOL: SECTOR_ETF}; the ETFs named in it are benchmarks for the
+    industry features and are NOT scored as candidates. `shares_outstanding` is
+    {SYMBOL: float} for turnover_20d — a static snapshot, so treat that one feature as
+    approximate (see --shares-outstanding)."""
     bench_bars = bars.get(benchmark) or []
-    bench_tech = None
+    bench_tech, bench_hist = None, None
     if bench_bars:
         bh = upto(bench_bars, as_of)
         if len(bh) >= 60:
             bench_tech = technicals.derive(bh)
+            bench_hist = bh
+    sector_map = sector_map or {}
+    etfs = set(sector_map.values())
+    sector_hist = {}
+    for etf in etfs:
+        if bars.get(etf):
+            sector_hist[etf] = upto(bars[etf], as_of)
 
     candidates = {}
     for sym, b in bars.items():
-        if sym == benchmark:
+        if sym == benchmark or sym in etfs:
             continue
         if allowed is not None and sym not in allowed:
             continue                     # not a member that day: not scored that day
         fin = financials_asof((financials or {}).get(sym), as_of) if financials else None
-        c = candidate(sym, b, as_of, bench_tech, fin)
+        c = candidate(sym, b, as_of, bench_tech, fin, bench_hist=bench_hist,
+                      sector_hist=sector_hist.get(sector_map.get(sym)),
+                      shares_outstanding=(shares_outstanding or {}).get(sym))
         if c:
             candidates[sym] = c
     if not candidates:
@@ -347,6 +399,14 @@ def main(argv=None):
                     help="a universe_history.py file: each replay date scores only the names "
                          "that were index members on that date. Absent = the whole bars file, "
                          "which is a survivor universe and is labelled as such.")
+    ap.add_argument("--sector-map", dest="sector_map", metavar="JSON",
+                    help="{SYMBOL: SECTOR_ETF} for the industry features (S-04). Each ETF "
+                         "must have bars in the file; the ETFs are benchmarks, not "
+                         "candidates, and are not scored. Absent = those features null.")
+    ap.add_argument("--shares-outstanding", dest="shares_outstanding", metavar="JSON",
+                    help="{SYMBOL: shares} for turnover_20d. A STATIC snapshot (today's "
+                         "share count applied to every date), so the feature is approximate "
+                         "and every record says so. Absent = turnover_20d null.")
     ap.add_argument("--out-records", required=True)
     ap.add_argument("--summary")
     # The trial ledger. `--ledger` alone uses the default path; omitted, the run is not
@@ -368,6 +428,12 @@ def main(argv=None):
               "would invent both.", file=sys.stderr)
         return 2
     fin = load_financials(a.financials) if a.financials else None
+    sector_map, shares_out = load_sector_map(a.sector_map), load_shares(a.shares_outstanding)
+    missing_etfs = sorted(e for e in set(sector_map.values()) if e not in bars)
+    if missing_etfs:
+        print(f"note: sector ETF(s) named in --sector-map but not in the bars file: "
+              f"{', '.join(missing_etfs)} — their industry features will be null",
+              file=sys.stderr)
 
     dates = rebalance_dates(bars, a.benchmark, a.start, a.end, a.every)
     if not dates:
@@ -383,7 +449,8 @@ def main(argv=None):
     for d in dates:
         allowed = allowed_on(membership, d) if membership is not None else None
         out = replay(bars, d, a.benchmark, fin, allowed=allowed,
-                     universe_bias=uni.get("bias"))
+                     universe_bias=uni.get("bias"), sector_map=sector_map,
+                     shares_outstanding=shares_out)
         if not out or not out.get("results"):
             skipped.append(d)
             continue
@@ -397,8 +464,13 @@ def main(argv=None):
     summary = {
         "_what": "A backtest replay of the Scan Desk scoring model over historical bars.",
         "_warnings": [SURVIVORSHIP if membership is None else SURVIVORSHIP_WITH_HISTORY,
-                      MODEL_SUBSET] + ([uni["bias"]] if uni.get("bias") else []),
+                      MODEL_SUBSET] + ([uni["bias"]] if uni.get("bias") else [])
+                     + ([TURNOVER_STATIC] if shares_out else []),
         "benchmark": a.benchmark,
+        "features": {"keys": list(technicals.FEATURE_KEYS),
+                     "sector_map": bool(sector_map), "n_sector_etfs": len(set(sector_map.values())),
+                     "shares_outstanding": bool(shares_out),
+                     "note": "logged on every record for ic.py --by-feature; scored by nothing"},
         "start": a.start, "end": a.end, "every_n_sessions": a.every,
         "universe_size": len(bars) - 1,
         "universe": uni,

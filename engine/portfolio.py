@@ -43,6 +43,14 @@ RULES = {
     "fractional": True,          # Robinhood supports fractional shares
     "min_notional": 1.00,        # Robinhood's minimum fractional order
     "share_decimals": 6,
+    # S-05 / E13: volatility-targeted sizing (Moreira & Muir 2017; Barroso & Santa-Clara
+    # 2015 — see docs/PORTFOLIO.md, "Vol-targeted sizing"). OFF BY DEFAULT: with `enabled`
+    # False, build_proposals is byte-identical to the pre-S-05 engine (tests pin this).
+    # When on, a new entry is the SMALLER of the ATR-risk size and
+    # equity × target_vol / rv_20d, and the desk scalar clamp(target_vol / SPY rv_20d,
+    # lo, hi) multiplies new-entry notional. Flip it only after E13 has a ledger row with
+    # a hold-out result.
+    "vol_target": {"enabled": False, "target_vol_pct": 12.0, "lo": 0.5, "hi": 1.5},
 }
 
 def capital_basis(book):
@@ -93,6 +101,50 @@ def calculate_position_size(portfolio_value, entry_price, stop_loss_price, max_r
     max_affordable = spendable / entry_price
     shares = min(raw, max_affordable)
     return round(shares, decimals) if fractional else float(int(shares))
+
+def _num(v):
+    return isinstance(v, (int, float)) and not isinstance(v, bool)
+
+
+def size_by_vol(equity, price, rv_20d, target_vol_pct, cap_notional=None,
+                fractional=True, decimals=6):
+    """Shares such that the position contributes `target_vol_pct` of equity in annualised
+    volatility: notional = equity × (target_vol_pct / 100) / rv_20d, then capped.
+
+    Barroso & Santa-Clara (2015) "Momentum has its moments": scaling momentum exposure by
+    the inverse of its recent realised variance roughly doubles its Sharpe and removes
+    the crashes, because momentum's risk is highly predictable from its own recent vol.
+    Moreira & Muir (2017) "Volatility-managed portfolios" show the same for the market and
+    most factors. This is the per-name version: a 40%-vol name gets a third the notional
+    of a 13%-vol name for the same target.
+
+    `rv_20d` is the annualised FRACTION technicals.features() reports (0.25 = 25%). Zero
+    shares when any input is missing or non-positive — a vol of zero is not a licence for
+    an infinite position, it is a data gap."""
+    if not (_num(equity) and _num(price) and _num(rv_20d) and _num(target_vol_pct)):
+        return 0.0
+    if equity <= 0 or price <= 0 or rv_20d <= 0 or target_vol_pct <= 0:
+        return 0.0
+    notional = equity * (target_vol_pct / 100.0) / rv_20d
+    if _num(cap_notional):
+        notional = min(notional, max(0.0, cap_notional))
+    shares = notional / price
+    return round(shares, decimals) if fractional else float(int(shares))
+
+
+def desk_vol_scalar(spy_rv_20d, target_vol_pct, lo=0.5, hi=1.5):
+    """clamp(target_vol / SPY realised vol, lo, hi): the desk-level exposure multiplier.
+
+    Moreira & Muir (2017): weight ∝ target / recent realised vol lowers exposure when
+    the tape is volatile — when returns per unit of risk are lowest — and raises it when
+    it is quiet. The clamp is Barroso & Santa-Clara's leverage cap in both directions: no
+    more than `hi`× in a dead-calm tape, no less than `lo`× in a panic (the book still
+    trades, smaller). 1.0 — unchanged — when the SPY vol is unknown, because a missing
+    number must never scale the book."""
+    if not (_num(spy_rv_20d) and _num(target_vol_pct)) or spy_rv_20d <= 0 or target_vol_pct <= 0:
+        return 1.0
+    return max(lo, min(hi, (target_vol_pct / 100.0) / spy_rv_20d))
+
 
 def conviction_from_score(score):
     """Scan Desk score -> the 0-2 conviction scale the sizing model expects.
@@ -239,12 +291,21 @@ def review_holdings(marked, results):
     return out
 
 # ---- proposals ----
-def build_proposals(results, marked, rules=RULES, daily_pnl_pct=0.0):
+def build_proposals(results, marked, rules=RULES, daily_pnl_pct=0.0, spy_rv_20d=None):
+    """Order proposals for the scan rows not already held.
+
+    `spy_rv_20d` (SPY's annualised 20-day realised vol, a fraction) feeds the desk scalar
+    ONLY when rules["vol_target"]["enabled"] is True; with the flag off — the default — it
+    is ignored and the output is byte-identical to the engine before S-05."""
     held = {p["symbol"] for p in marked["positions"]}
     open_positions = [{"symbol": p["symbol"], "gics": p.get("gics"), "industry": p.get("industry")}
                       for p in marked["positions"]]
     equity = marked["equity"]
     blocks, proposals = [], []
+    vt = rules.get("vol_target") or {}
+    vol_on = bool(vt.get("enabled"))
+    desk_scalar = (desk_vol_scalar(spy_rv_20d, vt.get("target_vol_pct", 12.0),
+                                   vt.get("lo", 0.5), vt.get("hi", 1.5)) if vol_on else 1.0)
 
     if daily_pnl_pct <= -rules["max_daily_loss_pct"]:
         blocks.append(f"HALT: daily loss {daily_pnl_pct:.2f}% breached the "
@@ -295,6 +356,32 @@ def build_proposals(results, marked, rules=RULES, daily_pnl_pct=0.0):
         frac, dec = rules.get("fractional", False), rules.get("share_decimals", 6)
         shares = calculate_position_size(equity, r["price"], stop, risk_pct, frac, dec,
                                          cash_available=cash_left)
+        vol_info = None
+        if vol_on:
+            # E13: the smaller of the ATR-risk size and the vol-target size, then the desk
+            # scalar. rv_20d comes from the row's `features` block (technicals.features);
+            # a row without it keeps its ATR size and says so.
+            feats = r.get("features") if isinstance(r.get("features"), dict) else {}
+            rv = feats.get("rv_20d", r.get("rv_20d"))
+            atr_shares = shares
+            vol_shares = size_by_vol(equity, r["price"], rv, vt.get("target_vol_pct", 12.0),
+                                     cap_notional=cash_left, fractional=frac, decimals=dec)
+            if _num(rv) and rv > 0:
+                shares = min(atr_shares, vol_shares)
+                if vol_shares < atr_shares:
+                    trims.append(f"Vol target: {rv * 100:.0f}% realised vol sizes this at "
+                                 f"{vt.get('target_vol_pct', 12.0):g}% of equity in vol, "
+                                 f"below the ATR-risk size")
+            else:
+                trims.append("Vol target: no rv_20d on this row — ATR-risk size kept")
+            if desk_scalar != 1.0:
+                shares = round(shares * desk_scalar, dec) if frac else float(int(shares * desk_scalar))
+                trims.append(f"Desk vol scalar x{desk_scalar:.2f} "
+                             f"(SPY realised vol {spy_rv_20d * 100:.0f}% vs "
+                             f"{vt.get('target_vol_pct', 12.0):g}% target)")
+            vol_info = {"rv_20d": rv, "atr_shares": atr_shares, "vol_shares": vol_shares,
+                        "desk_scalar": round(desk_scalar, 4),
+                        "target_vol_pct": vt.get("target_vol_pct", 12.0)}
         corr_mult, corr_note = correlation_size_adjustment(g, r.get("industry"), open_positions)
         shares = round(shares * corr_mult, dec) if frac else float(int(shares * corr_mult))
 
@@ -340,6 +427,8 @@ def build_proposals(results, marked, rules=RULES, daily_pnl_pct=0.0):
             "warnings": hard + trims,
             "thesis": r.get("setup_note"),
         })
+        if vol_info is not None:
+            proposals[-1]["vol_target"] = vol_info
         if not hard and shares > 0:
             slots -= 1
             cumulative_risk += risk_pct

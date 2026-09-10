@@ -653,6 +653,12 @@ def scan(data):
             "confidence": conf_level, "confidence_note": conf_note,
             "price_disagreement_pct": c.get("price_disagreement_pct"),
         })
+        # S-04: the research features technicals.features() computed (merged into the
+        # candidate from technicals.json, or set directly by backtest.py). Logged so the
+        # archive record and the snapshot carry them for ic.py --by-feature; NOT an input
+        # to any pillar above, and absent rather than null when nothing computed them.
+        if isinstance(c.get("features"), dict):
+            rows[-1]["features"] = c["features"]
 
     # Score trail across today's slots, with this scan appended as the final point
     prior_top5 = set()

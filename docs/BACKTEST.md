@@ -288,6 +288,110 @@ nothing. A spread whose 90% interval straddles zero is not a spread.
 
 ---
 
+## 6b. The research features and the E10 / E2 recipes (S-04, 2026-09-10)
+
+Every backtest record — and, on a live run where `technicals.py` had the bars, every scan
+row, archive record and snapshot row — now carries a `features` dict from
+`technicals.features()`. **Scored by nothing.** `ic.py --by-feature` is the only reader.
+The keys, all fractions (0.10 = +10%), windows in sessions (21 to a month, 252 to a year),
+each `null` when the history does not cover it:
+
+| key | formula | paper | expected sign |
+|---|---|---|---|
+| `ret_12_7` | close[t−147]/close[t−252] − 1 | Novy-Marx 2012 | **+** |
+| `ret_6_2` | close[t−42]/close[t−126] − 1 | Novy-Marx 2012 | ≈ 0 |
+| `ret_12_1` | close[t−21]/close[t−252] − 1 | Jegadeesh & Titman 1993 | + |
+| `ret_1m` | close[t]/close[t−21] − 1 | Jegadeesh 1990 | **−** (reversal) |
+| `ret_5d` | close[t]/close[t−5] − 1 | Lehmann 1990 | **−** |
+| `close_to_52wk_high` | close[t] / max high over 252 | George & Hwang 2004 | + |
+| `max_1m` | max daily return over 21 sessions | Bali, Cakici & Whitelaw 2011 | **−** |
+| `rv_20d` | √252 × std of 20 daily log returns | (input to E13 sizing) | − / ? |
+| `atr_pct` | ATR14 / close (fraction; the row-level field is in percent) | — | **? — E2** |
+| `turnover_20d` | mean 20-day volume / shares outstanding | Lee & Swaminathan 2000 | interaction |
+| `rs_20d_vs_spy` | stock 20d − SPY 20d | (existing definition, as a fraction) | + |
+| `industry_rs_20d` | sector ETF 20d − SPY 20d | Moskowitz & Grinblatt 1999 | + |
+| `stock_vs_industry_rs_20d` | stock 20d − sector ETF 20d | — | ? (E1 decomposition) |
+| `resid_mom_12_1` | Σ residuals, all but the last 21, of the 252-day regression on SPY (+ sector) | Blitz, Huij & Martens 2011 | + |
+| `beta_252` | the SPY slope of that regression | — | (control) |
+| `ivol_20d` | √252 × std of the last 20 residuals | Ang, Hodrick, Xing & Zhang 2006 | − |
+| `overnight_share_20d` | Σ(open/prev close − 1) / Σ(close/prev close − 1), 20 sessions | Lou, Polk & Skouras 2019 | + |
+
+The regression behind `resid_mom_12_1` / `beta_252` / `ivol_20d` is **through the origin**:
+the estimation window is the momentum window plus one month, and with an intercept OLS
+residuals sum to zero over the sample, so "all but the last month" would collapse to minus
+the last month — a reversal signal wearing a momentum label. The module docstring says the
+same. Attention (`wsb_mentions`, watchlist counts) is not a bars feature; its sign test
+(expected **−**) is S-09 and reads the sentiment fields off the live archive.
+
+**Inputs the run needs.** Daily bars for the universe **plus SPY plus the eleven sector
+ETFs** (XLK, XLF, XLV, XLY, XLP, XLE, XLI, XLB, XLU, XLRE, XLC), from **252 sessions before the
+first replay date** (2024-08-21 → bars from 2023-08-01 or earlier). A `sector_map.json` of
+`{SYMBOL: ETF}` — GICS sector → SPDR ETF; the sector comes from the Wikipedia constituents
+table's "GICS Sector" column (the same page `universe_history.py` reads, which does not yet
+keep that column) or from the scan snapshot's `gics` field for names the scan has followed.
+Optionally a
+`shares_outstanding.json` of `{SYMBOL: shares}` from `get_equity_fundamentals` for
+`turnover_20d` — a static snapshot, so the run's summary and every record carry the
+`TURNOVER IS APPROXIMATE` warning; rank it, never quote its level.
+
+### The E10 recipe — window split, in-sample then hold-out
+
+```bash
+# in-sample: the first year
+python3 engine/backtest.py --bars bars_all.json --start 2024-08-21 --end 2025-08-20 \
+    --every 5 --sector-map sector_map.json --shares-outstanding shares_outstanding.json \
+    --universe-history experiments/universe_sp500.json \
+    --out-records records/e10_in/ --ledger experiments/ledger.jsonl \
+    --experiment-id E10 --hypothesis "ret_12_7 ranks 20d forward returns; ret_1m and ret_5d rank them negatively; the 40-point core is loading on the wrong window" \
+    --config-diff '{"features": "logged, unscored"}'
+python3 engine/ic.py --records records/e10_in/ --bars bars_all.json --horizons 5,10,20 \
+    --by-feature --md ic_e10_in.md --json ic_e10_in.json
+
+# hold-out: the second year — run ONCE, after the in-sample table has been read and the
+# expected signs written down
+python3 engine/backtest.py --bars bars_all.json --start 2025-08-21 --end 2026-08-28 \
+    --every 5 --sector-map sector_map.json --shares-outstanding shares_outstanding.json \
+    --universe-history experiments/universe_sp500.json \
+    --out-records records/e10_out/
+python3 engine/ic.py --records records/e10_out/ --bars bars_all.json --horizons 5,10,20 \
+    --by-feature --md ic_e10_out.md --json ic_e10_out.json
+
+# record the hold-out on the ledger row
+python3 engine/ledger.py --path experiments/ledger.jsonl --set-decision E10 "<what the hold-out said>"
+```
+
+**What to read off `ic_e10_*.md`.** At the 20-session horizon, per feature: the IC mean, its
+Newey–West t, and the quintile spread with its interval. The *signs* are the hypothesis:
+`ret_12_7` **+**, `ret_6_2` **≈ 0**, `ret_1m` **−**, `ret_5d` **−**, `max_1m` **−**,
+`atr_pct` **?** (E2 decides), attention **−** (S-09). A feature whose in-sample sign is right
+and whose hold-out t is under 3 is *not yet* a feature (Harvey, Liu & Zhu 2016). A feature whose
+hold-out sign flips is noise, and the in-sample table that suggested it spent a trial.
+Interaction with `turnover_20d`: split the observations at the median turnover (the `ic.json`
+observations carry it) and re-run `ic.py` on each half — momentum should be stronger and
+reversal faster in the high-turnover half (Lee & Swaminathan 2000).
+
+### The E2 recipe — is `atr_pct` a signal or a beta?
+
+`atr_pct` was the one bars field that ranked forward returns *negatively* on the 2026-09-10
+run. Two explanations, opposite implications: it is a real low-vol/lottery effect (then it
+belongs in the score with a negative sign), or it is a beta proxy and the sample was a
+drawdown (then it belongs in sizing, which E13 already does). Separating them:
+
+1. From `ic_e10_in.json`, take each observation's `features.beta_252`, `features.atr_pct`,
+   `features.max_1m`, `features.ivol_20d` and its `fwd["20"]`; from the bars take SPY's
+   forward 20-session return on the same dates.
+2. Regress `fwd_20` on `beta_252 × SPY_fwd_20` (and a semis-regime dummy, per the synthesis)
+   — `technicals.ols` will do it, stdlib only — and keep the **residual**.
+3. Rank-IC `atr_pct` against the residual, per date, Newey–West as usual. Do the same for
+   `max_1m` and `ivol_20d`, and for `atr_pct` *after* also partialling out `max_1m`.
+
+If `atr_pct`'s IC against the residual is near zero, it was beta: leave it out of the score
+and let vol targeting handle it. If it survives, and survives `max_1m`, it is a signal in
+its own right and gets a ledger row of its own before anything is promoted. Either way the
+answer is one row: `--experiment-id E2`.
+
+---
+
 ## 7. Where this sits in the plan
 
 Phase 2 of the roadmap (`claude/health/2026-09-02-system-review-and-roadmap.md`) is *prove the
