@@ -492,6 +492,66 @@ says *not a sample*, and there is no win rate and no Sharpe anywhere in the outp
 size neither is evidence and both flatter. It describes the paper record and forecasts
 nothing.
 
+## 6d. E26 — the sector-rotation desk's own replay (D-01, 2026-09-10)
+
+**The question.** The rotation desk (docs/PM.md section 18) is a monthly rule, not a scored
+scan: rank the eleven SPDR sector ETFs and VEU on 12-1 month return, hold the top three
+equal-weight when SPY's 12-month return beats the 3-month bill, else TLT. The scoring replay
+above cannot test it — there is no score, no quintile and no per-trade horizon — so
+`engine/rotation.py` carries its own harness, `rotation.replay()`, and `backtest.py --desk
+rotation` runs it in place of the scoring replay and writes the ledger row **E26**.
+
+**What it does.** SPY's sessions in the bars file are the calendar. At the last session of
+each calendar month (and, with the weekly check on, at the last session of each ISO week)
+it ranks, reads the filter against the bill rate as of that date, and decides; the trade is
+booked at the **next session's open** (its close when the bar has no open) with a stated
+one-way cost on every buy and sell (`--cost-bps`, default 5 — a liquid ETF's spread plus
+fees; the engine's 25 bp no-quote fallback would be an order of magnitude too pessimistic
+here). A re-affirmed holding is not re-trimmed, which is what the paper desk does too. The
+weekly check acts only on a rank-6 drop or a filter flip against the holdings, as live.
+
+**What it reports — and only this.** `monthly_returns`, `equity_curve`, `max_dd`,
+`n_rebalances`, `corr_with_spy`, `turnover` (mean and total one-way), plus the counts
+(`n_month_ends`, `n_decisions`, `bond_months`) and the decision `log`. **No Sharpe, no win
+rate** — the honesty budget of section 6c applies unchanged. `--corr-with <curve>` adds the
+Pearson correlation of its daily returns with another equity curve on their common dates — a
+paper book (`equity_curve`, the last slot of each date wins), a replay summary, or a bare
+`[{date, equity}]` — with its n and a `not_a_sample` flag under 30 points. The plan's
+acceptance for the desk is **rho < 0.6 against the swing desk**, and the summary says
+`acceptance_rho_lt_0_6` true or false with the n beside it.
+
+**The bill rate.** `--tbill tbill.json` is either `{date: pct}` (looked up as-of each
+decision date) or a `macro.json` with `tbill_3m_pct`; `--tbill-pct 4.2` is a constant.
+Neither given, the rate is **0** and both the summary's `_warnings` and the ledger row's
+`tbill_default_used` say so. A filter measured against zero is a different experiment from
+one measured against the bill — do not compare the two as if they were one trial.
+
+```bash
+# bars_etf.json: the 14 symbols (XLK XLF XLV XLY XLP XLE XLI XLB XLU XLRE XLC VEU SPY TLT),
+# daily, from at least 253 sessions before --start
+python3 runner/fetch_bars.py --symbols SPY,TLT,VEU,XLK,XLF,XLV,XLY,XLP,XLE,XLI,XLB,XLU,XLRE,XLC \
+    --start 2015-01-01 --end today --keyfile alpaca.env --out bars_etf.json
+python3 engine/backtest.py --desk rotation --bars bars_etf.json \
+    --start 2016-01-01 --end 2026-08-31 --tbill tbill.json \
+    --corr-with books/swing.json --summary rotation.json --ledger --experiment-id E26
+# variants are their own trials: --no-weekly, --cost-bps 10, --tbill-pct 0
+```
+
+**How to read it.** `bond_months` over `n_month_ends` is how often the filter was off;
+`n_rebalances` over `n_decisions` is how often a decision actually traded (a re-affirmed
+top three trades nothing); `turnover.mean_one_way` × 2 × `cost_bps_one_way` is the cost
+drag per rebalance. `corr_with_spy` near 1 in the bull months is expected — three sector
+sleeves are a beta — and the number that matters is `corr_with_other` against the swing
+book, which is the diversification the desk was proposed for. `max_dd` is the drawdown the
+house would have had to carry; read it against the K-02 ladder before activating.
+
+**What it does not do.** It fills at the open, not at the next slot's quote plus slippage —
+the paper desk's number is different and the summary says so. XLRE and XLC start in 2015 and
+2018 respectively; before that they are unranked and the top three come from fewer names, so
+a window that starts before 2018 is a ten-or-eleven-sector rule, not a twelve-sector one.
+The parameters (12-1, top 3, rank 6, TLT) are the literature's, not fitted here; every re-run
+with other parameters is another ledger trial and spends evidence like any other.
+
 ---
 
 ## 7. Where this sits in the plan

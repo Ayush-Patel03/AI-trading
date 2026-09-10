@@ -111,10 +111,13 @@ RULES = ("sector_cap", "house_symbol_cap", "house_sector_cap", "spread", "price_
          "scan_stale", "macro_gate", "broker_policy", "ladder", "house_exposure",
          "earnings_gate", "min_notional", "max_entries", "kill_switch", "halt", "coverage",
          "stop_policy", "slot", "desk_mandate", "working_order", "once_per_session", "deadband",
-         "other")
+         "rotation", "other")
 
 # Precedence order. Each entry: (rule, compiled pattern). The first match wins.
 _RULES = [
+    # D-01: the rotation desk's own lines — a decision slot that is not one, a note, a
+    # sleeve under the minimum, a re-affirmed holding — all begin "rotation".
+    ("rotation", r"^rotation[:\- ]"),
     ("house_symbol_cap", r"house cap:.*single-name house limit"),
     ("house_sector_cap", r"house cap:.*sector house limit"),
     ("house_exposure", r"house exposure"),

@@ -1368,14 +1368,16 @@ stop is exactly the Kaminski–Lo failure — and stays on `fixed_atr` until it 
 
 `desks.json` now also carries two desks with a top-level `"inactive": true`: `rotation`
 (E26 — sector-ETF momentum, monthly, `time_catastrophe` with `max_sessions` 25 and `k_cat`
-3.5, a `universe: sector-etfs` filter the scan does not carry yet) and `orb` (E24 — opening-
-range breakout, `chandelier` with `k_init` 0.1 for the paper's 10%-of-ATR stop,
-`flatten_at_close` so nothing is held overnight, `intraday_margin` because every trade is a
-day trade). They are mandates written down with their exits so they can be wired later, not
-desks that trade: `pm.py --desk rotation` exits 2 with the reason unless `--allow-inactive`
-is passed, **no book is created** for them, and the peer loader, the paper mirror and the
-runner's peer staging all skip them. Activating one is: remove `inactive`, create the two
-project docs, add the desk to `runner/slots.json`.
+3.5, a `universe: sector-etfs` filter that routes its candidates to `engine/rotation.py`
+instead of the scan — section 18) and `orb` (E24 — opening-range breakout, `chandelier`
+with `k_init` 0.1 for the paper's 10%-of-ATR stop, `flatten_at_close` so nothing is held
+overnight, `intraday_margin` because every trade is a day trade). They are mandates written
+down with their exits so they can be wired later, not desks that trade: `pm.py --desk
+rotation` exits 2 with the reason unless `--allow-inactive` is passed, **no book is
+created** for them, and the peer loader, the paper mirror and the runner's peer staging all
+skip them. Activating one is: set `inactive` to false, seed its book and the two project
+docs, add the desk to `runner/slots.json` (the rotation desk's exact steps are in section
+18).
 
 ## 17. Live guardrails — doctrine, validators, and the paper-mode audit (K-07)
 
@@ -1439,3 +1441,112 @@ fixture the one proposal (SCHW, $557.94) clears every default ceiling and the au
 `tests/test_stops.py` proves the same run journals the refusal when the ceiling is lowered
 under it. `pm.py` never calls `live_mode_allowed`, `check_day` or `check_circuit` — a static
 test pins that.
+
+## 18. The rotation desk — sector ETF momentum, monthly (D-01 / E26, added 2026-09-10)
+
+**Status: INACTIVE.** `desks.json` ships `rotation` with `"inactive": true`, no book exists,
+and `pm.py --desk rotation` exits 2 unless `--allow-inactive` is passed. Everything below is
+wired and tested (`tests/test_rotation.py`); nothing below trades until the activation steps
+at the end are taken, and those should not be taken before the E26 harness in
+`docs/BACKTEST.md` § "E26" has been run and read.
+
+### The mandate
+
+- **Universe.** The eleven SPDR sector ETFs — XLK XLF XLV XLY XLP XLE XLI XLB XLU XLRE XLC —
+  plus VEU (ex-US equity, ranked alongside them as the world's twelfth sector), SPY (the
+  absolute-momentum reference; never held) and TLT (the bond leg; held only when the filter
+  is off). Fourteen symbols; `rotation.UNIVERSE`.
+- **Signal.** 12-1 month return, `technicals.features()["ret_12_1"]` =
+  close[t−21] / close[t−252] − 1 (Jegadeesh & Titman 1993; Faber 2010's sector rotation).
+  A symbol with fewer than 253 bars is *unranked* — never a 0 that would rank it.
+- **Rule.** Rank the twelve risk names on `ret_12_1`. When SPY's trailing 12-month return
+  exceeds the 3-month T-bill return over the same window (Antonacci 2014, absolute
+  momentum) hold the **top 3, equal weight**; otherwise hold **TLT only**. The bill rate is
+  `tbill_3m_pct` in `macro.json`; absent, it defaults to **0** and the journal and every
+  replay summary say so (`tbill_default_used`). An unmeasurable SPY (short history) is
+  treated as filter OFF — an unmeasured market is not a bull market.
+- **Cadence.** Decisions only at the **last power-hour slot of the calendar month** — the
+  last trading day on a weekday calendar with the NYSE's rule-based holidays
+  (`rotation.nyse_holidays`; the first holiday table in the engine) — plus
+  `--force-rebalance`. A **weekly check** at the last power-hour of the week acts only if a
+  held sector ETF has dropped below rank 6 (or out of the ranking) or the absolute filter has
+  flipped against what the book holds. Every other slot only manages holdings by their stops;
+  its journal carries the compact decision block (`jrn["rotation"]`) with `acts: false` and
+  the next decision date.
+- **Stops.** `time_catastrophe`, `k_cat` 3.5, `max_sessions` 25 (section 16). The rank IS
+  the exit; the catastrophe stop and the time stop are the safety net. A holding the rank
+  re-affirms at a decision gets `hold_from` reset to that date, so the 25-session clock
+  counts from the last decision, not the original fill.
+- **Sizing.** Equal **sleeves** of desk equity — a third each — times the desk vol scalar
+  (`portfolio.desk_vol_scalar` on SPY's `rv_20d`) when `rules.vol_target.enabled` is on,
+  capped at the cash left this run. The bond leg takes all three sleeves (Antonacci's rule;
+  `rules.rotation.bond_sleeves` 1 keeps two in cash). The pipeline's risk-based figure stays
+  on the order as `meta.unscaled_shares`; the sleeve replaces it.
+- **House caps.** The ETFs are sector-level by construction (XLK *is* Information
+  Technology), so they are **exempt from HOUSE-01's per-name and per-sector caps**
+  (`house_exposure` leaves them out of `by_symbol` / `by_sector`; `entry_pass` never asks
+  `house_block` about them) and **included in K-03's exposure metrics** (they stay in
+  `house["holdings"]`, so the beta and N_eff see them).
+
+### Inputs
+
+| File | Shape | Used for |
+|---|---|---|
+| `bars_etf.json` | the Robinhood `get_equity_historicals` payload (or `runner/fetch_bars.py` output) for the 14 symbols, **≥ 13 months of daily bars** | the rank, the filter, the candidate rows (`rotation.proposals`), and the K-03 beta (folded into the house bars) |
+| `macro.json` | `{"tbill_3m_pct": 4.1}` | the absolute filter's hurdle; absent = 0, logged |
+| `pm_quotes.json` | the usual broker quotes, **including the 14 ETFs** | the only price an entry or a rotation-exit may trade on — a bar close values, never trades (section 6), and the entry pass refuses an ETF without a fresh quote |
+
+`rotation.proposals()` produces candidate rows in the exact shape `entry_pass` consumes
+(`setup` "Sector Rotation", `verdict` "Buy", `coverage_pct` 100, `_source` "rotation") and
+`pm.rotation_scan()` wraps them as this run's own scan, so the desk goes through the same
+sizing, spread, drift, broker-policy and guardrail gates as every other desk. Its filter
+`{"universe": "sector-etfs"}` admits only rows the rotation module produced — a
+`scan_results.json` row can never reach this desk's sizing, and a scan row that claims to
+be one is just a row to the swing desk (`tests/test_rotation.py` pins both).
+
+### What a decision run writes
+
+- Entries are placed as **marketable next-session orders** (`expires: "next-session"`,
+  `fill_rule: "marketable"`): decided at 15:45, they survive exactly one session roll and
+  fill at the next slot's quote plus the exit-slippage assumption, whatever the limit — the
+  limit stays on the order as the decision price. A second roll expires them. The
+  power-hour no-entry rule (section 2) is right for a day-limit and wrong for a monthly
+  rotation; this is the one exception and it is gated on the desk's decision block.
+- Holdings that left the target set are sold whole at the slot price less slippage,
+  journaled **`rotation-exit`** with the rank that dropped them or the filter that flipped.
+- Re-affirmed holdings are journaled as skipped ("re-affirmed in the target set — held,
+  time stop restarts today").
+- The journal entry and the state carry the compact decision block: `acts`, `mode`
+  (`monthly` | `weekly` | `forced`), `why`, `filter_on`, `tbill_3m_pct`,
+  `tbill_default_used`, `ranks`, `target`, `held`, `exits`, `affirmed`, `entries`,
+  `sleeves_by_symbol`, `vol_scalar`, `next_rebalance`, `notes`. The bill-rate default and a
+  short history are a **warning** on the run that acts and a journal line otherwise.
+
+```bash
+# a dry run against a staged book, any day, without activating the desk
+python3 engine/rotation.py --bars bars_etf.json --macro macro.json --held XLK,XLE --as-of 2026-09-30
+python3 engine/pm.py --allow-inactive --desk rotation --slot power-hour --now 2026-09-30T19:45:00Z \
+    --quotes pm_quotes.json --bars-etf bars_etf.json --macro macro.json [--force-rebalance]
+```
+
+### Activation — in this order
+
+1. **Read the harness.** `python3 engine/backtest.py --desk rotation --bars bars_etf.json
+   --start 2016-01-01 --end <yesterday> --tbill tbill.json --corr-with <swing paper book>
+   --ledger --summary rotation.json` (docs/BACKTEST.md § E26). The plan's acceptance is
+   rho < 0.6 against the swing desk's curve and a drawdown the house can carry; a re-run with
+   other parameters is another ledger trial.
+2. **`engine/desks.json`**: set `rotation.inactive` to `false`.
+3. **Seed the book**: `python3 engine/rotation.py --seed-book > <state repo>/books/rotation.json`
+   (the same $5,000 every desk starts from), and create the two project docs
+   `claude/paper-book-rotation.json` and `claude/pm-journal-rotation.json` (the mirror's
+   targets, `doc_book` / `doc_journal` in desks.json).
+4. **`runner/slots.json`**: add `"rotation"` to the top-level `desks` list and to the
+   `desks` of `power-hour` (the decision slot) and `sentinel` (stop management); adding it
+   to the other three slots is optional — the desk only manages holdings there. List
+   `bars_etf.json` and `macro.json` under `inputs.pm.optional` for the record.
+5. **Stage the inputs** with every power-hour run: `bars_etf.json` (the 14 symbols, ≥ 13
+   months) and `macro.json` in the input manifest, and the 14 ETFs in `pm_quotes.json`. A
+   run without `bars_etf.json` takes no decision and says so on stderr and in the journal;
+   holdings are still managed by their stops.
+6. The first decision is the next last-power-hour-of-the-month, or `--force-rebalance` once.

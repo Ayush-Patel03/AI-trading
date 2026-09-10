@@ -20,6 +20,7 @@ render.py
 render_pm.py
 render_portfolio.py
 report.py
+rotation.py
 scanner.py
 sentiment.py
 snapshots.py
