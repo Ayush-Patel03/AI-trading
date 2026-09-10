@@ -62,7 +62,7 @@ absent from every replay (see `docs/BACKTEST.md` §1).
 
 ### 1c. Cboe VIX / VIX3M daily history — the options desk's regime gate (D-02)
 
-The paper options desk (`docs/PM.md` §18) refuses new short vol when VIX > VIX3M or VIX > 30
+The paper options desk (`docs/PM.md` §19) refuses new short vol when VIX > VIX3M or VIX > 30
 and reads both from `vix.json` in the run directory. Cboe publishes the full daily history of
 each index as a CSV on the CDN host that is already on the egress allowlist:
 

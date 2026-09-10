@@ -84,7 +84,7 @@
     },
     "sentinel": {
       "required": ["pm_quotes.json"],
-      "optional": ["pm_broker.json", "option_chains.json", "vix.json"]
+      "optional": ["pm_broker.json", "option_chains.json", "vix.json", "bars_5m.json", "bars.json"]
     },
     "watch": {
       "required": ["pm_quotes.json"],

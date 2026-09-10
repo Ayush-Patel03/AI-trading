@@ -61,7 +61,9 @@ class FakeAlpaca:
             self.fail_429_once = False
             raise urllib.error.HTTPError(url, 429, "Too Many Requests",
                                          {"Retry-After": "0"}, io.BytesIO(b"rate limited"))
-        assert q["timeframe"] == "1Day" and q["feed"] == "iex" and q["adjustment"] == "all"
+        self.timeframes = getattr(self, "timeframes", set())
+        self.timeframes.add(q["timeframe"])
+        assert q["timeframe"] in ("1Day", "5Min") and q["feed"] == "iex" and q["adjustment"] == "all"
         assert q["limit"] == "10000"
         syms = q["symbols"].split(",")
         page = q.get("page_token")
@@ -237,3 +239,25 @@ def test_source_file_re_emits_a_robinhood_dump(tmp_path):
     assert doc["data"]["results"][0]["symbol"] == "NVDA"
     assert [b["begins_at"][:10] for b in doc["data"]["results"][0]["bars"]] == ["2024-01-02", "2024-01-03"]
     assert not (tmp_path / "bars_missing.json").exists()
+
+
+# ------------------------------------------------------------------ D-03: 5-minute bars
+def test_timeframe_5min_is_sent_stamped_and_read_by_orb(tmp_path, universe, alpaca):
+    """--timeframe 5Min goes to Alpaca as the timeframe, is recorded in meta, and every
+    result carries Robinhood's `interval "5minute"` so orb.bars_by_symbol accepts the file
+    (and a daily file, with no stamp, is still what backtest.load_bars reads)."""
+    rc, out = _run(tmp_path, universe, "--timeframe", "5Min")
+    assert rc == 0 and alpaca.timeframes == {"5Min"}
+    doc = json.loads(out.read_text(encoding="utf-8"))
+    assert doc["meta"]["timeframe"] == "5Min"
+    assert all(r["interval"] == "5minute" for r in doc["data"]["results"])
+    import orb
+    by_sym, notes = orb.bars_by_symbol(doc)
+    assert notes == [] and "AAPL" in by_sym and by_sym["AAPL"][0]["bucket"]
+    # daily stays unstamped
+    rc, out = _run(tmp_path, universe)
+    doc = json.loads(out.read_text(encoding="utf-8"))
+    assert doc["meta"]["timeframe"] == "1Day"
+    assert all("interval" not in r for r in doc["data"]["results"])
+    with pytest.raises(SystemExit):
+        _run(tmp_path, universe, "--timeframe", "1Min")

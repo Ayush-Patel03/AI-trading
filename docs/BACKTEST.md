@@ -552,6 +552,83 @@ a window that starts before 2018 is a ten-or-eleven-sector rule, not a twelve-se
 The parameters (12-1, top 3, rank 6, TLT) are the literature's, not fitted here; every re-run
 with other parameters is another ledger trial and spends evidence like any other.
 
+## 6e. E24 — the ORB desk replay (D-03, 2026-09-10)
+
+**The question.** Zarattini, Barbon & Aziz (2024) report a positive opening-range-breakout
+result on the top-20 opening-RVOL "stocks in play", stop at 10% of ATR14, flat at the close,
+**long and short**. This account cannot short. E24 asks the narrower question: *does the
+long half alone — a buy-stop above the opening-range high on the green-candle names, the
+same stop, a 0.5 × ATR chandelier trail on 5-minute highs, flat at 15:45 — come out
+positive after a one-half-spread haircut on every fill?* The desk's mechanics are in
+docs/PM.md section 20; `engine/orb.py` is both the desk's functions and this harness, so
+what the replay runs is what the 09:35 sentinel runs.
+
+**What `orb.replay` does, per session.** Rank every symbol in the file by opening RVOL
+(the 09:30 bar's volume over the 14-session average of the same bucket), apply the three
+filters, keep the top 20, skip the red and doji candles (counted under `skips.short` /
+`skips.doji`), size the rest against the *running* equity — 1% risk at the 10%-of-ATR stop,
+whole shares, 25% notional cap (`skips.cap_bound` counts how often it binds; on a $5,000
+book, nearly always) — then walk the 5-minute buckets in order: a pending stop-buy fills on
+the first bar from 09:35 whose high reaches the trigger at **max(trigger, that bar's open) +
+haircut**, `max_concurrent` 5 enforced in RVOL rank order at fill time; an open position
+ratchets the trail on each bar's high and exits on a low through the stop at min(stop, open),
+less the haircut; anything still open exits at the open of the 15:45 bar (the last close if
+there is none); pending orders die at 10:30. The haircut is `fill_k` (1) × the half-spread,
+and with no quote in a bars file the half-spread is `fill_half_spread_bps` (5) of price —
+**10 bp per round trip**, reported as `cost_bps_assumed`.
+
+**What it reports.** `daily_pnl`, `equity_curve`, `n_trades`, `n_days_traded`, `avg_r`
+(mean of P&L over initial dollar risk, per trade), `max_dd` (peak-to-trough on the equity
+curve, %), the `skips` counts and every trade. **No Sharpe and no win rate**, deliberately:
+a few weeks of this is dozens of trades, and at that size both numbers flatter.
+
+```bash
+# 1. the 5-minute bars: ~20 names, a year, IEX feed (Basic plan), same file shape as bars.json;
+#    ~78 bars a session × 250 sessions × 20 names ≈ 400k points → budget ~250 requests
+python3 runner/fetch_bars.py --timeframe 5Min --symbols AAPL,NVDA,TSLA,... \
+    --start 2025-09-01 --end today --keyfile C:\ai-trading-runner\alpaca.env \
+    --out bars_5m_year.json --batch 10 --resume
+# 2. the daily bars for ATR14 / ADV14 (the usual bars.json; the same names, from 30 sessions earlier)
+python3 runner/fetch_bars.py --symbols AAPL,NVDA,TSLA,... --start 2025-07-15 --end today \
+    --keyfile C:\ai-trading-runner\alpaca.env --out bars_year.json --resume
+# 3. the replay — counted on the ledger as E24 (omit --ledger for a dry run, which says so)
+python3 engine/orb.py --bars-5m bars_5m_year.json --bars bars_year.json \
+    --start 2025-10-01 --end 2026-08-31 --equity 5000 \
+    --json e24.json --ledger experiments/ledger.jsonl
+# a parameter check is a config diff, not a new hypothesis: pass it and say so on the row
+python3 engine/orb.py --bars-5m bars_5m_year.json --bars bars_year.json --start … --end … \
+    --rules '{"k_trail": 1.0}' --experiment-id E24 --hypothesis "…k_trail 1.0 instead of 0.5…" \
+    --ledger experiments/ledger.jsonl
+python3 engine/ledger.py --path experiments/ledger.jsonl --set-decision E24 "<what it said>"
+```
+
+**How to read it.** `avg_r` is the number that matters, with `n_trades` beside it: an
+average R above zero after the 10 bp haircut, on a hundred-plus trades over a window that
+contains both a rising and a falling month, is the bar for turning the template on;
+`max_dd` on a $5,000 book says whether the 25% cap and the 5-name limit actually bound the
+day's exposure the way the desk description claims. Read `skips.short` next to `n_trades`:
+that is the leg the paper had and this desk does not, and if it is the larger number the
+result is the *smaller* half of the paper's edge by construction. `skips.unfilled` counts
+breakouts that never came by 10:30 — a high count is not a fault, it is the filter working.
+
+**Two caveats stated up front, not in the fine print.**
+
+1. **IEX-only volume.** Alpaca's Basic feed reports IEX's share of the tape, a fraction of
+   consolidated volume that varies by name and by morning. Opening RVOL computed from it is a
+   *biased* rank: a name whose IEX share happened to be high that day ranks higher than the
+   consolidated tape would put it. The live desk reads Robinhood's consolidated 5-minute
+   bars, so **the replay's universe on any given day is not the live desk's universe**. The
+   replay is a directional check of the mechanics — fills, stops, the trail, the flatten,
+   the sizing — not a measurement of the edge, and the ledger row carries that under
+   `data_caveat`.
+2. **Long-only.** The paper's return is long and short; every red opening candle here is a
+   skip. The expectation is a weaker result than the paper's, and a replay that reproduces
+   the paper's figure on the long half alone should be doubted, not celebrated.
+
+Everything in section 2 applies as well: the symbol list is today's, so a name that was in
+play a year ago and has since delisted is not in the file (`bars_missing.json` names what
+was requested and not served); costs are the model's, not the tape's.
+
 ---
 
 ## 7. Where this sits in the plan

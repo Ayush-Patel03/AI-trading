@@ -151,7 +151,9 @@ run sweeps it in — that dirty file is the signal `docs/runbooks/git-push-rejec
   (with technicals already merged, or `bars.json` + `fundamentals.json` + `quotes.json` for
   `technicals.py` to merge them); `watch` → `pm_quotes.json`; `health` → nothing (`"files": {}`).
 - Optional and honoured when present: `pm_broker.json`, `pm_prices.json`,
-  `pm_tradability.json`, the eight sentiment payloads named in `slots.json`.
+  `pm_tradability.json`, the eight sentiment payloads named in `slots.json`; at the
+  sentinel, `bars_5m.json` (5-minute `get_equity_historicals`) and `bars.json` — read only
+  by an active ORB desk (docs/PM.md section 20), ignored by the three live desks.
 
 Compute the hash on the bytes you wrote. To confirm what landed on the box:
 `certutil -hashfile C:\ai-trading-inputs\<run_id>\pm_quotes.json SHA256`.

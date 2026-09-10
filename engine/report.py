@@ -44,6 +44,7 @@ gates; forcing those into a gate they are not would make the counterfactual lie:
 | `working_order` | `already has a working order`, `N working buy order(s) (…) counted against the … caps … (CAP-01)` |
 | `once_per_session` | `Score 47 — weakening, but it was already trimmed today — one trim per name per session`, `… over the cap, but it was already rebalanced today — one rebalance per name per session` |
 | `deadband` | `15.4% of equity, over the 15% cap but inside the 1.0pt rebalance deadband — a price wobble is not a breach` |
+| `orb` | the ORB desk's own refusals (D-03, orb.py): `ORB screen: RVOL 1.20x outside the top 20`, `ORB rank 4: red opening candle — the paper shorts it; this account is long-only`, `ORB notional cap binds: …`, `ORB: max 5 concurrent names — no room this run`, `no intraday bars — no ORB today (bars_5m.json was not staged)`, `ORB desk: entries are the 09:35 sentinel's buy-stops above the opening range — a decision slot places nothing on this desk` |
 | `other` | anything else; the raw text is kept in `detail` and listed under `refusals.other` so a new string is seen, never silently absorbed |
 
 Precedence is the order of `_RULES` below: a string that names several things (the soft
@@ -111,7 +112,7 @@ RULES = ("sector_cap", "house_symbol_cap", "house_sector_cap", "spread", "price_
          "scan_stale", "macro_gate", "broker_policy", "ladder", "house_exposure",
          "earnings_gate", "min_notional", "max_entries", "kill_switch", "halt", "coverage",
          "stop_policy", "slot", "desk_mandate", "working_order", "once_per_session", "deadband",
-         "rotation", "other")
+         "rotation", "orb", "other")
 
 # Precedence order. Each entry: (rule, compiled pattern). The first match wins.
 _RULES = [
@@ -124,6 +125,8 @@ _RULES = [
     ("ladder", r"ladder|soft daily level|re-entry after|drawdown"),
     ("kill_switch", r"kill.?switch|daily loss"),
     ("macro_gate", r"macro gate"),
+    # D-03: the ORB desk's own screen, sizing and slot refusals (orb.py / pm.orb_entry_pass)
+    ("orb", r"\borb\b|opening.range|stock in play|no intraday bars"),
     ("scan_stale", r"scan is .*entries frozen|no scan results available"),
     ("spread", r"bid/ask spread"),
     ("price_drift", r"price drifted"),
