@@ -1561,6 +1561,25 @@ def main():
             jrn.setdefault("warnings", []).append(w)
         state["journal"] = jrn
 
+    # S-01: the option chain as priced this slot, into $SCAN_DIR/archive/chain_snapshot/,
+    # only when a chain file was staged. Non-fatal and OUTSIDE the book and the journal:
+    # a snapshot failure is recorded on pm_state.json, never on the decision record, so
+    # the book the runner writes stays byte-identical to a direct run whatever happens
+    # here. Every desk of a slot writes the same file; the last writer wins and they agree.
+    try:
+        import snapshots
+        if snapshots.chain_files(BASE):
+            cpath, cn = snapshots.write_chain_snapshot(
+                BASE, os.path.join(BASE, "archive"),
+                {"slot": args.slot, "as_of": jrn["ts"], "date": jrn["date"],
+                 "run_id": archive.pm_run_id(jrn["date"], args.slot, jrn["ts"])})
+            state["chain_snapshot"] = {"path": os.path.relpath(cpath, BASE), "rows": cn}
+            print(f"chain snapshot -> {state['chain_snapshot']['path']} ({cn} rows)")
+    except Exception as exc:                      # noqa: BLE001 — never fail the manager
+        state["chain_snapshot"] = {"error": f"{type(exc).__name__}: {exc}"}
+        print(f"WARNING: chain snapshot NOT written: {state['chain_snapshot']['error']}",
+              file=sys.stderr)
+
     if args.slot == SENTINEL and not jrn["decisions"] and not jrn["warnings"]:
         b = state["book"]
         write_heartbeat(BASE, sfx, DESK["name"], args.slot, jrn["ts"], book, quiet=True,

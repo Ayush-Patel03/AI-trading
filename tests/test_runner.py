@@ -345,3 +345,67 @@ def test_stdlib_only():
                 continue
             for n in names:
                 assert n in allowed, f"{p.name} imports {n}"
+
+
+# ------------------------------------------------------------------ S-01 / S-03 archive
+def test_followed_set_is_staged_in_and_snapshots_written_back(tmp_path):
+    """The followed set must round-trip through the run dir, or every scan would start the
+    roster from nothing; the snapshot subdirs come back under archive/ unchanged."""
+    state = selftest.make_state_repo(tmp_path / "state")
+    (state / "archive").mkdir()
+    seed = {"symbols": {"OLD": {"symbol": "OLD", "first_seen": "2026-08-01", "status": "open",
+                                "horizon_end_date": "2026-08-29"}}}
+    runner.write_json(state / "archive" / "followed.json", seed)
+    now = selftest.synthetic_now("12:30")
+    inputs = selftest.write_inputs(tmp_path / "inputs",
+                                   {"scan_data.json": selftest.fresh_scan_data(now)}, as_of=now)
+    run_dir = tmp_path / "run"
+    staged = runner.stage_run(ROOT / "engine", state, inputs, run_dir, [], None)
+    assert "archive/followed.json" in staged["state"]
+    assert runner.load_json(run_dir / "archive" / "followed.json") == seed
+
+    # what the engine would leave behind
+    (run_dir / "archive" / "scan_snapshot").mkdir(parents=True)
+    (run_dir / "archive" / "chain_snapshot").mkdir(parents=True)
+    (run_dir / "archive" / "scan_snapshot" / "2026-09-10-midday.jsonl.gz").write_bytes(b"x")
+    (run_dir / "archive" / "chain_snapshot" / "2026-09-10-midday.jsonl.gz").write_bytes(b"y")
+    (run_dir / "archive" / "scan_snapshot" / "notes.txt").write_text("ignored", encoding="utf-8")
+    runner.write_json(run_dir / "archive" / "followed.json", {"symbols": {"NEW": {}}})
+    written = runner.write_back_archive(state, run_dir)
+    assert written == ["archive/scan_snapshot/2026-09-10-midday.jsonl.gz",
+                       "archive/chain_snapshot/2026-09-10-midday.jsonl.gz",
+                       "archive/followed.json"]
+    assert (state / "archive" / "scan_snapshot" / "2026-09-10-midday.jsonl.gz").read_bytes() == b"x"
+    assert (state / "archive" / "chain_snapshot" / "2026-09-10-midday.jsonl.gz").read_bytes() == b"y"
+    assert not (state / "archive" / "scan_snapshot" / "notes.txt").exists()
+    assert runner.load_json(state / "archive" / "followed.json") == {"symbols": {"NEW": {}}}
+    # a run that produced nothing writes nothing
+    assert runner.write_back_archive(state, tmp_path / "empty-run") == []
+
+
+def test_scan_run_commits_the_snapshot_and_follows_the_names(tmp_path):
+    state = selftest.make_state_repo(tmp_path / "state")
+    now = selftest.synthetic_now("12:30")
+    inputs = selftest.write_inputs(tmp_path / "inputs",
+                                   {"scan_data.json": selftest.fresh_scan_data(now)}, as_of=now)
+    code = runner.main(["--slot", "midday", "--desk", "all", "--inputs", str(inputs),
+                        "--state", str(state), "--engine", str(ROOT), "--no-push",
+                        "--now", runner.iso(now)])
+    assert code == 0
+    date = runner.to_et(now)[0].date().isoformat()
+    man = runner.load_json(state / "manifests" / date / "midday-scan.json")
+    assert f"archive/scan_snapshot/{date}-midday.jsonl.gz" in man["written"]
+    assert "archive/followed.json" in man["written"]
+    sys.path.insert(0, str(ROOT / "engine"))
+    import snapshots
+    meta, rows = snapshots.read_snapshot(state / "archive" / "scan_snapshot" / f"{date}-midday.jsonl.gz")
+    assert meta["run_id"] == f"{date}-midday" and meta["n_rows"] == len(rows) == 5
+    assert meta["engine_sha"] == man["engine_sha"]
+    followed = runner.load_json(state / "archive" / "followed.json")
+    assert set(followed["symbols"]) == {r["symbol"] for r in rows}
+    assert all(v["first_seen"] == date and v["first_slot"] == "midday"
+               for v in followed["symbols"].values())
+    tracked = subprocess.run(["git", "-C", str(state), "ls-files", "archive"],
+                             capture_output=True, text=True).stdout.split()
+    assert f"archive/scan_snapshot/{date}-midday.jsonl.gz" in tracked
+    assert "archive/followed.json" in tracked

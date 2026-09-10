@@ -77,6 +77,30 @@ it.
    from it. Real entry is the next open at best. The gap between those two is a real cost and
    `fills.py` (§5) is how it gets measured.
 
+### 2a. The followed set — the live record is survivorship-free from its first slot (S-03)
+
+The backtest cannot escape bias 1; the **live** record can, and now does. Every symbol that
+appears in a scan snapshot (SCAN.md §13) is added to `archive/followed.json` in the state repo
+— `{symbol, first_seen, first_slot, last_seen, horizon_end_date, status}` — the moment it is
+first scanned, and it stays `open` for twenty business days after it was last seen whether or
+not it is still on the screen. A name that stops scoring, falls off the popular watchlists or
+delists is exactly the loser a survivorship-biased record forgets; here it is on the roster
+until its forward horizon has run, and only then `closed` (seen again, it reopens with
+`first_seen` intact). `history.py` maintains it on every scan; no separate sweep has to
+remember to run.
+
+`validate.py` already observes each (date, ticker) from the records themselves, so a name that
+left the universe is still scored on every day it did scan — what it needs from outside is its
+**bars**, and that is the seam. The bar-fetching prompt fetches for the open list:
+
+```bash
+python3 history.py --followed --archive <state>/archive [--as-of YYYY-MM-DD]   # one symbol a line
+python3 validate.py ... --archive <state>/archive     # adds followed_open / followed_without_bars
+```
+
+`followed_without_bars` non-empty means the fetch missed a name that left the universe, and
+the record is biased by exactly those names until it is filled.
+
 ---
 
 ## 3. Point-in-time fundamentals

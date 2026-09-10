@@ -433,6 +433,13 @@ def stage_run(engine_dir, state, inputs_dir, run_dir, desks, engine_sha, config_
         if src.exists():
             shutil.copy2(src, run_dir / dst_name)
             staged["state"].append(src_name)
+    # S-03: the followed set lives in the archive and is maintained on every scan, so the
+    # engine must see the stored copy or every run would start the roster from nothing.
+    followed = state / "archive" / "followed.json"
+    if followed.exists():
+        (run_dir / "archive").mkdir(exist_ok=True)
+        shutil.copy2(followed, run_dir / "archive" / "followed.json")
+        staged["state"].append("archive/followed.json")
     for f in sorted(inputs_dir.iterdir()):
         if not f.is_file() or f.name in ("manifest.json", "outcome.json"):
             continue
@@ -725,6 +732,7 @@ def write_back_pm(state, run_dir, run_id, results, cfg):
             arch.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(src, arch / html)
             written.append(f"archive/runs/{run_id}/{html}")
+    written += write_back_archive(state, run_dir)
     return written
 
 
@@ -748,6 +756,36 @@ def write_back_scan(state, run_dir, run_id, scan):
         if (run_dir / name).exists():
             shutil.copyfile(run_dir / name, arch / name)
             written.append(f"archive/runs/{run_id}/{name}")
+    written += write_back_archive(state, run_dir)
+    return written
+
+
+ARCHIVE_SNAPSHOT_DIRS = ("scan_snapshot", "chain_snapshot")
+
+
+def write_back_archive(state, run_dir):
+    """S-01 / S-03: the per-slot snapshots and the followed set, `archive/` to `archive/`.
+
+    The engine writes them under $SCAN_DIR/archive exactly as the state repo lays them
+    out, so this is a straight copy of whatever this run produced: a snapshot file is
+    named by its slot and a re-run replaces its own.
+    """
+    state, run_dir = Path(state), Path(run_dir)
+    written = []
+    for sub in ARCHIVE_SNAPSHOT_DIRS:
+        src_dir = run_dir / "archive" / sub
+        if not src_dir.is_dir():
+            continue
+        dst_dir = state / "archive" / sub
+        dst_dir.mkdir(parents=True, exist_ok=True)
+        for f in sorted(src_dir.glob("*.jsonl.gz")):
+            shutil.copyfile(f, dst_dir / f.name)
+            written.append(f"archive/{sub}/{f.name}")
+    followed = run_dir / "archive" / "followed.json"
+    if followed.exists():
+        (state / "archive").mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(followed, state / "archive" / "followed.json")
+        written.append("archive/followed.json")
     return written
 
 

@@ -978,3 +978,42 @@ per-desk caps. It prints a NOTE to stderr, raises a warning on any decision slot
 journal's `house` block is `null`. The three books must all be staged before the engine runs
 — the skill's step 1 already stages them, and this is now load-bearing rather than
 convenient.
+
+---
+
+## 15. The chain snapshot — the option chain as priced (S-01, added 2026-09-10)
+
+When an option chain payload is staged in the run directory (`option_chains.json`,
+`option_chain.json`, `options_chain.json`, `option_quotes.json`, or per-symbol
+`option_chain-<SYM>.json`), `pm.py` writes, after pricing and the decision run:
+
+    $SCAN_DIR/archive/chain_snapshot/<date>-<slot>.jsonl.gz
+
+Line 1 is `{"_meta": {run_id, slot, date, as_of, engine_sha, kind, n_rows, n_symbols,
+source_files, schema}}`. Then one line per contract — `symbol, expiry, dte, strike, type,
+bid, ask, mid, last, volume, open_interest, iv, delta, gamma, theta, vega, spot` — for the four
+nearest expiries and the ten strikes either side of spot per expiry and type; and one
+`{"_derived": true}` line per symbol: `spot, expiries, nearest_expiry, nearest_dte,
+expiry_30_45, atm_iv_nearest, atm_iv_30d, atm_iv_60d, skew25, cpiv, os_ratio, share_volume,
+em_1sd, em_1sd_pct, straddle_price, straddle_pct`. The derived row is computed from the
+whole chain the payload carried, before the trim. Definitions: 30/60-day ATM IV are linear in
+DTE between the bracketing expiries (null when not bracketed — no extrapolation); `skew25` is
+(IV at put Δ −0.25 − IV at call Δ +0.25) / ATM IV at the first expiry with 30–45 DTE; `cpiv` is
+the open-interest-weighted mean of (IV_call − IV_put) over strikes carrying both legs at that
+expiry; `os_ratio` is Σ contract volume × 100 / share volume; `em_1sd` is spot × ATM IV ×
+√(DTE/365) at the nearest expiry with at least one session to run, and `straddle_price` is ATM
+call mid + ATM put mid there. Anything not computable is null, never 0. Spot falls back to the
+staged quote, then the scan price; share volume comes from the scan_data candidate.
+
+With no chain file staged the manager writes nothing. `get_option_quotes` still returns 403
+(SCAN.md §9.1), so today this is the reader waiting for a route; the CLI
+`python3 snapshots.py --run-dir . --out archive --chain --slot <slot> --as-of <iso>` writes the
+header-only file (n_rows 0) so an absence is on the record. Non-fatal by rule: a failure is
+recorded on `pm_state.json` as `chain_snapshot.error`, **never** on the journal or the book —
+the book the runner writes stays byte-identical to a direct run. Each desk of a slot writes the
+same file; the content is the same and the last writer wins.
+
+Why: IV rank needs a history of ATM IV — after ~60 sessions of `atm_iv_30d` it becomes
+computable per name, and nothing else in the system records it. E10/E17 read `skew25`, `cpiv`
+and `os_ratio` at the slot; the slot-event simulator needs the straddle and `em_1sd` the
+market was pricing at the moment the manager decided.

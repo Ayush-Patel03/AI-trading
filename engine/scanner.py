@@ -785,7 +785,27 @@ if __name__ == "__main__":
     json.dump(out, open(os.path.join(BASE, fn["results"]), "w", encoding="utf-8"), indent=2)
     if os.path.abspath(src) != os.path.abspath(os.path.join(BASE, fn["data"])):
         shutil.copyfile(src, os.path.join(BASE, fn["data"]))
-    print(f"RUN {rid}  ->  {fn['results']} + {fn['data']}\n")
+    # S-01: the raw inputs, as scored, into $SCAN_DIR/archive/scan_snapshot/. It reads the
+    # scan_results.json just written (rows, time, engine_sha), so it runs after that dump
+    # and the results are re-written once more to carry the snapshot's path — or the
+    # warning. Non-fatal by rule: a board is worth more than its archive, but a failure is
+    # recorded in the results meta so the record says the snapshot is missing rather than
+    # nothing at all.
+    try:
+        import snapshots
+        snap_path, snap_n = snapshots.write_scan_snapshot(
+            BASE, os.path.join(BASE, "archive"),
+            {"run_id": rid, "slot": out["meta"].get("slot") or out["meta"].get("session")})
+        out["meta"]["scan_snapshot"] = os.path.relpath(snap_path, BASE)
+        snap_note = f"snapshot {out['meta']['scan_snapshot']} ({snap_n} rows)"
+    except Exception as exc:                      # noqa: BLE001 — never fail the scan
+        warn = f"scan snapshot NOT written: {type(exc).__name__}: {exc}"
+        out["meta"].setdefault("data_warnings", []).append(warn)
+        snap_note = warn
+    for name in ("scan_results.json", fn["results"]):
+        json.dump(out, open(os.path.join(BASE, name), "w", encoding="utf-8"), indent=2)
+    print(f"RUN {rid}  ->  {fn['results']} + {fn['data']}")
+    print(f"{snap_note}\n")
     print(f"REGIME: {out['regime']['label']} (x{out['regime']['multiplier']})   "
           f"coverage avg {out['meta']['coverage_avg']:.0f}%\n")
     print(f"{'#':<3}{'TKR':<7}{'SCORE':>6}  {'VERDICT':<12}{'SETUP':<22}{'T/M/F/C/I':<16}"

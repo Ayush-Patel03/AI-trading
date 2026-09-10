@@ -17,6 +17,7 @@ render_pm.py
 render_portfolio.py
 scanner.py
 sentiment.py
+snapshots.py
 technicals.py
 universe.py
 validate.py

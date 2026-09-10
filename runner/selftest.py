@@ -14,7 +14,7 @@ through tests/test_runner.py. It proves, on this machine and this interpreter:
      `aborted: true` coverage row;
   5. the lock is released after every outcome;
   6. a scan run over the frozen scan_data fixture commits scans/latest.json, the compact
-     record, the index and the history;
+     record, the index, the history, the per-slot scan snapshot and the followed set;
   7. the tz database resolves America/New_York (the engine's freshness gates depend on it).
 
     python runner/selftest.py [--keep]         exit 0 on PASS, 1 on FAIL
@@ -274,6 +274,18 @@ def run_selftest(work, engine_root=None, log=print):
           "no compact scan record under scans/")
     step("scan run committed latest.json, record and index",
          detail=f"scan run_id {man3.get('scan', {}).get('run_id')}")
+
+    # 6b. S-01 / S-03: the scan snapshot and the followed set came back with it
+    snap = state / "archive" / "scan_snapshot" / f"{date}-midday.jsonl.gz"
+    check(snap.exists(), "archive/scan_snapshot/<date>-midday.jsonl.gz not written back")
+    check(f"archive/scan_snapshot/{snap.name}" in man3.get("written", []),
+          "scan snapshot missing from the manifest's written list")
+    followed = runner.load_json(state / "archive" / "followed.json") or {}
+    check(bool(followed.get("symbols")), "archive/followed.json empty or not written back")
+    check(all(r.get("status") == "open" for r in followed["symbols"].values()),
+          "a symbol closed on the day it was first seen")
+    step("scan snapshot and followed set written back",
+         detail=f"{len(followed['symbols'])} symbol(s) followed")
 
     n = len(_git(state, "log", "--oneline").strip().splitlines())
     report["commits"] = n

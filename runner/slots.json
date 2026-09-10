@@ -74,11 +74,11 @@
       "optional": ["bars.json", "fundamentals.json", "quotes.json", "apewisdom.json",
                    "st_trending.json", "st_gauges.json", "reddit_posts.json",
                    "rh_watchlists.json", "quotes_min.json", "options_scan.json",
-                   "earnings_days.json"]
+                   "earnings_days.json", "option_chains.json"]
     },
     "pm": {
       "required": ["pm_quotes.json"],
-      "optional": ["scan_results.json", "pm_broker.json", "pm_prices.json"]
+      "optional": ["scan_results.json", "pm_broker.json", "pm_prices.json", "option_chains.json"]
     },
     "sentinel": {
       "required": ["pm_quotes.json"],

@@ -583,3 +583,33 @@ any older instruction in a task prompt.** Read it with this file. The short vers
 - **Corroboration is the headline finding.** ApeWisdom and StockTwits agreed on 4 of 15 top
   names on 2026-09-01, and StockTwits' own two trending endpoints shared one ticker with each
   other. Single-source attention is now labelled as such on the board.
+
+---
+
+## 13. The scan snapshot — every input, as scored (S-01, added 2026-09-10)
+
+`scanner.py` writes, right after `scan_results.json`, one gzip'd JSON Lines file per slot:
+
+    $SCAN_DIR/archive/scan_snapshot/<date>-<slot>.jsonl.gz
+
+The runner copies `archive/` back into the state repo unchanged, so the same path exists
+there. Line 1 is `{"_meta": {run_id, slot, date, as_of, engine_sha, kind, n_rows, n_quoted,
+source_files, schema}}`; every following line is one candidate — **every** candidate the
+scanner was given, including the ones it dropped for having no usable price (`dropped: true`,
+`score: null`). Each row is the whole candidate dict from `scan_data.json` (fundamentals, the
+technicals.py fields, the sentiment blocks) with the scored row laid over it — `score`,
+`raw_score`, `normalized_score`, `coverage_pct`, `missing_pillars`, the five `pillars`,
+`verdict`, `setup`, `confidence`, `score_trail`, `rank` — plus `regime`,
+`regime_multiplier`, and `bid`, `ask`, `last`, `quote_ts` read from the staged
+`quotes.json` / `pm_quotes.json` (null, never 0, when no quote covers the name). The prose
+(`reasons`, `*_note`) is left to the board; it is an output, not an input.
+
+Why: the compact record keeps what the model *said*, this keeps what it *saw*. The slot-event
+simulator replays a slot from it; E10 and E17 need the bid/ask and the unscored fields at the
+moment of scoring, not a re-fetch; E27 needs the dropped names. It is written by rule
+non-fatally — a failure lands as `scan snapshot NOT written: …` in `meta.data_warnings` and
+the board still publishes — and the results meta carries `scan_snapshot` (the relative path)
+on success. `python3 snapshots.py --run-dir . --out archive --scan` re-creates it from a
+staged directory; `snapshots.read_snapshot(path)` returns `(meta, rows)`.
+
+Every symbol in a snapshot is also folded into `archive/followed.json` (BACKTEST.md §2a).
