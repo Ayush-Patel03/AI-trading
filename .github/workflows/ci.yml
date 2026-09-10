@@ -22,7 +22,7 @@ jobs:
               "archive", "portfolio", "config", "technicals", "sentiment",
               "scanner", "history", "pm", "render", "render_pm", "render_portfolio",
               "validate", "watch", "paper_mirror", "backtest", "fills", "universe",
-              "broker_policy", "ledger", "ic", "snapshots"}
+              "broker_policy", "ledger", "ic", "snapshots", "ladder"}
           bad = []
           for p in pathlib.Path("engine").glob("*.py"):
               for node in ast.walk(ast.parse(p.read_text())):

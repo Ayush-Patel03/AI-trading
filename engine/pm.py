@@ -91,6 +91,13 @@ ADDED 2026-09-10
     default — and cash_settled), selected by --broker-policy, the book, desks.json or
     engine-config.json in that order. Every sale, entry gate and state line goes through
     the policy object; legacy_pdt reproduces the old guard byte-for-byte.
+  * K-02 — the DRAWDOWN LADDER (ladder.py). The 3% daily kill was the only control against
+    losing money and it is a cliff. The ladder sits under it and measures from the book's
+    high-water mark (book["hwm"], never decreasing): −4% halves every new entry, −6% stops
+    new entries, −8% halts the book through the kill switch's own path — flatten, cancel
+    working buys — and cools off for five sessions, after which entries come back at half
+    size until the HWM is regained. A −2% session is a soft daily level: no new entries for
+    the rest of the day. Exits stay live at every rung. The 3% kill is untouched.
 
 Paths resolve from SCAN_DIR, else from this file's own directory.
 """
@@ -101,6 +108,7 @@ sys.path.insert(0, BASE)
 
 import archive
 import broker_policy
+import ladder as ladder_mod
 import portfolio as pf_mod
 from portfolio import RULES, build_proposals
 
@@ -136,6 +144,18 @@ PM_RULES = {
     "house_max_symbol_pct": 15.0,   # one ticker across every book
     "house_max_sector_pct": 40.0,   # one GICS sector across every book
     "house_caps_enabled": True,
+    # K-02 — the drawdown ladder, measured from the book's high-water mark. Lives here
+    # (not in portfolio.RULES) so the board and the alerts page read the same constants
+    # the engine gates on. Semantics in ladder.py and PM.md § "Drawdown ladder".
+    "ladder": {
+        "soft_daily_pct": 2.0,          # session P&L at or below −2%: no NEW entries today
+        "rungs": [
+            {"dd_pct": 4.0, "entry_size_mult": 0.5},                    # halve new entries
+            {"dd_pct": 6.0, "entry_size_mult": 0.0},                    # no new entries
+            {"dd_pct": 8.0, "flatten": True, "cool_sessions": 5},       # halt, flatten, cool off
+        ],
+        "reentry_size_mult": 0.5,       # after the cool-off, until the HWM is regained
+    },
 }
 
 SLOT_ORDER = {"pre-market": 0, "opening-range": 1, "midday": 2, "power-hour": 3, "ad-hoc": 4,
@@ -705,6 +725,90 @@ def kill_switch(book, marked, jrn):
     return pnl_pct
 
 
+def _cancel_working_buys(book, jrn, reason, detail):
+    """Cancel every resting buy — the kill switch's own cleanup, shared with the ladder."""
+    for o in book.get("working_orders", []):
+        if o["side"] == "buy" and o.get("status") == "working":
+            o["status"] = "cancelled"
+            o["closed"] = jrn["ts"]
+            jrn["decisions"].append({"action": "cancel", "symbol": o["symbol"],
+                                     "shares": o["shares"], "price": o["limit_price"],
+                                     "reason": reason, "detail": detail})
+    book["working_orders"] = [o for o in book["working_orders"] if o.get("status") == "working"]
+
+
+def ladder_pass(book, pb, today, marked, jrn, day_pnl_pct):
+    """K-02. Evaluate the drawdown ladder once per run, after the mark and the kill switch.
+
+    Maintains book["hwm"] (never decreases). At rung 3 the book is HALTED through the same
+    path as the kill switch — day.halted, working buys cancelled — and then FLATTENED:
+    every position with a fresh price is sold at the slot price less exit slippage, through
+    the broker policy like any other exit. A position that cannot be priced is reported
+    UNPROTECTED exactly as the exit pass would; it is not sold on a stale mark. The
+    cool-off record goes on the book (cool_until, ladder_halt) and the ladder re-arms
+    from the post-flatten equity. Returns the ladder state dict; the entry pass reads it.
+    """
+    rules = PM_RULES.get("ladder") or ladder_mod.DEFAULT
+    st = ladder_mod.state_for(book, marked["equity"], today, rules, day_pnl_pct)
+    book["hwm"] = max(float(book.get("hwm") or 0.0), st["hwm"])
+    day = book.setdefault("day", {})
+    if st["soft_daily_hit"] and not day.get("ladder_soft_hit"):
+        day["ladder_soft_hit"] = True
+        jrn["warnings"].append("SOFT DAILY LEVEL — " + st["reason"] + ".")
+    if st["regained"]:
+        book["cool_until"] = None
+        book["ladder_halt"] = None
+        jrn["warnings"].append(f"Ladder cleared: equity ${marked['equity']:,.2f} regained the "
+                               "high-water mark — entries back to full size, cool-off record "
+                               "cleared.")
+    if not st["halt"]:
+        return st
+
+    # ---- rung 3: halt, then flatten -------------------------------------------------
+    reason = f"Drawdown ladder halt — {st['reason']}"
+    if not day.get("halted"):
+        day["halted"] = True
+        day["halt_reason"] = reason
+    _cancel_working_buys(book, jrn, "drawdown ladder halt", reason)
+    jrn["warnings"].append("DRAWDOWN LADDER HALT — " + st["reason"] +
+                           ". Every position with a fresh price is being closed; the book "
+                           "cools off and re-enters at half size until the high-water mark "
+                           "is back.")
+    slip = 1 - PM_RULES["exit_slippage_pct"] / 100
+    for pos in list(book.get("positions", [])):
+        sym = pos["symbol"]
+        px = tradeable(pb, sym)
+        if px is None:
+            src = (pb.get(sym) or {}).get("source")
+            jrn["warnings"].append(
+                f"UNPROTECTED: {sym} has no fresh price ({src or 'none'}) and cannot be "
+                "flattened by the ladder halt on a stale mark — the position is carried as-is. "
+                "Close it by hand.")
+            jrn["skipped"].append({"symbol": sym, "reason": "ladder flatten wanted to fire — "
+                                                             "no fresh price"})
+            continue
+        sellable, note = _sellable(pos, pos["shares"], "flatten", book, today,
+                                   marked["equity"], jrn)
+        if note:
+            jrn["warnings"].append(f"{sym}: {note}")
+        if sellable <= 0:
+            jrn["skipped"].append({"symbol": sym, "reason": "ladder flatten wanted to fire — "
+                                                             + (note or "blocked")})
+            jrn["warnings"].append(
+                f"UNPROTECTED: {sym} — the ladder halt wanted it flat and the {_policy().name} "
+                "policy refused the sale. Close it by hand if you disagree.")
+            continue
+        _apply_sell(book, sym, sellable, round(px * slip, 4), today, jrn, "flatten",
+                    f"Ladder halt: {st['dd_pct']:.2f}% under the ${st['hwm']:,.2f} high-water mark")
+    after = mark_book(book, pb)
+    rec = ladder_mod.halt_record(st, today, after["equity"], rules)
+    book["ladder_halt"] = rec
+    book["cool_until"] = rec["cool_until"]
+    st["cool_until"] = rec["cool_until"]
+    st["reentry_base"] = rec["equity_after"]
+    return st
+
+
 # ------------------------------------------------------------------ 3. exits
 def _sellable(pos, want_shares, reason, book, today, equity, jrn):
     """Ask the broker policy about a proposed sale. Returns (shares actually sellable, note).
@@ -965,7 +1069,7 @@ def macro_events_pending(scan, today, jrn):
 
 
 # ------------------------------------------------------------------ 5. entries
-def entry_pass(book, scan, pb, today, marked, jrn, scan_stale, house=None):
+def entry_pass(book, scan, pb, today, marked, jrn, scan_stale, house=None, ladder=None):
     # FILL-01: an entry placed at the last slot of the day can never be evaluated for a
     # fill — the paper model fills entries only on a LATER slot, and roll_day() expires
     # every day order before the next session's fill pass runs. Placing entries here
@@ -980,6 +1084,14 @@ def entry_pass(book, scan, pb, today, marked, jrn, scan_stale, house=None):
     if book["day"].get("halted"):
         jrn["skipped"].append({"symbol": "*", "reason": book["day"]["halt_reason"]})
         return []
+    # K-02: the drawdown ladder. Rung 2, the cool-off after a rung-3 halt and the soft
+    # daily level all refuse new entries here; rung 1 and re-entry only resize, below.
+    if ladder and ladder.get("entries_blocked"):
+        jrn["skipped"].append({"symbol": "*", "reason": ladder["reason"]})
+        return []
+    ladder_mult = float((ladder or {}).get("entry_size_mult", 1.0))
+    if ladder and ladder.get("reason") and ladder_mult < 1.0:
+        jrn["warnings"].append("LADDER: " + ladder["reason"] + ".")
     if not scan or not scan.get("results"):
         jrn["skipped"].append({"symbol": "*", "reason": "no scan results available this run"})
         return []
@@ -1131,6 +1243,20 @@ def entry_pass(book, scan, pb, today, marked, jrn, scan_stale, house=None):
             jrn["skipped"].append({"symbol": p["ticker"], "reason": "; ".join(p["warnings"])})
             continue
         limit = round(p["entry"], 2)
+        # K-02: the ladder's entry-size multiplier is applied HERE, the one place a new
+        # entry's share count is fixed, and nowhere inside portfolio.py — that module
+        # mirrors the repo's sizing math and stays byte-identical. Dollar risk and
+        # notional scale with it; the unscaled figure is kept on the order for the audit.
+        full_shares = p["shares"]
+        if ladder_mult < 1.0:
+            p = dict(p, shares=_round_shares(p["shares"] * ladder_mult),
+                     dollar_risk=round(p["dollar_risk"] * ladder_mult, 2))
+            if p["shares"] <= 0 or p["shares"] * limit < RULES["min_notional"]:
+                jrn["skipped"].append({"symbol": p["ticker"], "reason":
+                                       f"ladder ×{ladder_mult:.2f} sized it to "
+                                       f"${p['shares'] * limit:.2f}, under the "
+                                       f"${RULES['min_notional']:.2f} broker minimum"})
+                continue
         notional = round(p["shares"] * limit, 2)
         # HOUSE-01. This is the LAST gate, after portfolio.py has approved the trade for
         # this desk in isolation: it can only ever refuse, never resize or allow. Applied
@@ -1153,7 +1279,8 @@ def entry_pass(book, scan, pb, today, marked, jrn, scan_stale, house=None):
                      "stop_pct": p.get("stop_pct"),
                      "score": p["score"], "gics": p["gics"], "industry": p["industry"],
                      "thesis": p.get("thesis"), "risk_pct": p["risk_pct_of_equity"],
-                     "dollar_risk": p["dollar_risk"]},
+                     "dollar_risk": p["dollar_risk"],
+                     "ladder_mult": ladder_mult, "unscaled_shares": full_shares},
             "warnings": p["warnings"],
         }
         book["working_orders"].append(order)
@@ -1164,7 +1291,9 @@ def entry_pass(book, scan, pb, today, marked, jrn, scan_stale, house=None):
                                  "reason": order["reason"],
                                  "detail": f"${order['notional']:,.2f}, stop {p['stop']:,.2f}, "
                                            f"target {p['target']:,.2f}, risking "
-                                           f"${p['dollar_risk']:,.2f}"})
+                                           f"${p['dollar_risk']:,.2f}"
+                                           + (f" (ladder ×{ladder_mult:.2f}: {full_shares:g} "
+                                              f"shares unscaled)" if ladder_mult < 1.0 else "")})
     return placed
 
 
@@ -1220,7 +1349,12 @@ def run(book, scan, prices_override, slot, now_iso, mode, policy_name=None):
     simulate_fills(book, pb, today, run_key, jrn, scan_by_tk)
 
     marked = mark_book(book, pb)
-    kill_switch(book, marked, jrn)
+    day_pnl = kill_switch(book, marked, jrn)
+    # K-02: the ladder is judged ONCE per run, on the same mark the kill switch saw and
+    # before the exit pass — a rung-3 flatten is itself an exit and runs first.
+    ladder = ladder_pass(book, pb, today, marked, jrn, day_pnl)
+    if ladder["halt"]:
+        marked = mark_book(book, pb)
     exit_pass(book, pb, scan_by_tk, today, marked["equity"], jrn)
 
     # HOUSE-01. Computed AFTER the exit pass so a stop that just fired is already out of
@@ -1242,12 +1376,17 @@ def run(book, scan, prices_override, slot, now_iso, mode, policy_name=None):
         rebalance_pass(book, pb, today, marked["equity"], jrn, house)
 
         marked = mark_book(book, pb)
-        placed = entry_pass(book, scan, pb, today, marked, jrn, scan_stale, house)
+        placed = entry_pass(book, scan, pb, today, marked, jrn, scan_stale, house, ladder)
 
     marked = mark_book(book, pb)
     open_eq = book["day"].get("open_equity") or marked["equity"]
     jrn["daily_pnl_pct"] = round(((marked["equity"] - open_eq) / open_eq * 100)
                                  if open_eq else 0.0, 2)
+    # The HWM is kept on the book, not derived from the capped equity curve, and it only
+    # ever rises. The run's ladder verdict was taken on the pre-exit mark; the closing
+    # mark can only bump the mark, never lower it.
+    book["hwm"] = round(max(float(book.get("hwm") or 0.0), marked["equity"]), 2)
+    ladder = dict(ladder, hwm=book["hwm"])
     for p in book["positions"]:
         p["last_priced"] = jrn["ts"]
     book["cash"] = round(book["cash"], 2)
@@ -1296,6 +1435,7 @@ def run(book, scan, prices_override, slot, now_iso, mode, policy_name=None):
     jrn.update({"equity": marked["equity"], "cash": marked["cash"],
                 "invested": marked["invested"], "realized_pnl": round(book["realized_pnl"], 2),
                 "halted": bool(book["day"].get("halted")),
+                "ladder": ladder,
                 "day_trades_used": day_trades_used(book, today),
                 "scan_stale": scan_stale, "positions": len(book["positions"]),
                 "working_orders": len(book["working_orders"])})
@@ -1324,6 +1464,11 @@ def run(book, scan, prices_override, slot, now_iso, mode, policy_name=None):
                  "daily_pnl_pct": jrn["daily_pnl_pct"],
                  "halted": bool(book["day"].get("halted")),
                  "halt_reason": book["day"].get("halt_reason"),
+                 # K-02: hwm, dd_pct, rung, entry_size_mult, entries_blocked, reason,
+                 # soft_daily_hit, cool_until, reentry_active — see ladder.state_for().
+                 "hwm": book["hwm"],
+                 "cool_until": book.get("cool_until"),
+                 "ladder": ladder,
                  # K-01: broker_policy, day_trades_used, day_trade_limit, pdt_applies and
                  # whatever else the regime reports (deficits, settlement, GFVs).
                  **POLICY.state(book, today, marked["equity"])},
@@ -1677,6 +1822,14 @@ def main():
     print(f"day P&L {b['daily_pnl_pct']:+.2f}%   realised ${b['realized_pnl']:+,.2f}   "
           f"total {b['total_return_pct']:+.2f}%   {regime}"
           + ("   *HALTED*" if b["halted"] else ""))
+    lad = b.get("ladder") or {}
+    if lad.get("rung", 0) > 0 or lad.get("entries_blocked") or lad.get("reentry_active"):
+        print(f"LADDER rung {lad.get('rung', 0)}   drawdown {lad.get('dd_pct', 0):.2f}% from "
+              f"HWM ${lad.get('hwm', 0):,.2f}   entry size x{lad.get('entry_size_mult', 1.0):.2f}"
+              + ("   entries BLOCKED" if lad.get("entries_blocked") else "")
+              + (f"   cool-off through {lad['cool_until']}" if lad.get("cool_active") else "")
+              + ("   re-entry" if lad.get("reentry_active") else "")
+              + (f"\n  {lad['reason']}" if lad.get("reason") else ""))
     h = state.get("house")
     if h:
         top = sorted(h["sector_pct"].items(), key=lambda kv: -kv[1])[:3]
