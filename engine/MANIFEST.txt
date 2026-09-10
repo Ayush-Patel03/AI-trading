@@ -6,6 +6,7 @@ config.py
 desks.json
 fills.py
 guardrails.py
+health.py
 history.py
 house.py
 ic.py

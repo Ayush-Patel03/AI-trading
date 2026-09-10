@@ -70,7 +70,9 @@ C:\ai-trading-state\
   archive\book-history\<pm run_id>.json               every revision that changed something
   archive\runs\<runner run_id>\                       boards, pm_state, engine stdout/stderr
   manifests\<date>\<slot>-<desk>.json                 one per invocation; the idempotency record (sentinel-<HH>-<desk>, watch-<session>-<desk>, <slot>-scan, health-<HHMM>)
-  health\<date>.json                                  the health slot's pass/fail sheet
+  health\<date>.json  <date>.md                      the health slot's sheet (engine/health.py + runner checks)
+  health\heartbeat.json                              written by EVERY invocation, any outcome (K-05)
+  health\deadman.json                                the dead-man's switch record when it has ever tripped
   .runs\  .runner.lock                                ignored; scratch and the lock
 ```
 
@@ -92,7 +94,12 @@ already done, **1** refused (inputs, window, lock), **2** failed (an engine step
 | `pre-market`, `opening-range`, `midday`, `power-hour` | scan at 08:00/10:00/12:30/15:00 ET, PM 45 min later | `auto` = `scan` when the inputs carry `scan_data.json`, else `pm` | scan: `technicals.py` (if `bars.json`), `sentiment.py` (if any sentiment file), `scanner.py`, `paper_mirror.py`, `portfolio.py`, `render.py`, `archive.py --record`, `--index`, `--history-entry`, `history.py`. PM: `pm.py --slot … --desk …` per desk, then the section-8 `--check` against the stored book, then `render_pm.py` |
 | `sentinel` | hourly :35, 09:35–15:35 ET | — | `pm.py --slot sentinel --desk …` per desk; a quiet desk leaves only a heartbeat |
 | `watch` | 07:00 (`pre-open`) and 16:20 (`after-hours`) ET; `--session` optional | — | `watch.py --session … --desk …` per desk, read-only |
-| `health` | 16:15 ET or on demand | — | runner-side checks → `health/<date>.json` |
+| `health` | 16:15 ET or on demand | — | `health.py --state … --engine … [--mirror …]` (thirteen pass/warn/fail checks over the state repo) plus the runner's `lock_free` and `engine_sha` → `health/<date>.json` and `.md`; the manifest carries `health_verdict`. Pass `--mirror C:\ai-trading-mirror` for the mirror-age check |
+
+The dead-man's switch (`runner/deadman.py`, K-05) is **not** a slot: it is its own scheduled
+task on a different runtime that reads `health\heartbeat.json` and trips at two missed
+sentinel/PM runs during market hours — `docs/runner/deadman-task.md`,
+`docs/runbooks/deadman-tripped.md`.
 
 `--desk` is `swing`, `pullback`, `momentum` or `all` (the default). Use `all` from the
 scheduled prompts: the idempotency key includes the desk argument, so `--desk swing` after a

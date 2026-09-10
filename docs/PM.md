@@ -620,6 +620,27 @@ exists to honour exits within the hour. The pure evaluation is `engine/ladder.py
 Known limit: a withdrawal lowers equity without lowering the HWM and reads as drawdown.
 Record it as a negative deposit and, if the ladder trips on it, reset `hwm` by hand.
 
+### Dead-man's switch — when the manager itself goes silent (K-05, 2026-09-10)
+
+The kill switch and the ladder only work while the engine runs. Section 5 is the reason
+that matters: there is no resting stop in the market, so a box that stops running the
+sentinel is a book with no stops at all. The dead-man's switch is the control for that case.
+Every runner invocation writes `health/heartbeat.json`; an **independent** checker
+(`runner/deadman.py`, its own scheduled task on a different runtime —
+`docs/runner/deadman-task.md`) counts the expected sentinel and PM runs that have gone by
+during market hours without one. At **two missed** it trips: every working paper buy is
+cancelled, every open position is stamped `protective_stop: {level, placed_at, reason:
+"deadman"}` at its own stop (or entry − 2.5 × ATR when it has none), a `deadman` journal
+entry and an `aborted: true` coverage row are written, `health/deadman.json` records the
+trip and the state repo commits. It is idempotent while tripped and clears itself
+(`cleared_at`) on the first heartbeat after. In paper mode that stamp is a record — the
+same stop `pm.py` would fire on at its next run — and nothing is sent anywhere.
+**Live behaviour, specified and not implemented:** behind the two-key live mode of
+section 1, a trip would place one broker-resident stop-limit order per position at the
+stamped level (limit = level − 0.5 × ATR), so the book is protected by the exchange while
+nobody is watching; a heartbeat would *not* cancel them — a human does, after reading
+`docs/runbooks/deadman-tripped.md`. Until live mode exists no code path places that order.
+
 ---
 
 ## 8. Concurrent writes — the same problem that destroyed scan history

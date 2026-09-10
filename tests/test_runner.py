@@ -334,7 +334,7 @@ def test_missing_stored_book_is_refused_on_the_record(tmp_path):
 def test_stdlib_only():
     """The runner may import nothing the box does not ship with."""
     import ast
-    allowed = set(sys.stdlib_module_names) | {"run", "selftest"}
+    allowed = set(sys.stdlib_module_names) | {"run", "selftest", "deadman"}
     for p in (ROOT / "runner").glob("*.py"):
         for node in ast.walk(ast.parse(p.read_text(encoding="utf-8"))):
             if isinstance(node, ast.Import):
@@ -409,3 +409,49 @@ def test_scan_run_commits_the_snapshot_and_follows_the_names(tmp_path):
                              capture_output=True, text=True).stdout.split()
     assert f"archive/scan_snapshot/{date}-midday.jsonl.gz" in tracked
     assert "archive/followed.json" in tracked
+
+
+# ------------------------------------------------------------------ U-01 / K-05
+def test_heartbeat_is_written_on_every_outcome(tmp_path):
+    state, inputs, now, argv = _state_and_inputs(tmp_path)
+    hb = state / "health" / "heartbeat.json"
+    assert runner.main(argv + ["--dry-run"]) == 0 and not hb.exists()      # a dry run touches nothing
+    assert runner.main(argv) == 0
+    doc = runner.load_json(hb)
+    assert doc["outcome"] == "committed" and doc["slot"] == "midday" and doc["desk"] == "all"
+    assert doc["run_id"].endswith("-midday") and doc["ts"] == runner.iso(now)
+    tracked = subprocess.run(["git", "-C", str(state), "ls-files", "health"], capture_output=True, text=True).stdout
+    assert "health/heartbeat.json" in tracked
+    assert runner.main(argv) == 0                                            # already_done
+    assert runner.load_json(hb)["outcome"] == "already_done"
+    (inputs / "pm_quotes.json").write_text("{}", encoding="utf-8")           # refused (a fresh key)
+    assert runner.main([a if a != "all" else "swing" for a in argv]) == 1
+    assert runner.load_json(hb)["outcome"] == "refused" and runner.load_json(hb)["desk"] == "swing"
+
+
+def test_health_slot_runs_engine_health_and_keeps_the_runner_checks(tmp_path):
+    state = selftest.make_state_repo(tmp_path / "state")
+    now = selftest.synthetic_now("16:15")
+    inputs = selftest.write_inputs(tmp_path / "inputs", {}, as_of=now)
+    mirror = tmp_path / "mirror"
+    mirror.mkdir()
+    (mirror / "manifest.json").write_text(json.dumps({"generated_at": runner.iso(now)}), encoding="utf-8")
+    code = runner.main(["--slot", "health", "--inputs", str(inputs), "--state", str(state),
+                        "--engine", str(ROOT), "--no-push", "--now", runner.iso(now), "--mirror", str(mirror)])
+    assert code == 0
+    date = runner.to_et(now)[0].date().isoformat()
+    doc = runner.load_json(state / "health" / f"{date}.json")
+    names = [c["name"] for c in doc["checks"]]
+    assert names[:13] == ["tzdata", "engine_branch", "book_freshness", "coverage_today", "unjudged",
+                          "shadow_gap", "halt_state", "broker_policy", "state_commit_age", "push_backlog",
+                          "mirror_age", "runner_heartbeat", "deadman"]
+    assert names[13:] == ["lock_free", "engine_sha"]
+    by = {c["name"]: c for c in doc["checks"]}
+    assert by["mirror_age"]["status"] == "pass" and by["lock_free"]["status"] == "pass"
+    assert by["engine_sha"]["status"] == "pass" and by["tzdata"]["status"] == "pass"
+    assert doc["verdict"] in ("pass", "warn", "fail") and doc["engine_health_exit"] in (0, 1, 2)
+    assert (state / "health" / f"{date}.md").read_text(encoding="utf-8").startswith("# Health — ")
+    man = runner.load_json(state / "manifests" / date / "health-1615.json")
+    assert man["outcome"] == "committed" and man["health"]["engine_sha"] == "pass"
+    assert man["health_verdict"] == doc["verdict"]
+    assert f"health/{date}.json" in man["written"] and f"health/{date}.md" in man["written"]

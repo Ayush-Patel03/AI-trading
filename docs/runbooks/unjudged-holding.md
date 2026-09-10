@@ -7,7 +7,7 @@ means it has no usable price at all — no quote in the payload, a halted state,
 than 30 minutes.
 
 **How it shows up.** The warnings list on the journal entry and on the board row; the coverage
-row's `warnings` count; the health sheet's `unjudged` count (plan 1.5). `UNPROTECTED` also
+row's `warnings` count; the health sheet's `unjudged` check (held names the latest decision entry marked `priced but unjudged` or `UNPROTECTED`; `warn` at 1, `fail` at 3). `UNPROTECTED` also
 pushes a notification.
 
 **Recovery — the session, at the next run.**
