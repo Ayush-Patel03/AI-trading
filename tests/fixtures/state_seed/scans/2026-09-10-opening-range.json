@@ -1,0 +1,122 @@
+{
+  "run_id": "2026-09-10-opening-range",
+  "date": "2026-09-10",
+  "slot": "Opening range",
+  "time": "10:00",
+  "run_label": "Opening range \u00b7 Thu 10 Sep 2026",
+  "engine_sha": "423ed33",
+  "regime": {
+    "label": "Constructive",
+    "multiplier": 1.0,
+    "notes": [
+      "SPY -2.8% off its 52-week high \u2014 index at/near highs",
+      "VIX 17.9 \u2014 normal volatility"
+    ],
+    "vix": 17.85,
+    "spy": {
+      "price": 757.55,
+      "day_change_pct": -0.636,
+      "pct_off_52w_high": -2.8
+    },
+    "sector_etfs": {}
+  },
+  "coverage_avg": 91.0,
+  "results": [
+    {
+      "ticker": "SSL",
+      "name": "Sasol",
+      "sector": "Materials",
+      "price": 14.64,
+      "setup": "Momentum",
+      "score": 68.8,
+      "normalized_score": 68.8,
+      "verdict": "Buy",
+      "rsi_14": 74.83026263743639,
+      "atr_14": 0.5051434379961024
+    },
+    {
+      "ticker": "AEHR",
+      "name": "Aehr Test Systems",
+      "sector": "Information Technology",
+      "price": 95.4,
+      "setup": "Momentum",
+      "score": 64.4,
+      "normalized_score": 64.4,
+      "verdict": "Buy",
+      "rsi_14": 51.233570624020025,
+      "atr_14": 10.247535409896681
+    },
+    {
+      "ticker": "ANET",
+      "name": "Arista Networks",
+      "sector": "Information Technology",
+      "price": 191.3,
+      "setup": "Momentum",
+      "score": 61.5,
+      "normalized_score": 61.5,
+      "verdict": "Buy",
+      "rsi_14": 52.300047441390305,
+      "atr_14": 7.946537414943083
+    },
+    {
+      "ticker": "VRT",
+      "name": "Vertiv Holdings",
+      "sector": "Industrials",
+      "price": 247.7943,
+      "setup": "Broken Trend",
+      "score": 61.0,
+      "normalized_score": 61.0,
+      "verdict": "Avoid",
+      "rsi_14": 46.305599173521294,
+      "atr_14": 15.303482750743225
+    },
+    {
+      "ticker": "AMD",
+      "name": "AMD",
+      "sector": "Information Technology",
+      "price": 506.65,
+      "setup": "Momentum",
+      "score": 59.0,
+      "normalized_score": 59.0,
+      "verdict": "Watch",
+      "rsi_14": 60.432420646981456,
+      "atr_14": 23.21926480259753
+    },
+    {
+      "ticker": "FCX",
+      "name": "Freeport-McMoRan",
+      "sector": "Materials",
+      "price": 70.31,
+      "setup": "Momentum",
+      "score": 58.0,
+      "normalized_score": 58.0,
+      "verdict": "Watch",
+      "rsi_14": 59.49503703360547,
+      "atr_14": 3.0210613083971856
+    },
+    {
+      "ticker": "SNDK",
+      "name": "Sandisk",
+      "sector": "Information Technology",
+      "price": 1694.44,
+      "setup": "Momentum",
+      "score": 57.5,
+      "normalized_score": 57.5,
+      "verdict": "Watch",
+      "rsi_14": 62.24088045572311,
+      "atr_14": 122.53167656859947
+    },
+    {
+      "ticker": "MRVL",
+      "name": "Marvell Technology",
+      "sector": "Information Technology",
+      "price": 231.055,
+      "setup": "Momentum",
+      "score": 56.2,
+      "normalized_score": 56.2,
+      "verdict": "Watch",
+      "rsi_14": 55.5424022523929,
+      "atr_14": 15.451638122090515
+    }
+  ]
+}

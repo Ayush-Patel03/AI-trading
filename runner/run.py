@@ -643,6 +643,30 @@ def _health_row(name, status, value, threshold, detail):
     return {"name": name, "status": status, "value": value, "threshold": threshold, "detail": detail}
 
 
+def state_layout_row(state, engine_root):
+    """runner/validate_state.py over the state repo, as one health row (read-only).
+
+    Layout, every JSON parsing, no `mirrors` block or banned shape anywhere, revisions
+    monotonic, coverage rows well-formed. An error is `fail`; a warning `warn`; a validator
+    that cannot run at all is reported as `warn` rather than taking the health slot down.
+    """
+    try:
+        import validate_state
+        engine_root = Path(engine_root)
+        engine_dir = engine_root / "engine" if (engine_root / "engine" / "desks.json").exists() else engine_root
+        res = validate_state.validate(state, engine_dir)
+        status = "fail" if res["errors"] else ("warn" if res["warnings"] else "pass")
+        detail = "; ".join(res["errors"][:3] + res["warnings"][:2]) or \
+            f"{res['summary']['json']} JSON document(s), books " + \
+            ", ".join(f"{d} r{r}" for d, r in sorted(res["summary"]["books"].items()))
+        return _health_row("state_layout", status,
+                           {"errors": len(res["errors"]), "warnings": len(res["warnings"])},
+                           "validate_state.py reports no error", detail)
+    except Exception as exc:       # the validator must never take the health slot down
+        return _health_row("state_layout", "warn", None, "validate_state.py reports no error",
+                           f"validate_state could not run: {type(exc).__name__}: {exc}")
+
+
 def health_steps(ctx, state, engine_root, engine_sha, engine_branch, now, slots, mirror=None,
                  slots_path=None, config_path=None):
     """The health slot: engine/health.py over the state repo, plus the runner's own checks.
@@ -652,6 +676,8 @@ def health_steps(ctx, state, engine_root, engine_sha, engine_branch, now, slots,
     policy, commit age and push backlog, the mirror, the heartbeat, the dead-man's switch,
     tzdata and the engine branch. The runner adds only what the engine cannot see from a
     directory: whether the lock is free and whether it could identify the engine at all.
+    The runner adds its `lock_free`, `engine_sha` and `state_layout` rows (the last from
+    runner/validate_state.py).
     The sheet is `{"checks": [{name, status, value, threshold, detail}], "verdict", ...}`
     and is written to health/<date>.json (and .md) by main().
     """
@@ -677,6 +703,7 @@ def health_steps(ctx, state, engine_root, engine_sha, engine_branch, now, slots,
     checks.append(_health_row("engine_sha", "pass" if engine_sha else "fail", engine_sha,
                               "the engine clone answers rev-parse HEAD",
                               f"{engine_sha[:10]}@{engine_branch}" if engine_sha else "engine sha unknown"))
+    checks.append(state_layout_row(state, engine_root))
     doc["checks"] = checks
     doc["verdict"] = max((c["status"] for c in checks), key=lambda s: HEALTH_STATUS_RANK.get(s, 2))
     doc.update({"generated": iso(now), "runner_version": RUNNER_VERSION, "engine_sha": engine_sha,
@@ -686,7 +713,7 @@ def health_steps(ctx, state, engine_root, engine_sha, engine_branch, now, slots,
     md = ctx.run_dir / "health.md"
     if md.exists():
         extra = "".join(f"| `{c['name']}` | {c['status'].upper()} | {c['detail']} | {c['threshold']} |\n"
-                        for c in checks[-2:])
+                        for c in checks[-3:])
         md.write_text(md.read_text(encoding="utf-8").rstrip("\n") + "\n" + extra, encoding="utf-8")
     return doc
 

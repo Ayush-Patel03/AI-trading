@@ -1,0 +1,518 @@
+{
+  "_what": "Portfolio Manager journal for the 'pullback' desk \u2014 one entry per run, keyed by run_key.",
+  "entries": [
+    {
+      "ts": "2026-09-09T17:22:17Z",
+      "date": "2026-09-09",
+      "slot": "midday",
+      "run_key": "2026-09-09#midday",
+      "mode": "paper",
+      "desk": "pullback",
+      "sentinel": false,
+      "decisions": [],
+      "skipped": [
+        {
+          "symbol": "MU",
+          "reason": "Score 47 \u2014 weakening, but it was already trimmed today \u2014 one trim per name per session"
+        },
+        {
+          "symbol": "KLAC",
+          "reason": "trim wanted to fire \u2014 PDT guard: selling would be day trade 1/3 and this is not a stop \u2014 held"
+        },
+        {
+          "symbol": "MDB",
+          "reason": "trim wanted to fire \u2014 PDT guard: selling would be day trade 1/3 and this is not a stop \u2014 held"
+        },
+        {
+          "symbol": "*",
+          "reason": "desk 'pullback': 19 scan row(s) outside this desk's mandate (setups=['Pullback in Uptrend', 'Early Recovery'], rsi_range=[25, 55])"
+        }
+      ],
+      "warnings": [
+        "MRVL: not in this scan's universe \u2014 priced but unjudged",
+        "SNDK: not in this scan's universe \u2014 priced but unjudged",
+        "KLAC: PDT guard: selling would be day trade 1/3 and this is not a stop \u2014 held",
+        "MDB: PDT guard: selling would be day trade 1/3 and this is not a stop \u2014 held",
+        "Macro calendar today (not gating): MBA Mortgage Applications at 07:00 ET, ADP Employment Change (weekly) at 08:15 ET, Redbook YoY at 08:55 ET, 17-Week Bill Auction at 11:30 ET, 10-Year Note Auction at 13:00 ET, API Crude Oil Stock Change at 16:30 ET",
+        "MACRO TOMORROW: PPI MoM / Core PPI MoM / PPI YoY at 08:30 ET, Initial Jobless Claims at 08:30 ET, Continuing Jobless Claims at 08:30 ET, Existing Home Sales at 10:00 ET, Wholesale Inventories MoM at 10:00 ET \u2014 overnight holds carry tape-wide event risk."
+      ],
+      "daily_pnl_pct": -0.41,
+      "scan_as_of": "2026-09-09 12:30",
+      "run_id": "2026-09-09-midday-pullback",
+      "book_revision": 22,
+      "book_fingerprint": "8883f668f7a0caf6",
+      "engine_sha": "45a753f",
+      "house": {
+        "equity": 15455.8,
+        "desks": 3,
+        "top_symbol_pct": {
+          "MU": 6.88,
+          "MRVL": 0.92,
+          "SNDK": 8.82,
+          "KLAC": 8.76,
+          "MDB": 7.54,
+          "NVDA": 6.48,
+          "ANET": 9.99
+        },
+        "sector_pct": {
+          "Information Technology": 25.3,
+          "Unclassified": 24.09
+        },
+        "caps": {
+          "symbol_pct": 15.0,
+          "sector_pct": 40.0
+        },
+        "peers": [
+          "swing",
+          "momentum"
+        ]
+      },
+      "equity": 5151.89,
+      "cash": 2546.96,
+      "invested": 2604.93,
+      "realized_pnl": 23.44,
+      "halted": false,
+      "day_trades_used": 0,
+      "scan_stale": null,
+      "positions": 5,
+      "working_orders": 0,
+      "changed": true,
+      "change_reasons": [
+        "warnings raised",
+        "book state changed"
+      ],
+      "attempt": 1,
+      "artifact_url": null,
+      "publish_snapshot": false,
+      "book_snapshot": "claude/book-history/2026-09-09-midday-pullback.json"
+    },
+    {
+      "ts": "2026-09-09T20:04:13Z",
+      "date": "2026-09-09",
+      "slot": "power-hour",
+      "run_key": "2026-09-09#power-hour",
+      "mode": "paper",
+      "desk": "pullback",
+      "sentinel": false,
+      "decisions": [],
+      "skipped": [
+        {
+          "symbol": "MU",
+          "reason": "Score 47 \u2014 weakening, but it was already trimmed today \u2014 one trim per name per session"
+        },
+        {
+          "symbol": "KLAC",
+          "reason": "trim wanted to fire \u2014 PDT guard: selling would be day trade 1/3 and this is not a stop \u2014 held"
+        },
+        {
+          "symbol": "*",
+          "reason": "power-hour places no new entries \u2014 a day-limit entry placed at the last slot expires unfilled at the session roll before it can ever fill. Exits, trims and rebalancing still ran."
+        }
+      ],
+      "warnings": [
+        "MRVL: not in this scan's universe \u2014 priced but unjudged",
+        "SNDK: not in this scan's universe \u2014 priced but unjudged",
+        "KLAC: PDT guard: selling would be day trade 1/3 and this is not a stop \u2014 held"
+      ],
+      "daily_pnl_pct": -0.54,
+      "scan_as_of": "2026-09-09 15:00",
+      "run_id": "2026-09-09-power-hour-pullback",
+      "book_revision": 23,
+      "book_fingerprint": "8883f668f7a0caf6",
+      "engine_sha": "45a753f",
+      "house": {
+        "equity": 15423.3,
+        "desks": 3,
+        "top_symbol_pct": {
+          "MU": 6.93,
+          "MRVL": 0.91,
+          "SNDK": 8.77,
+          "KLAC": 8.8,
+          "MDB": 6.74,
+          "NVDA": 6.49,
+          "ANET": 9.9
+        },
+        "sector_pct": {
+          "Information Technology": 24.57,
+          "Unclassified": 23.99
+        },
+        "caps": {
+          "symbol_pct": 15.0,
+          "sector_pct": 40.0
+        },
+        "peers": [
+          "swing",
+          "momentum"
+        ]
+      },
+      "equity": 5144.98,
+      "cash": 2546.96,
+      "invested": 2598.02,
+      "realized_pnl": 23.44,
+      "halted": false,
+      "day_trades_used": 0,
+      "scan_stale": null,
+      "positions": 5,
+      "working_orders": 0,
+      "changed": true,
+      "change_reasons": [
+        "warnings raised"
+      ],
+      "attempt": 1,
+      "artifact_url": null,
+      "publish_snapshot": false,
+      "book_snapshot": "claude/book-history/2026-09-09-power-hour-pullback.json"
+    },
+    {
+      "ts": "2026-09-09T15:51:01Z",
+      "date": "2026-09-09",
+      "slot": "sentinel",
+      "run_key": "2026-09-09#sentinel-1551",
+      "mode": "paper",
+      "desk": "pullback",
+      "sentinel": true,
+      "decisions": [
+        {
+          "action": "fill-buy",
+          "symbol": "KLAC",
+          "shares": 4.215526,
+          "price": 184.05,
+          "reason": "Score 65 Pullback in Uptrend \u2014 Buy",
+          "detail": "$775.87 filled at the resting limit"
+        },
+        {
+          "action": "fill-buy",
+          "symbol": "MDB",
+          "shares": 1.21594,
+          "price": 363.07,
+          "reason": "Score 61 Pullback in Uptrend \u2014 Buy",
+          "detail": "$441.47 filled at the resting limit"
+        }
+      ],
+      "skipped": [],
+      "warnings": [],
+      "daily_pnl_pct": -0.49,
+      "scan_as_of": null,
+      "run_id": "2026-09-09-sentinel-1551-pullback",
+      "book_revision": 21,
+      "book_fingerprint": "8883f668f7a0caf6",
+      "engine_sha": "45a753f",
+      "house": {
+        "equity": 15459.16,
+        "desks": 3,
+        "top_symbol_pct": {
+          "MU": 6.89,
+          "MRVL": 0.92,
+          "SNDK": 8.77,
+          "KLAC": 8.8,
+          "MDB": 7.51,
+          "NVDA": 6.49,
+          "ANET": 10.02
+        },
+        "sector_pct": {
+          "Information Technology": 25.26,
+          "Unclassified": 24.14
+        },
+        "caps": {
+          "symbol_pct": 15.0,
+          "sector_pct": 40.0
+        },
+        "peers": [
+          "swing",
+          "momentum"
+        ]
+      },
+      "equity": 5147.9,
+      "cash": 2546.96,
+      "invested": 2600.94,
+      "realized_pnl": 23.44,
+      "halted": false,
+      "day_trades_used": 0,
+      "scan_stale": null,
+      "positions": 5,
+      "working_orders": 0,
+      "changed": true,
+      "change_reasons": [
+        "2 decisions taken",
+        "book state changed"
+      ],
+      "attempt": 1,
+      "artifact_url": null,
+      "publish_snapshot": false,
+      "book_snapshot": "claude/book-history/2026-09-09-sentinel-1551-pullback.json"
+    },
+    {
+      "ts": "2026-09-10T13:04:06Z",
+      "date": "2026-09-10",
+      "slot": "pre-market",
+      "run_key": "2026-09-10#pre-market",
+      "mode": "paper",
+      "desk": "pullback",
+      "sentinel": false,
+      "decisions": [
+        {
+          "action": "fill-sell",
+          "symbol": "MU",
+          "shares": 0.471929,
+          "price": 997.3005,
+          "reason": "thesis",
+          "detail": "Score fell to 45 \u2014 the thesis that bought it is gone \u2014 realised $+17.86"
+        },
+        {
+          "action": "fill-sell",
+          "symbol": "MRVL",
+          "shares": 0.599792,
+          "price": 225.0859,
+          "reason": "thesis",
+          "detail": "Score 52 \u2014 weakening. Already trimmed 2 times \u2014 a name that keeps weakening gets closed, not shaved again. \u2014 realised $+9.82"
+        },
+        {
+          "action": "fill-sell",
+          "symbol": "SNDK",
+          "shares": 0.143132,
+          "price": 1715.2013,
+          "reason": "trim",
+          "detail": "Score 54 \u2014 weakening \u2014 cutting a third (trim 1 of 2 before a full exit) \u2014 realised $+20.72"
+        },
+        {
+          "action": "fill-sell",
+          "symbol": "KLAC",
+          "shares": 1.391124,
+          "price": 175.0712,
+          "reason": "trim",
+          "detail": "Score 54 \u2014 weakening \u2014 cutting a third (trim 1 of 2 before a full exit) \u2014 realised $-12.49"
+        },
+        {
+          "action": "fill-sell",
+          "symbol": "MDB",
+          "shares": 0.40126,
+          "price": 353.3045,
+          "reason": "trim",
+          "detail": "Score 51 \u2014 weakening \u2014 cutting a third (trim 1 of 2 before a full exit) \u2014 realised $-3.92"
+        },
+        {
+          "action": "place-buy",
+          "symbol": "ALAB",
+          "shares": 1.252509,
+          "price": 288.0,
+          "reason": "Score 63 Pullback in Uptrend \u2014 Buy",
+          "detail": "$360.72, stop 253.44, target 391.68, risking $43.29"
+        }
+      ],
+      "skipped": [
+        {
+          "symbol": "*",
+          "reason": "desk 'pullback': 14 scan row(s) outside this desk's mandate (setups=['Pullback in Uptrend', 'Early Recovery'], rsi_range=[25, 55])"
+        },
+        {
+          "symbol": "NAVN",
+          "reason": "bid/ask spread 4.75% of price, over the 1.0% entry limit \u2014 too expensive to trade at this size"
+        }
+      ],
+      "warnings": [
+        "Macro calendar today (not gating): PPI MoM / Core PPI MoM / PPI YoY at 08:30 ET, Initial Jobless Claims at 08:30 ET, Continuing Jobless Claims at 08:30 ET, Existing Home Sales at 10:00 ET, Wholesale Inventories MoM at 10:00 ET, EIA Natural Gas Stocks Change at 10:30 ET, EIA Crude Oil Stocks Change at 12:00 ET",
+        "MACRO TOMORROW: CPI / Core CPI (Inflation Rate MoM & YoY) at 08:30 ET, Michigan Consumer Sentiment Prel at 10:00 ET \u2014 overnight holds carry tape-wide event risk.",
+        "Not entered \u2014 bid/ask spread over the 1.0% limit: NAVN 4.75%"
+      ],
+      "daily_pnl_pct": -0.06,
+      "scan_as_of": "2026-09-10 08:00",
+      "run_id": "2026-09-10-pre-market-pullback",
+      "book_revision": 24,
+      "book_fingerprint": "85f8d1485fa4f722",
+      "engine_sha": "423ed33",
+      "house": {
+        "equity": 15227.95,
+        "desks": 3,
+        "top_symbol_pct": {
+          "ANET": 9.76,
+          "SNDK": 7.05,
+          "KLAC": 6.95,
+          "NVDA": 6.48,
+          "MDB": 5.81,
+          "MU": 3.73,
+          "ALAB": 2.37
+        },
+        "sector_pct": {
+          "Unclassified": 21.06,
+          "Information Technology": 21.08
+        },
+        "caps": {
+          "symbol_pct": 15.0,
+          "sector_pct": 40.0
+        },
+        "peers": [
+          "swing",
+          "momentum"
+        ]
+      },
+      "equity": 5067.39,
+      "cash": 3783.43,
+      "invested": 1283.95,
+      "realized_pnl": 55.43,
+      "halted": false,
+      "day_trades_used": 0,
+      "scan_stale": null,
+      "positions": 3,
+      "working_orders": 1,
+      "changed": true,
+      "change_reasons": [
+        "6 decisions taken",
+        "warnings raised",
+        "book state changed"
+      ],
+      "attempt": 1,
+      "artifact_url": null,
+      "publish_snapshot": false,
+      "book_snapshot": "claude/book-history/2026-09-10-pre-market-pullback.json"
+    },
+    {
+      "ts": "2026-09-10T15:05:52Z",
+      "date": "2026-09-10",
+      "slot": "opening-range",
+      "run_key": "2026-09-10#opening-range",
+      "mode": "paper",
+      "desk": "pullback",
+      "sentinel": false,
+      "decisions": [],
+      "skipped": [
+        {
+          "symbol": "KLAC",
+          "reason": "Score 52 \u2014 weakening, but it was already trimmed today \u2014 one trim per name per session"
+        },
+        {
+          "symbol": "MDB",
+          "reason": "Score 54 \u2014 weakening, but it was already trimmed today \u2014 one trim per name per session"
+        },
+        {
+          "symbol": "ALAB",
+          "reason": "trim wanted to fire \u2014 PDT guard: selling would be day trade 1/3 and this is not a stop \u2014 held"
+        },
+        {
+          "symbol": "*",
+          "reason": "desk 'pullback': 16 scan row(s) outside this desk's mandate (setups=['Pullback in Uptrend', 'Early Recovery'], rsi_range=[25, 55])"
+        }
+      ],
+      "warnings": [
+        "ALAB: PDT guard: selling would be day trade 1/3 and this is not a stop \u2014 held",
+        "Macro calendar today (not gating): PPI MoM / Core PPI MoM / PPI YoY at 08:30 ET, Initial Jobless Claims at 08:30 ET, Continuing Jobless Claims at 08:30 ET, Existing Home Sales at 10:00 ET, Wholesale Inventories MoM at 10:00 ET, EIA Natural Gas Stocks Change at 10:30 ET, EIA Crude Oil Stocks Change at 12:00 ET",
+        "MACRO TOMORROW: CPI / Core CPI (Inflation Rate MoM & YoY) at 08:30 ET, Michigan Consumer Sentiment Prel at 10:00 ET \u2014 overnight holds carry tape-wide event risk."
+      ],
+      "daily_pnl_pct": 0.41,
+      "scan_as_of": "2026-09-10 10:00",
+      "run_id": "2026-09-10-opening-range-pullback",
+      "book_revision": 26,
+      "book_fingerprint": "fcc10280562015e9",
+      "engine_sha": "423ed33",
+      "house": {
+        "equity": 15301.86,
+        "desks": 3,
+        "top_symbol_pct": {
+          "SNDK": 5.71,
+          "KLAC": 5.83,
+          "MDB": 3.71,
+          "ALAB": 4.75,
+          "ANET": 9.94
+        },
+        "sector_pct": {
+          "Information Technology": 10.46,
+          "Unclassified": 19.48
+        },
+        "caps": {
+          "symbol_pct": 15.0,
+          "sector_pct": 40.0
+        },
+        "peers": [
+          "swing",
+          "momentum"
+        ]
+      },
+      "equity": 5091.46,
+      "cash": 3422.71,
+      "invested": 1668.75,
+      "realized_pnl": 55.43,
+      "halted": false,
+      "day_trades_used": 0,
+      "scan_stale": null,
+      "positions": 4,
+      "working_orders": 0,
+      "changed": true,
+      "change_reasons": [
+        "warnings raised",
+        "book state changed"
+      ],
+      "attempt": 1,
+      "artifact_url": null,
+      "publish_snapshot": false,
+      "book_snapshot": "claude/book-history/2026-09-10-opening-range-pullback.json"
+    },
+    {
+      "ts": "2026-09-10T13:52:20Z",
+      "date": "2026-09-10",
+      "slot": "sentinel",
+      "run_key": "2026-09-10#sentinel-1352",
+      "mode": "paper",
+      "desk": "pullback",
+      "sentinel": true,
+      "decisions": [
+        {
+          "action": "fill-buy",
+          "symbol": "ALAB",
+          "shares": 1.252509,
+          "price": 288.0,
+          "reason": "Score 63 Pullback in Uptrend \u2014 Buy",
+          "detail": "$360.72 filled at the resting limit"
+        }
+      ],
+      "skipped": [],
+      "warnings": [],
+      "daily_pnl_pct": -0.18,
+      "scan_as_of": null,
+      "run_id": "2026-09-10-sentinel-1352-pullback",
+      "book_revision": 25,
+      "book_fingerprint": "fcc10280562015e9",
+      "engine_sha": "423ed33",
+      "house": {
+        "equity": 15239.75,
+        "desks": 3,
+        "top_symbol_pct": {
+          "SNDK": 5.74,
+          "KLAC": 5.74,
+          "MDB": 3.59,
+          "ALAB": 4.68,
+          "ANET": 9.9
+        },
+        "sector_pct": {
+          "Information Technology": 10.42,
+          "Unclassified": 19.23
+        },
+        "caps": {
+          "symbol_pct": 15.0,
+          "sector_pct": 40.0
+        },
+        "peers": [
+          "swing",
+          "momentum"
+        ]
+      },
+      "equity": 5061.39,
+      "cash": 3422.71,
+      "invested": 1638.68,
+      "realized_pnl": 55.43,
+      "halted": false,
+      "day_trades_used": 0,
+      "scan_stale": null,
+      "positions": 4,
+      "working_orders": 0,
+      "changed": true,
+      "change_reasons": [
+        "1 decision taken",
+        "book state changed"
+      ],
+      "attempt": 1,
+      "artifact_url": null,
+      "publish_snapshot": false,
+      "book_snapshot": "claude/book-history/2026-09-10-sentinel-1352-pullback.json"
+    }
+  ],
+  "updated": "2026-09-10T15:05:52Z"
+}
