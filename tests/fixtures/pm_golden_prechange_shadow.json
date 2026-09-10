@@ -1,0 +1,1017 @@
+{
+ "book": {
+  "based_on_revision": 17,
+  "cash": 3108.53,
+  "closed_trades": [
+   {
+    "closed": "2026-09-02",
+    "closed_slot": "pre-market",
+    "detail": "Position was 15.2% of equity, over the 15% cap",
+    "entry": 218.38,
+    "exit": 217.3154,
+    "opened": "2026-09-01",
+    "pnl": -0.04,
+    "pnl_pct": -0.49,
+    "reason": "rebalance",
+    "shares": 0.038917,
+    "symbol": "NVDA"
+   },
+   {
+    "closed": "2026-09-02",
+    "closed_slot": "sentinel",
+    "detail": "Price 179.29 broke the 186.49 stop",
+    "entry": 211.92,
+    "exit": 178.8418,
+    "opened": "2026-09-01",
+    "pnl": -48.53,
+    "pnl_pct": -15.61,
+    "reason": "stop",
+    "shares": 1.46698,
+    "symbol": "CRDO"
+   },
+   {
+    "closed": "2026-09-10",
+    "closed_slot": "midday",
+    "detail": "Target 257.05 hit \u2014 taking half, stop to breakeven",
+    "entry": 218.38,
+    "exit": 259.35,
+    "opened": "2026-09-01",
+    "pnl": 69.56,
+    "pnl_pct": 18.76,
+    "reason": "target",
+    "shares": 1.697731,
+    "symbol": "NVDA"
+   },
+   {
+    "closed": "2026-09-10",
+    "closed_slot": "midday",
+    "detail": "Price 90.00 broke the 93.85 stop (1.5x ATR stop)",
+    "entry": 104.34,
+    "exit": 89.775,
+    "opened": "2026-09-01",
+    "pnl": -74.94,
+    "pnl_pct": -13.96,
+    "reason": "stop",
+    "shares": 5.145277,
+    "symbol": "HOOD"
+   }
+  ],
+  "day": {
+   "date": "2026-09-10",
+   "halt_reason": null,
+   "halted": false,
+   "open_equity": 4954.36
+  },
+  "day_trades": [],
+  "equity_curve": [
+   {
+    "cash": 5000.0,
+    "date": "2026-09-01",
+    "equity": 5000.0,
+    "invested": 0.0,
+    "realized": 0.0,
+    "slot": "pre-market",
+    "ts": "2026-09-01T13:05:35Z"
+   },
+   {
+    "cash": 2501.89,
+    "date": "2026-09-02",
+    "equity": 4931.55,
+    "invested": 2429.66,
+    "realized": -0.04,
+    "slot": "pre-market",
+    "ts": "2026-09-02T13:03:14Z"
+   },
+   {
+    "cash": 2764.25,
+    "date": "2026-09-10",
+    "equity": 4954.36,
+    "invested": 2190.11,
+    "realized": -48.57,
+    "slot": "opening-range",
+    "ts": "2026-09-10T14:45:00Z"
+   },
+   {
+    "cash": 3108.53,
+    "date": "2026-09-10",
+    "equity": 4994.43,
+    "invested": 1885.89,
+    "realized": -53.95,
+    "slot": "midday",
+    "ts": "2026-09-10T17:15:00Z"
+   }
+  ],
+  "hwm": 5000.0,
+  "last_run": "2026-09-10T17:15:00Z",
+  "mirrors": {
+   "broker": "Robinhood",
+   "display": "\u2022\u2022\u2022\u20226005",
+   "live_cash_expected": 50.0,
+   "nickname": "Agentic",
+   "type": "limited_margin"
+  },
+  "mode": "paper",
+  "positions": [
+   {
+    "atr_14": 58.21,
+    "atr_pct": 6.07,
+    "avg_cost": 959.46,
+    "entry_score": 76.5,
+    "gics": "Information Technology",
+    "high_water": 959.46,
+    "industry": "Semiconductors",
+    "intraday_shares": 0.0,
+    "last_price": 941.9,
+    "last_priced": "2026-09-10T17:15:00Z",
+    "last_trim_date": null,
+    "opened": "2026-09-01",
+    "opened_slot": "sentinel",
+    "price_source": "pm-fetch",
+    "scaled_out": false,
+    "shares": 0.401123,
+    "stop": 872.14,
+    "stop_basis": "1.5x ATR stop",
+    "stop_basis_kind": "atr",
+    "stop_basis_short": "1.5x ATR",
+    "stop_pct": 9.1,
+    "symbol": "MU",
+    "target": 1221.42,
+    "thesis": "Long-term trend up but price has pulled back below the 50-day \u2014 mean-reversion entry",
+    "trim_count": 0
+   },
+   {
+    "atr_14": 137.11,
+    "atr_pct": 8.75,
+    "avg_cost": 1570.41,
+    "entry_score": 77.5,
+    "gics": "Information Technology",
+    "high_water": 1581.975,
+    "industry": "Computer Hardware",
+    "intraday_shares": 0.0,
+    "last_price": 1526.54,
+    "last_priced": "2026-09-10T17:15:00Z",
+    "last_trim_date": null,
+    "opened": "2026-09-01",
+    "opened_slot": "midday",
+    "price_source": "pm-fetch",
+    "scaled_out": false,
+    "shares": 0.33365,
+    "stop": 1381.96,
+    "stop_basis": "1.5x ATR stop",
+    "stop_basis_kind": "atr",
+    "stop_basis_short": "1.5x ATR",
+    "stop_pct": 12.0,
+    "symbol": "SNDK",
+    "target": 2135.77,
+    "thesis": "Long-term trend up but price has pulled back below the 50-day \u2014 mean-reversion entry",
+    "trim_count": 0
+   },
+   {
+    "atr_14": 7.48,
+    "atr_pct": 3.39,
+    "avg_cost": 218.38,
+    "entry_score": 78.0,
+    "gics": "Information Technology",
+    "high_water": 260.0,
+    "industry": "Semiconductors",
+    "intraday_shares": 0.0,
+    "last_price": 260.0,
+    "last_priced": "2026-09-10T17:15:00Z",
+    "last_trim_date": null,
+    "opened": "2026-09-01",
+    "opened_slot": "sentinel",
+    "price_source": "pm-fetch",
+    "scaled_out": true,
+    "shares": 1.697732,
+    "stop": 218.38,
+    "stop_basis": "breakeven \u2014 half the position was taken at the 3R target",
+    "stop_basis_kind": "breakeven",
+    "stop_basis_short": "breakeven",
+    "stop_pct": 5.9,
+    "symbol": "NVDA",
+    "target": 257.05,
+    "thesis": "Price above both MAs with 50 over 200 \u2014 trend intact and extended",
+    "trim_count": 0
+   },
+   {
+    "atr_14": 2.77,
+    "atr_pct": 3.0,
+    "avg_cost": 92.4,
+    "entry_score": 78.0,
+    "gics": "Financials",
+    "high_water": 92.4,
+    "industry": "Capital Markets",
+    "intraday_shares": 6.0383,
+    "last_price": 92.3,
+    "last_priced": "2026-09-10T17:15:00Z",
+    "last_rebalance_date": null,
+    "last_trim_date": null,
+    "opened": "2026-09-10",
+    "opened_slot": "midday",
+    "price_source": "pm-fetch",
+    "rebalance_count": 0,
+    "scaled_out": false,
+    "shares": 6.0383,
+    "stop": 86.46,
+    "stop_basis": "1.5% below the 50-day MA ($87.78) \u2014 within a whisker of the 1.5x ATR stop, so the structural level is the better place to sit",
+    "stop_basis_kind": "atr",
+    "stop_basis_short": "1.5x ATR",
+    "stop_pct": 6.43,
+    "symbol": "SCHW",
+    "target": 110.22,
+    "thesis": "Price above both MAs with 50 over 200 \u2014 trend intact",
+    "trim_count": 0
+   }
+  ],
+  "realized_pnl": -53.95141,
+  "revision": 18,
+  "seeded": "2026-08-31",
+  "starting_equity": 5000.0,
+  "working_orders": []
+ },
+ "journal": {
+  "entries": [
+   {
+    "book_fingerprint": "9beb1ffb5ca0c83c",
+    "book_revision": 17,
+    "broker_policy": "intraday_margin",
+    "cash": 2764.25,
+    "daily_pnl_pct": 0.0,
+    "date": "2026-09-10",
+    "day_trades_used": 0,
+    "decisions": [
+     {
+      "action": "place-buy",
+      "detail": "$557.94, stop 86.46, target 110.22, risking $35.87",
+      "price": 92.4,
+      "reason": "Score 78 Momentum \u2014 Strong Buy",
+      "shares": 6.0383,
+      "symbol": "SCHW"
+     }
+    ],
+    "desk": "swing",
+    "engine_sha": null,
+    "equity": 4954.36,
+    "halted": false,
+    "house": {
+     "caps": {
+      "sector_pct": 40.0,
+      "symbol_pct": 15.0
+     },
+     "desks": 3,
+     "equity": 14926.57,
+     "peers": [
+      "pullback",
+      "momentum"
+     ],
+     "sector_pct": {
+      "Financials": 11.7,
+      "Information Technology": 34.02
+     },
+     "top_symbol_pct": {
+      "DELL": 3.41,
+      "HOOD": 7.96,
+      "MDB": 3.54,
+      "MRVL": 1.85,
+      "MU": 6.98,
+      "NVDA": 10.17,
+      "SCHW": 3.74,
+      "SNDK": 8.08
+     }
+    },
+    "invested": 2190.11,
+    "ladder": {
+     "base_dd_pct": null,
+     "cool_active": false,
+     "cool_until": null,
+     "dd_pct": 0.91,
+     "entries_blocked": false,
+     "entry_size_mult": 1.0,
+     "flatten": false,
+     "halt": false,
+     "hwm": 5000.0,
+     "reason": null,
+     "reentry_active": false,
+     "reentry_base": null,
+     "regained": false,
+     "rules": {
+      "reentry_size_mult": 0.5,
+      "rungs": [
+       {
+        "dd_pct": 4.0,
+        "entry_size_mult": 0.5
+       },
+       {
+        "dd_pct": 6.0,
+        "entry_size_mult": 0.0
+       },
+       {
+        "cool_sessions": 5,
+        "dd_pct": 8.0,
+        "flatten": true
+       }
+      ],
+      "soft_daily_pct": 2.0
+     },
+     "rung": 0,
+     "soft_daily_hit": false
+    },
+    "mode": "paper",
+    "positions": 4,
+    "realized_pnl": -48.57,
+    "run_id": "2026-09-10-opening-range",
+    "run_key": "2026-09-10#opening-range",
+    "scan_as_of": "2026-09-10 10:15",
+    "scan_stale": null,
+    "sentinel": false,
+    "skipped": [
+     {
+      "reason": "15.2% of equity, over the 15% cap but inside the 1.5pt rebalance deadband \u2014 a price wobble is not a breach",
+      "symbol": "NVDA"
+     }
+    ],
+    "slot": "opening-range",
+    "ts": "2026-09-10T14:45:00Z",
+    "warnings": [
+     "MU: not in this scan's universe \u2014 priced but unjudged",
+     "SNDK: not in this scan's universe \u2014 priced but unjudged",
+     "NVDA: not in this scan's universe \u2014 priced but unjudged",
+     "HOOD: not in this scan's universe \u2014 priced but unjudged"
+    ],
+    "working_orders": 1
+   },
+   {
+    "book_fingerprint": "4b9216cde5cc4444",
+    "book_revision": 18,
+    "broker_policy": "intraday_margin",
+    "cash": 3108.53,
+    "daily_pnl_pct": 0.81,
+    "date": "2026-09-10",
+    "day_trades_used": 0,
+    "decisions": [
+     {
+      "action": "fill-buy",
+      "detail": "$557.94 filled at the resting limit",
+      "price": 92.4,
+      "reason": "Score 78 Momentum \u2014 Strong Buy",
+      "shares": 6.0383,
+      "symbol": "SCHW"
+     },
+     {
+      "action": "fill-sell",
+      "detail": "Target 257.05 hit \u2014 taking half, stop to breakeven \u2014 realised $+69.56",
+      "price": 259.35,
+      "reason": "target",
+      "shares": 1.697731,
+      "symbol": "NVDA"
+     },
+     {
+      "action": "fill-sell",
+      "detail": "Price 90.00 broke the 93.85 stop (1.5x ATR stop) \u2014 realised $-74.94",
+      "price": 89.775,
+      "reason": "stop",
+      "shares": 5.145277,
+      "symbol": "HOOD"
+     }
+    ],
+    "desk": "swing",
+    "engine_sha": null,
+    "equity": 4994.43,
+    "halted": false,
+    "house": {
+     "caps": {
+      "sector_pct": 40.0,
+      "symbol_pct": 15.0
+     },
+     "desks": 3,
+     "equity": 14996.76,
+     "peers": [
+      "pullback",
+      "momentum"
+     ],
+     "sector_pct": {
+      "Financials": 7.32,
+      "Information Technology": 32.63
+     },
+     "top_symbol_pct": {
+      "DELL": 3.39,
+      "HOOD": 3.6,
+      "MDB": 3.52,
+      "MRVL": 1.84,
+      "MU": 6.94,
+      "NVDA": 8.9,
+      "SCHW": 3.72,
+      "SNDK": 8.04
+     }
+    },
+    "invested": 1885.89,
+    "ladder": {
+     "base_dd_pct": null,
+     "cool_active": false,
+     "cool_until": null,
+     "dd_pct": 0.07,
+     "entries_blocked": false,
+     "entry_size_mult": 1.0,
+     "flatten": false,
+     "halt": false,
+     "hwm": 5000.0,
+     "reason": null,
+     "reentry_active": false,
+     "reentry_base": null,
+     "regained": false,
+     "rules": {
+      "reentry_size_mult": 0.5,
+      "rungs": [
+       {
+        "dd_pct": 4.0,
+        "entry_size_mult": 0.5
+       },
+       {
+        "dd_pct": 6.0,
+        "entry_size_mult": 0.0
+       },
+       {
+        "cool_sessions": 5,
+        "dd_pct": 8.0,
+        "flatten": true
+       }
+      ],
+      "soft_daily_pct": 2.0
+     },
+     "rung": 0,
+     "soft_daily_hit": false
+    },
+    "mode": "paper",
+    "positions": 4,
+    "realized_pnl": -53.95,
+    "run_id": "2026-09-10-midday",
+    "run_key": "2026-09-10#midday",
+    "scan_as_of": "2026-09-10 10:15",
+    "scan_stale": null,
+    "sentinel": false,
+    "skipped": [],
+    "slot": "midday",
+    "ts": "2026-09-10T17:15:00Z",
+    "warnings": [
+     "MU: not in this scan's universe \u2014 priced but unjudged",
+     "SNDK: not in this scan's universe \u2014 priced but unjudged"
+    ],
+    "working_orders": 0
+   }
+  ]
+ },
+ "state": {
+  "account": {
+   "broker": "Robinhood",
+   "display": "\u2022\u2022\u2022\u20226005",
+   "live_cash_expected": 50.0,
+   "nickname": "Agentic",
+   "type": "limited_margin"
+  },
+  "book": {
+   "broker_policy": "intraday_margin",
+   "cash": 3108.53,
+   "cool_until": null,
+   "daily_pnl_pct": 0.81,
+   "day_trade_limit": null,
+   "day_trades_used": 0,
+   "deployed_pct": 37.76,
+   "deposits_total": 0.0,
+   "equity": 4994.43,
+   "freeze_until": null,
+   "frozen": false,
+   "halt_reason": null,
+   "halted": false,
+   "hwm": 5000.0,
+   "imd_counted_90d": 0,
+   "invested": 1885.89,
+   "ladder": {
+    "base_dd_pct": null,
+    "cool_active": false,
+    "cool_until": null,
+    "dd_pct": 0.07,
+    "entries_blocked": false,
+    "entry_size_mult": 1.0,
+    "flatten": false,
+    "halt": false,
+    "hwm": 5000.0,
+    "reason": null,
+    "reentry_active": false,
+    "reentry_base": null,
+    "regained": false,
+    "rules": {
+     "reentry_size_mult": 0.5,
+     "rungs": [
+      {
+       "dd_pct": 4.0,
+       "entry_size_mult": 0.5
+      },
+      {
+       "dd_pct": 6.0,
+       "entry_size_mult": 0.0
+      },
+      {
+       "cool_sessions": 5,
+       "dd_pct": 8.0,
+       "flatten": true
+      }
+     ],
+     "soft_daily_pct": 2.0
+    },
+    "rung": 0,
+    "soft_daily_hit": false
+   },
+   "maintenance_pct": 25.0,
+   "open_deficit": null,
+   "open_equity": 4954.36,
+   "pdt_applies": false,
+   "projected_deficit": -4522.95,
+   "realized_pnl": -53.95,
+   "seed_equity": 5000.0,
+   "starting_equity": 5000.0,
+   "total_return_pct": -0.11
+  },
+  "broker_policy": {
+   "describe": "intraday_margin: FINRA 4210 / Reg. Notice 26-10 \u2014 no day-trade cap, 25% intraday maintenance, deficits met within 5 business days; a practice freezes entries for 90 days",
+   "name": "intraday_margin"
+  },
+  "closed_trades": [
+   {
+    "closed": "2026-09-02",
+    "closed_slot": "pre-market",
+    "detail": "Position was 15.2% of equity, over the 15% cap",
+    "entry": 218.38,
+    "exit": 217.3154,
+    "opened": "2026-09-01",
+    "pnl": -0.04,
+    "pnl_pct": -0.49,
+    "reason": "rebalance",
+    "shares": 0.038917,
+    "symbol": "NVDA"
+   },
+   {
+    "closed": "2026-09-02",
+    "closed_slot": "sentinel",
+    "detail": "Price 179.29 broke the 186.49 stop",
+    "entry": 211.92,
+    "exit": 178.8418,
+    "opened": "2026-09-01",
+    "pnl": -48.53,
+    "pnl_pct": -15.61,
+    "reason": "stop",
+    "shares": 1.46698,
+    "symbol": "CRDO"
+   },
+   {
+    "closed": "2026-09-10",
+    "closed_slot": "midday",
+    "detail": "Target 257.05 hit \u2014 taking half, stop to breakeven",
+    "entry": 218.38,
+    "exit": 259.35,
+    "opened": "2026-09-01",
+    "pnl": 69.56,
+    "pnl_pct": 18.76,
+    "reason": "target",
+    "shares": 1.697731,
+    "symbol": "NVDA"
+   },
+   {
+    "closed": "2026-09-10",
+    "closed_slot": "midday",
+    "detail": "Price 90.00 broke the 93.85 stop (1.5x ATR stop)",
+    "entry": 104.34,
+    "exit": 89.775,
+    "opened": "2026-09-01",
+    "pnl": -74.94,
+    "pnl_pct": -13.96,
+    "reason": "stop",
+    "shares": 5.145277,
+    "symbol": "HOOD"
+   }
+  ],
+  "date": "2026-09-10",
+  "desk": "swing",
+  "engine_sha": null,
+  "equity_curve": [
+   {
+    "cash": 5000.0,
+    "date": "2026-09-01",
+    "equity": 5000.0,
+    "invested": 0.0,
+    "realized": 0.0,
+    "slot": "pre-market",
+    "ts": "2026-09-01T13:05:35Z"
+   },
+   {
+    "cash": 2501.89,
+    "date": "2026-09-02",
+    "equity": 4931.55,
+    "invested": 2429.66,
+    "realized": -0.04,
+    "slot": "pre-market",
+    "ts": "2026-09-02T13:03:14Z"
+   },
+   {
+    "cash": 2764.25,
+    "date": "2026-09-10",
+    "equity": 4954.36,
+    "invested": 2190.11,
+    "realized": -48.57,
+    "slot": "opening-range",
+    "ts": "2026-09-10T14:45:00Z"
+   },
+   {
+    "cash": 3108.53,
+    "date": "2026-09-10",
+    "equity": 4994.43,
+    "invested": 1885.89,
+    "realized": -53.95,
+    "slot": "midday",
+    "ts": "2026-09-10T17:15:00Z"
+   }
+  ],
+  "generated": "2026-09-10T17:15:00Z",
+  "house": {
+   "by_sector": {
+    "Financials": 1097.96,
+    "Information Technology": 4893.67
+   },
+   "by_symbol": {
+    "DELL": 509.08,
+    "HOOD": 540.62,
+    "MDB": 528.1,
+    "MRVL": 275.42,
+    "MU": 1041.27,
+    "NVDA": 1334.35,
+    "SCHW": 557.34,
+    "SNDK": 1205.45
+   },
+   "caps": {
+    "sector_pct": 40.0,
+    "symbol_pct": 15.0
+   },
+   "desk_count": 3,
+   "desks": {
+    "__this__": {
+     "committed": 0.0,
+     "equity": 4994.43,
+     "invested": 1885.89
+    },
+    "momentum": {
+     "committed": 0.0,
+     "equity": 5038.17,
+     "invested": 2470.74
+    },
+    "pullback": {
+     "committed": 0.0,
+     "equity": 4964.17,
+     "invested": 1635.0
+    }
+   },
+   "equity": 14996.76,
+   "peers_loaded": [
+    "pullback",
+    "momentum"
+   ],
+   "peers_missing": [],
+   "sector_pct": {
+    "Financials": 7.32,
+    "Information Technology": 32.63
+   },
+   "symbol_pct": {
+    "DELL": 3.39,
+    "HOOD": 3.6,
+    "MDB": 3.52,
+    "MRVL": 1.84,
+    "MU": 6.94,
+    "NVDA": 8.9,
+    "SCHW": 3.72,
+    "SNDK": 8.04
+   }
+  },
+  "journal": {
+   "book_fingerprint": "4b9216cde5cc4444",
+   "book_revision": 18,
+   "broker_policy": "intraday_margin",
+   "cash": 3108.53,
+   "daily_pnl_pct": 0.81,
+   "date": "2026-09-10",
+   "day_trades_used": 0,
+   "decisions": [
+    {
+     "action": "fill-buy",
+     "detail": "$557.94 filled at the resting limit",
+     "price": 92.4,
+     "reason": "Score 78 Momentum \u2014 Strong Buy",
+     "shares": 6.0383,
+     "symbol": "SCHW"
+    },
+    {
+     "action": "fill-sell",
+     "detail": "Target 257.05 hit \u2014 taking half, stop to breakeven \u2014 realised $+69.56",
+     "price": 259.35,
+     "reason": "target",
+     "shares": 1.697731,
+     "symbol": "NVDA"
+    },
+    {
+     "action": "fill-sell",
+     "detail": "Price 90.00 broke the 93.85 stop (1.5x ATR stop) \u2014 realised $-74.94",
+     "price": 89.775,
+     "reason": "stop",
+     "shares": 5.145277,
+     "symbol": "HOOD"
+    }
+   ],
+   "desk": "swing",
+   "engine_sha": null,
+   "equity": 4994.43,
+   "halted": false,
+   "house": {
+    "caps": {
+     "sector_pct": 40.0,
+     "symbol_pct": 15.0
+    },
+    "desks": 3,
+    "equity": 14996.76,
+    "peers": [
+     "pullback",
+     "momentum"
+    ],
+    "sector_pct": {
+     "Financials": 7.32,
+     "Information Technology": 32.63
+    },
+    "top_symbol_pct": {
+     "DELL": 3.39,
+     "HOOD": 3.6,
+     "MDB": 3.52,
+     "MRVL": 1.84,
+     "MU": 6.94,
+     "NVDA": 8.9,
+     "SCHW": 3.72,
+     "SNDK": 8.04
+    }
+   },
+   "invested": 1885.89,
+   "ladder": {
+    "base_dd_pct": null,
+    "cool_active": false,
+    "cool_until": null,
+    "dd_pct": 0.07,
+    "entries_blocked": false,
+    "entry_size_mult": 1.0,
+    "flatten": false,
+    "halt": false,
+    "hwm": 5000.0,
+    "reason": null,
+    "reentry_active": false,
+    "reentry_base": null,
+    "regained": false,
+    "rules": {
+     "reentry_size_mult": 0.5,
+     "rungs": [
+      {
+       "dd_pct": 4.0,
+       "entry_size_mult": 0.5
+      },
+      {
+       "dd_pct": 6.0,
+       "entry_size_mult": 0.0
+      },
+      {
+       "cool_sessions": 5,
+       "dd_pct": 8.0,
+       "flatten": true
+      }
+     ],
+     "soft_daily_pct": 2.0
+    },
+    "rung": 0,
+    "soft_daily_hit": false
+   },
+   "mode": "paper",
+   "positions": 4,
+   "realized_pnl": -53.95,
+   "run_id": "2026-09-10-midday",
+   "run_key": "2026-09-10#midday",
+   "scan_as_of": "2026-09-10 10:15",
+   "scan_stale": null,
+   "sentinel": false,
+   "skipped": [],
+   "slot": "midday",
+   "ts": "2026-09-10T17:15:00Z",
+   "warnings": [
+    "MU: not in this scan's universe \u2014 priced but unjudged",
+    "SNDK: not in this scan's universe \u2014 priced but unjudged"
+   ],
+   "working_orders": 0
+  },
+  "mode": "paper",
+  "orders_to_place": [],
+  "pm_rules": {
+   "closed_trades_max": 300,
+   "equity_curve_max": 400,
+   "exit_slippage_pct": 0.25,
+   "house_caps_enabled": true,
+   "house_max_sector_pct": 40.0,
+   "house_max_symbol_pct": 15.0,
+   "ladder": {
+    "reentry_size_mult": 0.5,
+    "rungs": [
+     {
+      "dd_pct": 4.0,
+      "entry_size_mult": 0.5
+     },
+     {
+      "dd_pct": 6.0,
+      "entry_size_mult": 0.0
+     },
+     {
+      "cool_sessions": 5,
+      "dd_pct": 8.0,
+      "flatten": true
+     }
+    ],
+    "soft_daily_pct": 2.0
+   },
+   "macro_gate_lookahead_min": 120,
+   "max_new_entries_per_run": 3,
+   "max_price_drift_pct": 5.0,
+   "max_rebalances_per_session": 1,
+   "max_spread_pct": 1.0,
+   "max_trims_before_exit": 2,
+   "pdt_equity_threshold": 25000.0,
+   "pdt_max_day_trades": 3,
+   "pdt_reserve": 1,
+   "pdt_window_business_days": 5,
+   "rebalance_deadband_pct": 1.5,
+   "scale_out_pct": 50.0,
+   "scan_stale_minutes": 240,
+   "trim_pct": 33.0,
+   "warn_price_drift_pct": 3.0
+  },
+  "positions": [
+   {
+    "atr_14": 58.21,
+    "atr_pct": 6.07,
+    "avg_cost": 959.46,
+    "entry_score": 76.5,
+    "gics": "Information Technology",
+    "high_water": 959.46,
+    "industry": "Semiconductors",
+    "intraday_shares": 0.0,
+    "last_price": 941.9,
+    "last_priced": "2026-09-10T17:15:00Z",
+    "last_trim_date": null,
+    "market_value": 377.82,
+    "opened": "2026-09-01",
+    "opened_slot": "sentinel",
+    "price": 941.9,
+    "price_source": "pm-fetch",
+    "scaled_out": false,
+    "score": null,
+    "setup": null,
+    "shares": 0.401123,
+    "stop": 872.14,
+    "stop_basis": "1.5x ATR stop",
+    "stop_basis_kind": "atr",
+    "stop_basis_short": "1.5x ATR",
+    "stop_pct": 9.1,
+    "symbol": "MU",
+    "target": 1221.42,
+    "thesis": "Long-term trend up but price has pulled back below the 50-day \u2014 mean-reversion entry",
+    "trim_count": 0,
+    "unrealized": -7.04,
+    "unrealized_pct": -1.83
+   },
+   {
+    "atr_14": 137.11,
+    "atr_pct": 8.75,
+    "avg_cost": 1570.41,
+    "entry_score": 77.5,
+    "gics": "Information Technology",
+    "high_water": 1581.975,
+    "industry": "Computer Hardware",
+    "intraday_shares": 0.0,
+    "last_price": 1526.54,
+    "last_priced": "2026-09-10T17:15:00Z",
+    "last_trim_date": null,
+    "market_value": 509.33,
+    "opened": "2026-09-01",
+    "opened_slot": "midday",
+    "price": 1526.54,
+    "price_source": "pm-fetch",
+    "scaled_out": false,
+    "score": null,
+    "setup": null,
+    "shares": 0.33365,
+    "stop": 1381.96,
+    "stop_basis": "1.5x ATR stop",
+    "stop_basis_kind": "atr",
+    "stop_basis_short": "1.5x ATR",
+    "stop_pct": 12.0,
+    "symbol": "SNDK",
+    "target": 2135.77,
+    "thesis": "Long-term trend up but price has pulled back below the 50-day \u2014 mean-reversion entry",
+    "trim_count": 0,
+    "unrealized": -14.64,
+    "unrealized_pct": -2.79
+   },
+   {
+    "atr_14": 7.48,
+    "atr_pct": 3.39,
+    "avg_cost": 218.38,
+    "entry_score": 78.0,
+    "gics": "Information Technology",
+    "high_water": 260.0,
+    "industry": "Semiconductors",
+    "intraday_shares": 0.0,
+    "last_price": 260.0,
+    "last_priced": "2026-09-10T17:15:00Z",
+    "last_trim_date": null,
+    "market_value": 441.41,
+    "opened": "2026-09-01",
+    "opened_slot": "sentinel",
+    "price": 260.0,
+    "price_source": "pm-fetch",
+    "scaled_out": true,
+    "score": null,
+    "setup": null,
+    "shares": 1.697732,
+    "stop": 218.38,
+    "stop_basis": "breakeven \u2014 half the position was taken at the 3R target",
+    "stop_basis_kind": "breakeven",
+    "stop_basis_short": "breakeven",
+    "stop_pct": 5.9,
+    "symbol": "NVDA",
+    "target": 257.05,
+    "thesis": "Price above both MAs with 50 over 200 \u2014 trend intact and extended",
+    "trim_count": 0,
+    "unrealized": 70.66,
+    "unrealized_pct": 19.06
+   },
+   {
+    "atr_14": 2.77,
+    "atr_pct": 3.0,
+    "avg_cost": 92.4,
+    "entry_score": 78.0,
+    "gics": "Financials",
+    "high_water": 92.4,
+    "industry": "Capital Markets",
+    "intraday_shares": 6.0383,
+    "last_price": 92.3,
+    "last_priced": "2026-09-10T17:15:00Z",
+    "last_rebalance_date": null,
+    "last_trim_date": null,
+    "market_value": 557.34,
+    "opened": "2026-09-10",
+    "opened_slot": "midday",
+    "price": 92.3,
+    "price_source": "pm-fetch",
+    "rebalance_count": 0,
+    "scaled_out": false,
+    "score": 78.0,
+    "setup": "Momentum",
+    "shares": 6.0383,
+    "stop": 86.46,
+    "stop_basis": "1.5% below the 50-day MA ($87.78) \u2014 within a whisker of the 1.5x ATR stop, so the structural level is the better place to sit",
+    "stop_basis_kind": "atr",
+    "stop_basis_short": "1.5x ATR",
+    "stop_pct": 6.43,
+    "symbol": "SCHW",
+    "target": 110.22,
+    "thesis": "Price above both MAs with 50 over 200 \u2014 trend intact",
+    "trim_count": 0,
+    "unrealized": -0.6,
+    "unrealized_pct": -0.11
+   }
+  ],
+  "rules": {
+   "atr_stop_multiple": 1.5,
+   "cumulative_risk_cap_pct": 20.0,
+   "exit_score_below": 45.0,
+   "fractional": true,
+   "max_daily_loss_pct": 3.0,
+   "max_deployed_pct": 85.0,
+   "max_per_sector": 3,
+   "max_position_pct": 15.0,
+   "max_positions": 10,
+   "max_risk_per_trade_pct": 2.0,
+   "max_stop_pct": 12.0,
+   "min_cash_reserve_pct": 15.0,
+   "min_coverage_to_propose": 70.0,
+   "min_notional": 1.0,
+   "min_risk_per_trade_pct": 0.5,
+   "min_score_to_propose": 60.0,
+   "min_stop_pct": 3.0,
+   "share_decimals": 6,
+   "trim_score_below": 55.0
+  },
+  "scan_as_of": "2026-09-10 10:15",
+  "scan_stale": null,
+  "sentinel": false,
+  "slot": "midday",
+  "working_orders": []
+ }
+}
