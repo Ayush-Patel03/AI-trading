@@ -80,6 +80,11 @@ Closed-trade P&L by exit reason, by desk, by entry-score decile and by verdict a
 window from the bars, and exposure-adjusted: the average invested fraction times SPY's
 return is what a passive position of the same average size would have earned.
 
+The `--json` also carries, for `render_review.py` (U-05): `shadow` — the K-06 booked-versus-
+shadow gap per desk, cumulative and across the window; `house` — the latest journal entry's
+HOUSE-01 block (combined equity, N_eff, β·w, overlap, largest sector); `engine_sha` and
+`generated_at`. All read off the journals and books; nothing is recomputed.
+
 The honesty budget: every number in the markdown carries its `n`; anything under 30 says
 "not a sample"; there is no win rate and no Sharpe anywhere in this file.
 
@@ -569,6 +574,51 @@ def benchmark(entries, series_oc=None):
     return out
 
 
+# ---------------------------------------------------------------- shadow ledger, house
+def shadow_ledger(entries, books):
+    """Per desk: the booked-versus-shadow gap (K-06) — cumulative on the book, and the
+    movement across the journal window where the entries carry a `shadow` block. A desk
+    with no shadow block on its book has the model off; that is reported, not zeroed."""
+    out = {}
+    desks = sorted(set(books or {}) | {e["desk"] for e in entries})
+    for desk in desks:
+        sh = ((books or {}).get(desk) or {}).get("shadow")
+        with_sh = [e for e in entries if e["desk"] == desk and isinstance(e.get("shadow"), dict)]
+        row = {"model": "on" if isinstance(sh, dict) or with_sh else "off",
+               "cum_gap_usd": None, "n_fills": 0, "gap_share_of_realized_pct": None,
+               "window_gap_usd": None, "n_entries_with_shadow": len(with_sh)}
+        src = with_sh[-1]["shadow"] if with_sh else (sh if isinstance(sh, dict) else None)
+        if src:
+            row["cum_gap_usd"] = validate._f(src.get("cum_gap_usd"))
+            row["n_fills"] = int(src.get("n_fills") or 0)
+            row["gap_share_of_realized_pct"] = validate._f(src.get("gap_share_of_realized_pct"))
+        if len(with_sh) >= 2:
+            a = validate._f(with_sh[0]["shadow"].get("cum_gap_usd"))
+            b = validate._f(with_sh[-1]["shadow"].get("cum_gap_usd"))
+            row["window_gap_usd"] = round(b - a, 2) if a is not None and b is not None else None
+        out[desk] = row
+    return out
+
+
+def house_latest(entries):
+    """The most recent journal entry that carries a `house` block (HOUSE-01 / K-03), as
+    the review's picture of combined exposure; None when no entry carries one."""
+    for e in reversed(entries):
+        h = e.get("house")
+        if isinstance(h, dict):
+            return {"date": e["date"], "slot": e.get("slot"), "desk": e["desk"],
+                    "equity": h.get("equity"), "desks": h.get("desks"),
+                    "exposure": h.get("exposure") if isinstance(h.get("exposure"), dict) else None}
+    return None
+
+
+def engine_sha_latest(entries):
+    for e in reversed(entries):
+        if e.get("engine_sha"):
+            return e["engine_sha"]
+    return None
+
+
 # ---------------------------------------------------------------- the report
 def build(entries, books=None, series_oc=None, horizons=DEFAULT_HORIZONS, with_cf=False,
           since=None):
@@ -585,6 +635,11 @@ def build(entries, books=None, series_oc=None, horizons=DEFAULT_HORIZONS, with_c
         "attribution": attribution(entries, books or {}, since=since),
         "benchmark": benchmark(entries, series_oc),
         "counterfactual": None,
+        "shadow": shadow_ledger(entries, books or {}),
+        "house": house_latest(entries),
+        "engine_sha": engine_sha_latest(entries),
+        "generated_at": dt.datetime.now(dt.timezone.utc).replace(microsecond=0)
+                        .isoformat().replace("+00:00", "Z"),
     }
     if with_cf:
         if series_oc is None:

@@ -964,6 +964,20 @@ and setup, and each desk's return against exposure-adjusted SPY. It is read-only
 journals and books; every number carries its n, anything under 30 says *not a sample*, and
 it prints no win rate and no Sharpe. The review quotes it; it does not recompute it.
 
+The same numbers are published as a page (U-05): `python3 engine/render_review.py --review
+review.json --ledger experiments/ledger.jsonl --model-card docs/model-card.md [--ic ic.json]
+[--health health.json] --out weekly-review.html` renders `report.py --json` — plus the
+experiment ledger, the week's `ic.py` output when the archive was staged, and the model card
+(`docs/model-card.md`, whose front-matter fields it parses) — into one self-contained HTML
+page in the Trade Desk palette: masthead, benchmark-relative per desk, attribution, refusals
+histogram by rule and week (inline SVG), the E5 counterfactual, the shadow ledger, house
+exposure from the latest journal entry, the ledger table with the DSR reminder, and the model
+card block. The honesty budget is enforced in code: every aggregate cell carries its n, every
+row under 30 carries a *not a sample* chip, and the renderer exits 2 rather than publish a
+page in which the words "win rate" or "Sharpe" appear — from any input, the ledger and the
+card included. The Friday task publishes it as `claude/reviews/weekly-<date>.html` next to
+the markdown (`docs/runner/prompts/weekly-review.md`).
+
 **The 2026-09-01 one-off** (`trig_018y5gXv3gNafba2GULRoDaU`, 11:00 ET) verifies that the
 first morning under the rewritten prompts and engine actually completed: no `import archive`
 crash, `claude/latest-scan.json` written, scans inside ~40 minutes, PM entries carrying
