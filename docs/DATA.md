@@ -36,6 +36,7 @@ absent from every replay (see `docs/BACKTEST.md` §1).
 | Earnings calendar (am/pm, estimate, actual) | `get_earnings_calendar` | earnings gate, catalyst pillar | daily | 31-day window | Forward calendar; consensus is as-of-announcement only, no revision history |
 | News with full bodies | `get_equity_news` | catalyst, analyst targets | per slot | 1 symbol/call | Minute-stamped articles. Analyst targets appear only in article text, so they are not a series |
 | VIX / SPX / NDX | `get_indexes` → `get_index_quotes` | regime | per slot | many | Live to the second. **Not scraped.** No history through the connector; the backtest leaves `vix` absent rather than proxied |
+| VIX, VIX3M term structure (history) | Cboe CSVs — §1c | options desk gates (`vix.json`), regime | daily | one GET per index | Dated daily closes; the one VIX series with a real date column. Stage the last close as `vix.json` |
 | Level 2 depth | `get_equity_price_book` | PM fills sanity | on demand | 4 symbols | Live only |
 | Options: chains, IV, volume, OI, put/call | Options-activity saved scan `cc3b6743-…` (`get_option_quotes` is 403) | intelligence pillar | per slot | market-wide | Live only; `sentiment.py` gates thin chains. `implied_move_pct` stays null without a straddle |
 | Retail attention (RH) | `get_popular_watchlists` + `get_watchlist_items` | universe (live) | per slot | per list | Live only. **This is the attention universe `universe.py` exists to replace** |
@@ -58,6 +59,30 @@ absent from every replay (see `docs/BACKTEST.md` §1).
 | IPO calendar | `iposcoop.com/ipo-calendar/`, RH *IPO Access* list | scan | daily | — | Forward; lockups estimated as IPO + 90/180 d |
 | Earnings transcripts | `stockanalysis.com/stocks/<T>/transcripts/` → alphastreet / fool.com | deep dives | on demand | 2 calls per name | Dated by call |
 | **Index membership history** | **Wikipedia S&P 500 / S&P 400 pages — `universe_history.py`** | **backtest universe** | **weekly, or before a harness run** | **one GET per page, project User-Agent** | **Add/remove effective dates per ticker — see §3** |
+
+### 1c. Cboe VIX / VIX3M daily history — the options desk's regime gate (D-02)
+
+The paper options desk (`docs/PM.md` §18) refuses new short vol when VIX > VIX3M or VIX > 30
+and reads both from `vix.json` in the run directory. Cboe publishes the full daily history of
+each index as a CSV on the CDN host that is already on the egress allowlist:
+
+```
+https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv
+https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX3M_History.csv
+```
+
+Columns `DATE,OPEN,HIGH,LOW,CLOSE` (VIX from 1990, VIX3M from 2007-12), one row per session,
+updated after the close. The scheduled task stages the last row of each as
+
+```json
+{"vix": 17.42, "vix3m": 19.31, "as_of": "2026-09-09", "source": "cdn.cboe.com daily_prices"}
+```
+
+`options_desk.parse_vix` also accepts `{"vix": {"close", "date"}}` objects or `[{date, close}]`
+rows per index, and any key casing. **PIT:** the CSV is the prior session's close during the
+day — label it so; the live VIX from `get_index_quotes` is the intraday number and may be
+used for `vix` when the session fetched it, with the CSV close for `vix3m` (the connector
+does not serve VIX3M). Absent `vix.json` the gate fails closed: no new structures.
 
 Dead and never-retry sources are listed in `docs/scan-sources.md`; do not re-probe them from a
 scheduled task.

@@ -414,7 +414,8 @@ def should_publish(jrn, book, prev_entry=None):
     now_fp = jrn.get("book_fingerprint") or book_fingerprint(book)
     prev_fp = (prev_entry or {}).get("book_fingerprint")
     has_book = bool((book.get("positions") or []) or (book.get("working_orders") or [])
-                    or (book.get("closed_trades") or []))
+                    or (book.get("closed_trades") or [])
+                    or (book.get("structures") or []))      # D-02: an options book's open spreads
     if prev_fp is None:
         # No comparable predecessor: either the first run ever, or a journal entry written
         # before fingerprints existed. Do not manufacture a "change" out of an empty book —

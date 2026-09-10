@@ -1103,6 +1103,7 @@ class rather than to the blend. `claude/engine/desks.json` defines them:
 | `momentum` | setup *Momentum*, RSI 50–72 — trend continuation, not exhaustion | `claude/paper-book-momentum.json`, `claude/pm-journal-momentum.json` |
 | `rotation` | **inactive template** (E26) — sector-ETF momentum, monthly, `time_catastrophe` | none — section 16 |
 | `orb` | **inactive template** (E24) — opening-range breakout, intraday, `chandelier` k_init 0.1, flatten at close | none — section 16 |
+| `options` | **inactive template** (E27, D-02) — XSP/SPY put credit spreads, paper, `kind: options` | none until activated — section 18 |
 
 Every desk starts from the same $5,000 of paper capital, runs under the same paper lock,
 account lock, risk rules (`portfolio.RULES`, overridable per desk in `desks.json` but not
@@ -1550,3 +1551,101 @@ python3 engine/pm.py --allow-inactive --desk rotation --slot power-hour --now 20
    run without `bars_etf.json` takes no decision and says so on stderr and in the journal;
    holdings are still managed by their stops.
 6. The first decision is the next last-power-hour-of-the-month, or `--force-rebalance` once.
+## 19. The paper options desk — XSP/SPY put credit spreads (E27, D-02, added 2026-09-10)
+
+`engine/options_desk.py` is the fourth desk and the first that is not the equity engine. It
+is **paper only, by construction**: the module imports nothing that can reach a broker
+(`tests/test_options_desk.py` pins its import list), it writes no order file, and `pm.py
+--desk options` runs it under exactly the protocol every other desk gets — revision,
+`--check`, heartbeat, journal merge, `pm_book_next-options.json` / `pm_state-options.json`.
+`desks.json` carries it as `"kind": "options"` with `"inactive": true`: `pm.py` refuses it
+without `--allow-inactive`, no book is created for it, and the peer loader, the paper mirror
+and the runner's peer staging skip it. The equity engine (`pm.run`) and the three equity desks
+are untouched.
+
+### The mandate (plan §6, Appendix H §2 / §7) — as implemented
+
+| Rule | Implementation |
+|---|---|
+| Structure | XSP put credit spread; SPY when XSP has no usable chain. 30–45 DTE, the expiry nearest 40; short strike nearest 20Δ (chain delta, else Black–Scholes at the row's IV), ties to the lower strike; long strike = short − width |
+| Width | **$5 is the maximum.** A 20Δ short collects less than 20% of the width as credit — always, at every IV — so a $5-wide risks over $400 per contract and the mandate's two numbers cannot both hold. The risk cap is the risk rule; the width is a structure parameter: the desk takes the widest of $5, $4, $3, $2 whose (width − credit) × 100 fits the cap, and journals the narrowing (`rules.width_fallback`; off, it does not trade under the cap) |
+| Risk per structure | ≤ 8% of desk equity ($400 on $5k) = (width − credit) × 100 × contracts; contracts = ⌊cap / loss per contract⌋, at least 1 or no trade. The ladder's `entry_size_mult` scales the cap |
+| Total risk | Σ max loss of open structures ≤ 40% of desk equity |
+| Concurrency | ≤ 5 structures; ≤ 2 per sector (index underlyings are the `Index` sector); never on an underlying a stock desk holds or has a working buy on — SPY, XSP and SPX are aliases of one exposure for that test |
+| Exits | 50% of max profit (debit to close ≤ half the credit) or 21 DTE, whichever first; **defensive close** when spot < short strike; a structure that reaches expiry anyway is cash-settled at intrinsic |
+| Regime gates | no new short vol when VIX > VIX3M, VIX > 30, or SPY GEX < 0. GEX = Σ gamma × OI × 100 × spot² × 1% (calls +, puts −) from the chain snapshot; **no gamma/OI in the chain → the gate is skipped and the skip journaled**. No `vix.json` → the gate fails: an unmeasured regime is not a benign one |
+| Portfolio limits | β-weighted delta (Σ net Δ × 100 × contracts × spot × β × 1%) within ±0.5% of **house NAV** (this desk + every peer stock desk's cash and marked positions; the desk alone when no peer is staged) per 1% SPY move; net short vega ≤ 0.5% of desk equity per vol point; \|net theta\| ≤ 0.3% of desk equity per day |
+| Paper fill | net credit = (short mid − long mid) − $0.02 per leg; a leg with bid = 0 or (ask − bid)/mid > 10% is refused at entry. A close is **never** refused for width — protection does not sit unfilled — the width is journaled and the fill goes through at mid ± $0.02/leg |
+| Mark | every slot from the chain mids; a leg the chain does not carry is marked by Black–Scholes at its last IV (`value_source: model`) and the journal says so; no IV and no spot → carried at the last mark and reported UNPRICED |
+| Stress | weekly (first decision slot ≥ 7 days after the last): instantaneous shocks repriced leg by leg by Black–Scholes, S′ = S(1 + shift), σ′ = max(σ + shift, floor), T unchanged. Stored on `book["stress"]` and the journal; a scenario costing more than half the total-risk cap raises a warning |
+| Ladder / kill switch | K-02 unchanged: rung 1 halves the per-structure cap, rung 2 blocks entries, rung 3 **flattens every structure at its mark** and cools off; the −3% daily kill blocks entries. Exits stay live at every rung |
+| Broker policy | a credit spread is defined-risk: under `intraday_margin` (and `legacy_pdt`) the maintenance requirement **is** the max loss; under `cash_settled` the full width is reserved. `margin_state()` reports requirement and projected deficit; an entry that would leave the requirement over equity is refused. The 40% cap binds first |
+| Shadow fills | **not applicable** — the paper fill (mid less slippage, plus fees, both ways) is the conservative model. `jrn["shadow"].applicable` is false |
+| House exposure | when a stock desk runs with the options book staged as a peer, each open structure enters HOUSE-01's tally as its **beta-weighted-delta equity equivalent**: \|net Δ\| × 100 × contracts × spot × β, under the underlying's symbol and the `Index` sector, `kind: options-delta` (`house.options_holdings`). A short put spread is a hidden long and is counted as one; its cash (less the debit to close) is house equity |
+
+### Fees (`rules.fees`, charged per contract per leg, on the open **and** the close)
+
+| | Regulatory pass-through | Index-option fee | Commission |
+|---|---|---|---|
+| XSP (and SPX, NDX, RUT, VIX, DJX) | $0.04 | $0.35 | $0 |
+| SPY (equity options) | $0.04 | — | $0 |
+
+A one-contract XSP spread costs $0.78 to open and $0.78 to close; SPY $0.08 each way. The
+$0.35 is Robinhood's index-option contract fee as researched on 2026-09-10 (Appendix H §5);
+the regulatory line is the OCC/ORF/FINRA order of magnitude. Fees accumulate on the
+structure (`fees`) and the book (`fees_paid`) and are inside every P&L number.
+
+### Black–Scholes, in the standard library
+
+`bs_price(S, K, T, r, sigma, put=True)` is the European price with T in years;
+`bs_greeks()` returns delta, gamma, **theta per day** and **vega per vol point**;
+`implied_vol()` is a bisection on [1e-4, 5.0] and returns None outside the no-arbitrage
+band. `r` is `rules.risk_free` (4%). XSP is European and cash-settled, so the model is
+exact in kind; SPY is American and the early-exercise premium on a 20Δ put is ignored. The
+stress scenarios, the delta derivation when a chain row has no delta, and the mark of an
+unquoted leg all go through these three functions and nothing else.
+
+### What a slot needs staged
+
+| File | Content | Without it |
+|---|---|---|
+| `option_chains.json` | any shape `snapshots.py` accepts (Robinhood rows, a Cboe payload, `{SYMBOL: {...}}`) with **puts for XSP and/or SPY at three or more expiries**, carrying bid, ask, `implied_volatility` and — for the delta pick and the GEX gate — delta, gamma, open_interest. Spot from `underlying_price` / `current_price` on the payload | structures are marked by model and no entry is possible |
+| `vix.json` | `{"vix": 17.4, "vix3m": 19.2, "as_of": "2026-09-10"}` — from the Cboe CSVs in `docs/DATA.md` §1c (any key casing; `{close, date}` objects or `[{date, close}]` rows per index are accepted) | no new short vol (the gate fails closed) |
+| `pm_quotes.json` | optional; the SPY spot fallback when the chain carries no spot | XSP only from the chain |
+| the stock desks' books | `pm.load_peers` stages them; held underlyings are excluded, their equity is the house NAV | the desk's own equity is the NAV; nothing is excluded |
+
+**Robinhood's XSP chain — assumed, not verified.** `get_option_quotes` still returns 403 on
+this account and `get_option_chains` has not been called for an index root, so whether
+XSP appears in it at all, under what `chain_symbol`, with what strike increments (the
+reader assumes 1-point strikes near the money) and whether the rows carry greeks and open
+interest are all assumptions the first staged chain will settle. The reader tolerates
+every one of them being wrong: no delta → derived from IV; no IV → implied from the mid;
+no gamma/OI → GEX gate skipped; no XSP → SPY.
+
+### Activating it
+
+1. Remove `inactive` from the desk in `desks.json`.
+2. Seed the book: `python3 engine/options_desk.py --init-book paper_book_options.json`
+   ($5,000, no structures) and `project_write` it to `claude/paper-book-options.json`; an
+   empty `{"entries": []}` to `claude/pm-journal-options.json`.
+3. Add `options` to `runner/slots.json` `desks` (and to the PM slots' desk lists), and have
+   the scheduled task stage `option_chains.json` and `vix.json` with every PM slot.
+4. The coverage row then carries the desk like any other; the heartbeat's `positions` count
+   is the number of open structures.
+
+The dead-man's switch (K-05) stamps no stop on a spread — defined risk bounds it, and the
+21-DTE / breach exits fire on the next slot the runner reaches.
+
+### The 60-session paper trial and the review
+
+The desk runs paper-forward for 60 sessions (there is no chain archive to replay yet; the
+S-01 chain snapshot is being accumulated for exactly that harness). The review, against the
+Cboe PUT index's risk profile (Ennis Knupp / Cboe: ~10.3%/yr at ~9.9% SD over 1986–2008,
+losing less than the S&P in big-down months but still losing), asks: realised P&L after fees
+per structure and per session; win rate and the ratio of 50%-profit exits to DTE, breach and
+flatten exits; the worst stress result recorded each week against what the mark actually did
+on the worst session; net vega and theta against their caps; how often each gate blocked an
+entry; and whether the desk's daily P&L correlates with the equity desks' — the plan's own
+framing is that a short-vol sleeve is a higher-Sharpe form of equity beta, **not**
+diversification, and the house tally counts it as the hidden long it is. Keep, resize or
+retire at the review; `n` is stated.

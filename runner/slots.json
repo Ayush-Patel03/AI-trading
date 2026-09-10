@@ -80,11 +80,11 @@
     },
     "pm": {
       "required": ["pm_quotes.json"],
-      "optional": ["scan_results.json", "pm_broker.json", "pm_prices.json", "option_chains.json"]
+      "optional": ["scan_results.json", "pm_broker.json", "pm_prices.json", "option_chains.json", "vix.json"]
     },
     "sentinel": {
       "required": ["pm_quotes.json"],
-      "optional": ["pm_broker.json"]
+      "optional": ["pm_broker.json", "option_chains.json", "vix.json"]
     },
     "watch": {
       "required": ["pm_quotes.json"],
