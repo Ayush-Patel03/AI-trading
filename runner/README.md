@@ -69,6 +69,7 @@ C:\ai-trading-state\
   scan-index.json  scan-history.json
   archive\book-history\<pm run_id>.json               every revision that changed something
   archive\runs\<runner run_id>\                       boards, pm_state, engine stdout/stderr
+  archive\followed.json  attention_history.json       staged into every scan run and written back after: the followed set (BACKTEST.md §2a) and sentiment.py's rolling 20-scan attention history (P-04, COLLECTION.md §3b)
   manifests\<date>\<slot>-<desk>.json                 one per invocation; the idempotency record (sentinel-<HH>-<desk>, watch-<session>-<desk>, <slot>-scan, health-<HHMM>)
   health\<date>.json  <date>.md                      the health slot's sheet (engine/health.py + runner checks)
   health\heartbeat.json                              written by EVERY invocation, any outcome (K-05)

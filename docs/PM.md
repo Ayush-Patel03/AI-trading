@@ -1261,6 +1261,86 @@ N_eff, and staging bars turns it into a measurement.
 
 ---
 
+## 14c. VaR and stress — what the desk stands to lose (K-04, added 2026-09-10)
+
+Section 7's kill switch and the K-02 ladder react to a loss after it has happened; section
+14b says how crowded the house is. Neither says how much THIS desk's book stands to lose on
+an ordinary bad day, or what it would have done through the sessions this decade that broke
+the most books. `engine/var.py` answers both, once per run, for one desk's marked positions
+(working buys are not exposure until they fill). It is pure — weights and per-symbol daily
+returns in, a dict out — and nothing in it reads a file, mutates a book or touches an order.
+
+### The numbers
+
+Weights are position market value over **desk** equity, so cash carries a return of 0 and a
+40%-invested book's VaR is a share of desk equity, not of the invested slice.
+
+| Field | Definition | Without `bars.json` |
+|---|---|---|
+| `var.var_pct` | **1-day 99% historical-simulation VaR**: over the dates every held name shares (newest 504 at most — two trading years), the portfolio return Σ wᵢ rᵢ is sorted and the loss at the k-th worst observation, k = ⌊(1−α)·n⌋ (at least 1), is the VaR. 500 days at α = 0.99 is the 5th-worst day. Positive percent of desk equity. **Null with a reason under 120 overlapping days**, or when no held name has bars, or when the book is flat — an unmeasured VaR is never 0. | `null`, reason `no bars.json staged this run` |
+| `var.cvar_pct` | the mean loss of those k worst observations. Never below the VaR. | `null` |
+| `var.n_days`, `var.window`, `var.coverage_pct`, `var.uncovered` | how many shared days, their span, what share of the invested weight had bars, and which names had none (left out of the series, named, never counted as 0). | 0 / null |
+| `stress[<window>].pnl_pct` | the book's cumulative P&L, % of desk equity, had each holding repeated its **own** return through the window (`coverage: "own"`). When the staged bars do not reach that far — a two-year file covers neither 2020 nor 2022 — the holding's contribution is **β₂₅₂ × the benchmark's window return**, from SPY's own bars when they cover it (`benchmark_basis: "bars"`) else the index return recorded in `var.BENCH_WINDOW_RET` (`"index"`), and the window is labelled `coverage: "proxy"`. A name with neither bars nor a beta is unmeasured and `measured_pct` says how much of the book was (`"partial"`); a name is never given β = 1. | `{}` |
+| `worst_stress`, `worst_stress_window` | the most negative **long-side** window. | `null` |
+
+The five windows, inclusive of the return dated on each bound:
+
+| Window | What | Side |
+|---|---|---|
+| `2020-03-16` | the COVID crash's worst single session (S&P 500 −11.98%) | long |
+| `2022` | 2022-01-03 → 2022-12-30 cumulative, the rate-shock bear (−19.4%) | long |
+| `2024-08-05` | the yen-carry unwind session (−3.0%) | long |
+| `2025-04-03/04` | the two tariff sessions, cumulative (−10.5%) | long |
+| `2025-04-09` | the +9.5% tariff-pause squeeze | **short** — a long book gains; `short_pnl_pct` is the loss a short book (the options desk, later) would take. It never counts toward `worst_stress`. |
+
+`bars.json` is the same file `technicals.py` and section 14b read — the raw
+`get_equity_historicals` payload with SPY in the same call — staged in `$SCAN_DIR` when a
+slot fetched bars. It is optional and usually absent: the sentinel and most slots stage
+none, and the block says `"bars": "absent"`.
+
+### Thresholds, and what they do
+
+| `PM_RULES["var"]` | Default | Flag when |
+|---|---|---|
+| `alpha` | **0.99** | — |
+| `max_var_pct_of_desk` | **3.0** | `var_pct` above it |
+| `max_stress_multiple_of_halt` | **2.0** | `−worst_stress` above it × `halt_pct` (16% by default) |
+| `halt_pct` | **8.0** | the ladder's rung-3 halt, restated here |
+| `enforce` | **`false`** | — |
+
+A null VaR or an unmeasured stress never flags. **With `enforce` off — the default — the
+block is reported and gates nothing**: the full block goes to `state["risk"]`, the compact
+summary to the journal's `risk` block, and `var_pct` / `worst_stress` /
+`worst_stress_window` to every heartbeat (quiet or not) and from there onto the desk's
+coverage row, all additive; the console prints one line:
+
+```
+risk: VaR99 1.84% (cvar 2.61%, 498d) · worst stress 2022 -9.4% (proxy)   FLAGS var  [reported]
+risk: VaR n/a (no bars.json staged this run)
+```
+
+As with 14b, a reported-only flag raises **no** journal warning, so a standing flag does
+not publish a board every slot.
+
+**With `enforce` on, a flagged breach refuses NEW ENTRIES on that desk** and journals a
+`skipped` reason starting `VaR / stress (enforced):` plus a `VAR / STRESS` warning
+(`report.py` files it under `var_stress`). The gate sits in `entry_pass` after the K-03
+house-exposure check and **after** the exit pass has already run. Exits are never touched
+by anything in `var.py` or by this gate, in either mode: a book that could lose too much is
+a reason not to add, never a reason not to sell. The sentinel measures and reports the block
+and takes no entry decision either way, so a quiet sentinel stays quiet.
+
+### What the fixture book measures today
+
+The swing fixture (four names, MU 7.6%, NVDA 8.8%, SCHW 11.2%, SNDK 10.2% of desk equity)
+with no bars: everything null with the reason, nothing flagged, nothing refused. The 3%
+cap and the 2× halt multiple are risk-policy choices and they are Vishal's to change;
+staging a bars file that reaches back two years turns the April 2025 windows into
+measurements of the names' own moves and leaves 2020 / 2022 / 2024-08-05 on the labelled
+proxy until a longer file is staged.
+
+---
+
 ## 15. The chain snapshot — the option chain as priced (S-01, added 2026-09-10)
 
 When an option chain payload is staged in the run directory (`option_chains.json`,

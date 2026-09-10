@@ -440,6 +440,13 @@ def stage_run(engine_dir, state, inputs_dir, run_dir, desks, engine_sha, config_
         (run_dir / "archive").mkdir(exist_ok=True)
         shutil.copy2(followed, run_dir / "archive" / "followed.json")
         staged["state"].append("archive/followed.json")
+    # P-04: the rolling attention history sentiment.py measures its z-score against —
+    # same round trip as the followed set, or every scan would be the first scan.
+    attention = state / "archive" / "attention_history.json"
+    if attention.exists():
+        (run_dir / "archive").mkdir(exist_ok=True)
+        shutil.copy2(attention, run_dir / "archive" / "attention_history.json")
+        staged["state"].append("archive/attention_history.json")
     for f in sorted(inputs_dir.iterdir()):
         if not f.is_file() or f.name in ("manifest.json", "outcome.json"):
             continue
@@ -557,9 +564,11 @@ def merge_technicals(run_dir):
 
 
 SENTIMENT_ARGS = [("apewisdom.json", "--apewisdom"), ("st_trending.json", "--stocktwits-trending"),
-                  ("st_gauges.json", "--stocktwits-gauges"), ("reddit_posts.json", "--reddit"),
+                  ("st_gauges.json", "--stocktwits-gauges"), ("trends.json", "--trends"),
                   ("rh_watchlists.json", "--watchlists"), ("quotes_min.json", "--quotes"),
                   ("options_scan.json", "--options-scan"), ("earnings_days.json", "--earnings-days")]
+# P-04: one StockTwits symbol stream per name, read for the bull share only.
+ST_SYMBOL_GLOB = "st_symbol_*.json"
 
 
 def scan_steps(ctx, slot_cfg, today_utc):
@@ -580,6 +589,8 @@ def scan_steps(ctx, slot_cfg, today_utc):
     for fname, flag in SENTIMENT_ARGS:
         if (rd / fname).exists():
             sargs += [flag, fname]
+    if any(rd.glob(ST_SYMBOL_GLOB)):
+        sargs += ["--stocktwits-symbols", ST_SYMBOL_GLOB]
     if sargs:
         ctx.run("sentiment", "sentiment.py", *sargs, "--out", "sentiment.json",
                 "--merge-into", "scan_data.json")
@@ -797,11 +808,12 @@ def write_back_archive(state, run_dir):
         for f in sorted(src_dir.glob("*.jsonl.gz")):
             shutil.copyfile(f, dst_dir / f.name)
             written.append(f"archive/{sub}/{f.name}")
-    followed = run_dir / "archive" / "followed.json"
-    if followed.exists():
-        (state / "archive").mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(followed, state / "archive" / "followed.json")
-        written.append("archive/followed.json")
+    for name in ("followed.json", "attention_history.json"):
+        src = run_dir / "archive" / name
+        if src.exists():
+            (state / "archive").mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(src, state / "archive" / name)
+            written.append(f"archive/{name}")
     return written
 
 
@@ -832,6 +844,11 @@ def coverage_row_from_results(results, slot, run_id, engine_sha, ts, step="pm", 
         if hb:
             desks[r["desk"]] = {k: hb.get(k) for k in ("quiet", "positions", "working_orders",
                                                        "decisions", "warnings", "book_revision")}
+            # K-04: the desk's 1-day VaR and worst stress window ride on its heartbeat;
+            # additive, null when no bars were staged for the run.
+            for k in ("var_pct", "worst_stress", "worst_stress_window"):
+                if k in hb:
+                    desks[r["desk"]][k] = hb.get(k)
             # K-03: every desk's heartbeat carries the SAME house-wide summary (it is one
             # combined book); the row keeps one copy, from the last desk that measured it.
             if isinstance(hb.get("exposure"), dict):
