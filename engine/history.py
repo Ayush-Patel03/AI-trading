@@ -68,6 +68,18 @@ overshoots by design). A symbol is closed once `as_of` is past its horizon_end_d
 reopens, first_seen intact, if it is seen again.
 
     python3 history.py --followed --archive <dir> [--as-of YYYY-MM-DD] [--all] [--json]
+
+Memo calibration (P-07)
+-----------------------
+`<archive_dir>/calibration.jsonl` holds one pending row per LLM memo that made a
+`p_up_5d` call (memo.py, written by scanner.py at scan time). This fills the realised
+outcome — did the close five sessions after `as_of` beat the close on `as_of` — from a bars
+file (the same raw get_equity_historicals dump the validation fetch produces), writes the
+Brier score per row, and prints the calibration report: Brier vs the base-rate Brier, the
+reliability table, and whether the feature is still ADVISORY (it is, until Brier beats the
+base rate over 100 resolved calls; the engine never sizes on it either way).
+
+    python3 history.py --resolve-memos --archive <dir> --bars bars.json [--json]
 """
 import argparse, json, os, sys
 from datetime import datetime, timedelta, timezone
@@ -265,7 +277,16 @@ def followed_symbols(archive_dir, as_of=None, status="open"):
     return sorted(s for s, r in doc["symbols"].items() if r.get("status") == status)
 
 
-def main():
+def resolve_memos(archive_dir, bars_path, today=None):
+    """Fill realised outcomes into <archive_dir>/calibration.jsonl from a bars file.
+    Returns (report, n_resolved_now, n_still_pending)."""
+    import memo
+    path = os.path.join(archive_dir, memo.CALIBRATION_FILE)
+    _, done, pending = memo.resolve(path, bars_path, today=today)
+    return memo.calibration_report(path), done, pending
+
+
+def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--current")
     ap.add_argument("--entry", help="this scan's entry (required unless --followed)")
@@ -273,11 +294,32 @@ def main():
     ap.add_argument("--out")
     ap.add_argument("--followed", action="store_true",
                     help="print the followed set from --archive instead of merging history")
-    ap.add_argument("--archive", help="archive dir holding followed.json")
+    ap.add_argument("--archive", help="archive dir holding followed.json / calibration.jsonl")
     ap.add_argument("--as-of", help="evaluate horizons at this date (default: today)")
     ap.add_argument("--all", action="store_true", help="closed symbols too")
     ap.add_argument("--json", action="store_true", help="print the whole document")
-    a = ap.parse_args()
+    ap.add_argument("--resolve-memos", action="store_true",
+                    help="fill realised outcomes into calibration.jsonl from --bars")
+    ap.add_argument("--bars", help="raw get_equity_historicals dump(s) for --resolve-memos")
+    a = ap.parse_args(argv)
+
+    if a.resolve_memos:
+        if not a.archive or not a.bars:
+            ap.error("--resolve-memos needs --archive <dir> and --bars bars.json")
+        rep, done, pending = resolve_memos(a.archive, a.bars, a.today)
+        if a.json:
+            sys.stdout.write(json.dumps(dict(rep, resolved_now=done, pending=pending), indent=2) + "\n")
+            return
+        print(f"resolved {done} memo call(s) now; {pending} still pending; "
+              f"{rep['n']} resolved in total")
+        if rep["n"]:
+            print(f"Brier {rep['brier']:.4f} vs base-rate Brier {rep['base_rate_brier']:.4f} "
+                  f"(base rate {rep['base_rate']:.2f})")
+            for b in rep["reliability_bins"]:
+                print(f"  {b['bin']}  n={b['n']:<4} mean_p={b['mean_p']:.2f}  "
+                      f"mean_outcome={b['mean_outcome']:.2f}")
+        print(f"ADVISORY: {rep['advisory']} — {rep['advisory_reason']}")
+        return
 
     if a.followed:
         if not a.archive:

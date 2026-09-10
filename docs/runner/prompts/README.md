@@ -76,6 +76,19 @@ From `docs/PM.md` §9, `docs/SCAN.md` §1/§12 and `runner/slots.json`:
   still recorded — the dead-man's switch reads the heartbeat every `run.py` invocation writes.
 - **Health**: nothing (`"files": {}`); the runner runs `engine/health.py` over the state repo.
 
+**LLM memos (P-07, optional at every scan slot).** Memo-writing sits *after the news fetch
+and before `scanner.py`*: once `get_equity_news` has answered for the deep-dive names, the
+session stages the raw articles as `news_payload.json` (keyed by symbol, with the
+`symbol_hash`, company name, aliases and executives the engine needs to anonymise), then runs
+the extractor prompt in `docs/LLM.md` §5 as a **separate sub-call per symbol** — anonymised
+items only, JSON-only output, temperature 0 — and writes each result to `memos/<SYMBOL>.json`
+in the same inputs directory. Both are ordinary manifest files. The runner's `scanner.py`
+validates every memo against the payload, attaches the `llm_*` features, and records
+rejections in `meta.memo_rejections`; nothing about the scan waits on or fails on a memo.
+Budget: at most eight names × two items × ~1,500 characters per slot (~12 k input tokens,
+~2.5 k output), and the step is skipped outright when the slot is already more than 15
+minutes late at the news fetch — collection time is never traded for a memo.
+
 ## Switching over
 
 Do this in one sitting, after `selftest.py` prints `PASS` on the box and

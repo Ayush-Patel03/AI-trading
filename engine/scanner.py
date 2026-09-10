@@ -25,6 +25,14 @@ the 60-point proposal floor blocked every order. Scores are now comparable acros
 scans regardless of which sources answered. Rows carry `coverage_pct`, and a row
 under 70% coverage cannot be called Strong Buy - thin evidence is not conviction.
 
+LLM MEMOS (P-07, 2026-09-10). A scheduled session may leave `memos/<SYMBOL>.json` in the
+run dir — a structured extraction from an ANONYMISED news payload (`news_payload.json`).
+memo.py validates each one against that payload (latency, numerals copied not computed,
+verbatim quote, temperature 0, post-cutoff) and the valid ones put `llm_*` keys on the
+row's `features`, exactly like the S-04 technical features: logged, scored by nothing.
+Every probability call goes to archive/calibration.jsonl for history.py --resolve-memos.
+See docs/LLM.md.
+
 Paths resolve from SCAN_DIR, else from this file's own directory, so the bundle
 runs wherever it is copied.
 """
@@ -644,8 +652,23 @@ def attach_filings(rows, staged, today):
             "threshold": (staged.get("_meta") or {}).get("threshold", filings.CHANGER_THRESHOLD)}
 
 
+def attach_memos(data, run_dir, archive_dir=None):
+    """P-07: LLM memos as logged features. `memos/<SYMBOL>.json` in the run dir, validated
+    by memo.py against `news_payload.json` (the staged raw news the session was given);
+    valid ones put `llm_*` keys on the candidate's `features`, rejections land in
+    `meta.memo_rejections`, probability calls go to `<archive>/calibration.jsonl`. No pillar
+    reads any of it — the row's score is the same with or without a memo. Never raises."""
+    try:
+        import memo
+        return memo.apply_memos(data, run_dir, archive_dir)
+    except Exception as exc:                      # noqa: BLE001 — a memo never kills a scan
+        data.setdefault("meta", {}).setdefault("data_warnings", []).append(
+            f"MEMO: processing failed and was skipped: {type(exc).__name__}: {exc}")
+        return {"accepted": [], "rejected": {}, "logged": [], "error": str(exc)}
+
+
 def scan(data, *, insider_signal=None, filings_signal=None, veto_feed=None,
-         earnings_quality=None):
+         earnings_quality=None, run_dir=None):
     """Score one scan_data.json document.
 
     Every optional input is a staged file the scheduled task may or may not have put in
@@ -672,8 +695,16 @@ def scan(data, *, insider_signal=None, filings_signal=None, veto_feed=None,
     days_since_earnings}} from earnings_quality.py, or None. Merged into each row's
     `features` dict — logged, scored by nothing. A ticker absent from the map gets every
     key null when the map was supplied, and nothing at all when it was not.
+
+    `run_dir` (P-07): the run directory holding `memos/<SYMBOL>.json` and
+    `news_payload.json`, or None. Valid memos put `llm_*` keys on the candidate's
+    `features` before scoring (so they ride into the row with the S-04 technicals),
+    rejections land in `meta.memo_rejections`, and probability calls are logged to
+    `<run_dir>/archive/calibration.jsonl`. With no memos/ directory nothing is touched.
     """
     today = datetime.strptime(scan_date_of(data["meta"]), "%Y-%m-%d").date()
+    if run_dir:
+        attach_memos(data, run_dir, os.path.join(run_dir, "archive"))
     mult, regime_label, regime_notes = score_regime(data["regime"])
     insider_sig = insider_signal if insider_signal is not None else load_insider_signal()
 
@@ -763,6 +794,8 @@ def scan(data, *, insider_signal=None, filings_signal=None, veto_feed=None,
         # candidate from technicals.json, or set directly by backtest.py). Logged so the
         # archive record and the snapshot carry them for ic.py --by-feature; NOT an input
         # to any pillar above, and absent rather than null when nothing computed them.
+        # The P-07 memo keys (llm_*) arrive here too: attach_memos() put them on the
+        # candidate before scoring, and every staged source below adds disjoint keys.
         if isinstance(c.get("features"), dict):
             rows[-1]["features"] = dict(c["features"])
         # P-01: the insider signal, when staged. Same rule — logged, scored by nothing.
@@ -958,14 +991,18 @@ if __name__ == "__main__":
         except (OSError, json.JSONDecodeError) as exc:
             print(f"note: {EARNINGS_QUALITY_FILE} unreadable ({exc}) — earnings-quality "
                   "features not attached", file=sys.stderr)
-    out = scan(json.load(open(src, encoding="utf-8")),
-               insider_signal=staged_insiders, filings_signal=staged_filings,
-               veto_feed=feed, earnings_quality=eq_map)
+    data = json.load(open(src, encoding="utf-8"))
     # Every run owns its own file names. The unstamped scan_results.json stays as the
     # "latest" copy the rest of the pipeline reads; the stamped copy is the one that is
     # still here after the next slot runs. The input is snapshotted too, so a board can
-    # be re-derived from exactly what it was scored on.
-    rid = archive.run_id(out["meta"])
+    # be re-derived from exactly what it was scored on. The id is fixed before scoring so
+    # the memo calibration rows (P-07) carry it.
+    scan_date_of(data["meta"])
+    rid = archive.run_id(data["meta"])
+    data["meta"]["run_id"] = rid
+    # BASE is the run dir: memos/<SYMBOL>.json + news_payload.json are read from it (P-07).
+    out = scan(data, insider_signal=staged_insiders, filings_signal=staged_filings,
+               veto_feed=feed, earnings_quality=eq_map, run_dir=BASE)
     out["meta"]["run_id"] = rid
     fn = archive.files_for(rid)
     json.dump(out, open(os.path.join(BASE, "scan_results.json"), "w", encoding="utf-8"), indent=2)
@@ -992,7 +1029,7 @@ if __name__ == "__main__":
     for name in ("scan_results.json", fn["results"]):
         json.dump(out, open(os.path.join(BASE, name), "w", encoding="utf-8"), indent=2)
     print(f"RUN {rid}  ->  {fn['results']} + {fn['data']}")
-    print(f"{snap_note}\n")
+    print(snap_note)
     # One line per optional source, staged or not, so the run log says what was looked at.
     im = out["meta"].get("insider_signal_meta")
     if im:
@@ -1018,6 +1055,14 @@ if __name__ == "__main__":
               f"{', '.join(out['meta']['veto']['applied']) or 'none'}")
     else:
         print("VETO FEED: not staged — no override applied")
+    mm = out["meta"].get("memos")
+    if mm:
+        print(f"MEMOS (P-07, not scored): {len(mm['accepted'])} accepted ({', '.join(mm['accepted']) or '-'}), "
+              f"{mm['rejected']} rejected; calibration advisory={mm.get('advisory', True)}")
+        for sym, errs in sorted((out["meta"].get("memo_rejections") or {}).items()):
+            print(f"  ! {sym}: " + "; ".join(errs))
+    else:
+        print("MEMOS: memos/ not staged — no llm_* features attached")
     print()
     print(f"REGIME: {out['regime']['label']} (x{out['regime']['multiplier']})   "
           f"coverage avg {out['meta']['coverage_avg']:.0f}%\n")
