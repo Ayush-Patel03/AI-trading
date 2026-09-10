@@ -1,0 +1,26 @@
+{
+  "_readme": "Extended-session risk watch (fixture: one entry).",
+  "_sessions": {
+    "after-hours": "16:20 ET",
+    "pre-open": "07:00 ET"
+  },
+  "updated": "2026-09-09T21:05:52Z",
+  "entries": [
+    {
+      "ts": "2026-09-09T21:05:52Z",
+      "date": "2026-09-09",
+      "session": "after-hours",
+      "desk": "swing",
+      "run_key": "2026-09-09#after-hours#swing",
+      "mode": "paper",
+      "book_revision": 34,
+      "read_only": true,
+      "positions": [],
+      "working_orders": [],
+      "alerts": [],
+      "notes": [],
+      "warnings": [],
+      "quiet": false
+    }
+  ]
+}

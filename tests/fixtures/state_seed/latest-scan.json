@@ -1,0 +1,1149 @@
+{
+  "meta": {
+    "scan_date": "2026-09-10",
+    "slot": "Opening range",
+    "time": "10:00",
+    "run_label": "Opening range \u00b7 Thu 10 Sep 2026",
+    "engine_sha": "423ed33",
+    "engine_source": "raw-https",
+    "live_board_url": null,
+    "macro_events": [
+      {
+        "date": "2026-09-10",
+        "name": "PPI MoM / Core PPI MoM / PPI YoY",
+        "time_et": "08:30"
+      },
+      {
+        "date": "2026-09-10",
+        "name": "Initial Jobless Claims",
+        "time_et": "08:30"
+      },
+      {
+        "date": "2026-09-10",
+        "name": "Continuing Jobless Claims",
+        "time_et": "08:30"
+      },
+      {
+        "date": "2026-09-10",
+        "name": "Existing Home Sales",
+        "time_et": "10:00"
+      },
+      {
+        "date": "2026-09-10",
+        "name": "Wholesale Inventories MoM",
+        "time_et": "10:00"
+      },
+      {
+        "date": "2026-09-10",
+        "name": "EIA Natural Gas Stocks Change",
+        "time_et": "10:30"
+      },
+      {
+        "date": "2026-09-10",
+        "name": "EIA Crude Oil Stocks Change",
+        "time_et": "12:00"
+      },
+      {
+        "date": "2026-09-11",
+        "name": "CPI / Core CPI (Inflation Rate MoM & YoY)",
+        "time_et": "08:30"
+      },
+      {
+        "date": "2026-09-11",
+        "name": "Michigan Consumer Sentiment Prel",
+        "time_et": "10:00"
+      }
+    ],
+    "run_id": "2026-09-10-opening-range",
+    "data_warnings": [
+      "THE REGIME 'FLIP' TO CONSTRUCTIVE IS AN ARTEFACT OF DATA AVAILABILITY, NOT AN IMPROVEMENT IN CONDITIONS - DO NOT READ IT AS ONE. The pre-market run could not resolve SPY's 52-week position and scored the regime partial ('Mixed / Cautious', multiplier 0.93). This run resolved it (SPY -2.80% off its 52-week high), which adds +2 regime points and lifts the label to Constructive at multiplier 1.00. Actual conditions are WORSE than at 08:00, not better: VIX rose 17.01 -> 17.85, SPY is -0.64% on the session, and the dated macro backdrop is an oil-and-rates shock. The label moved because a field became available, not because the tape improved.",
+      "CONSEQUENCE FOR EVERY SCORE COMPARISON ON THIS BOARD: the regime multiplier went 0.93 -> 1.00 between 08:00 and 10:00, so every raw score delta vs the pre-market entry is flattered by about 7%. Compare normalized_score, not score, when judging whether a name actually strengthened. Worked example: ALAB reads as -11.8 on score (62.8 -> 51.0) but is -16.5 on normalized_score (67.5 -> 51.0). The fade is BIGGER than the headline delta, not smaller. The same correction applies to every row.",
+      "OPENING RANGE 10:00 ET. Live quotes and session volume captured 10:14-10:15 ET; collection 10:12-10:25 ET; latest-scan.json written 10:26 ET, 26 minutes after slot time - inside the 40-minute target and clear of the 10:45 PM run.",
+      "Engine 423ed33 staged over the RAW-HTTPS FALLBACK (engine_source=raw-https). The git clone was refused by the sandbox permission classifier at path A; path B fetched the same production commit and git ls-remote confirmed the sha, so this is a VERIFIED COMMIT, not a content fingerprint.",
+      "gap_pct is on the SESSION_OPEN basis for all 21 rows (gap_basis=session_open): today's official open against the SIP prior close of 2026-09-09. day_change_pct is the live 10:14 ET print against the same close, so gap and day-change differ where a name has moved since the open - that difference IS the opening-range finding.",
+      "RELATIVE VOLUME IS PARTIAL-SESSION AND MUST BE READ AGAINST THE TAPE, NOT AGAINST 1.0. At 10:15 ET roughly 11-12% of the session had elapsed, so a name trading at its normal pace reads about 0.11-0.15x. SPY itself reads 0.28x, i.e. the broad tape is running about 2.4x its normal pace. Judge every name against 0.28x, not against 1.0x.",
+      "THE SEMI SELLOFF HAS NO SEMI CATALYST. A dedicated search found NOTHING dated 2026-09-09 or 2026-09-10 that is specifically about semiconductors or memory to the downside - no sector downgrade, no DRAM/NAND contract-price datapoint, no export-control or China headline, no AI-capex cut. The one dated chip datapoint is POSITIVE (TSMC August revenue NT$514.8B, +53.3% y/y, a record, reported 2026-09-10). The dated driver is MACRO: per Schwab's 2026-09-10 market-open update, WTI crude topped $100/bbl (+4.73%) on geopolitical supply disruption, the 10-year Treasury yield rose to 4.90%, and market-implied Fed RATE-HIKE odds jumped to about 65% after a hot August PPI (+0.4% headline). That is a duration shock hitting high-multiple names hardest into tomorrow's CPI.",
+      "PPI WAS LABELLED 'NOT GATING' BY THE PRE-MARKET BOARD AND THAT LABEL WAS CORRECT ON THE MANAGER'S RULE, BUT THE PRINT STILL MOVED THE TAPE. The gate covers FOMC/CPI/PCE/payrolls/GDP/Powell only. Reported here so the two are not confused: PPI did not freeze entries, and PPI is nevertheless the proximate cause of the morning's repricing.",
+      "ApeWisdom page 1 and StockTwits trending BOTH answered live this slot, so corroboration is real for the first time in several slots: 19 of 98 tickers carry 2+ feeds. AMD, AEHR and SKHY are corroborated. StockTwits gauges and Arctic Shift Reddit were NOT collected, so AEHR, SNDK, MRVL, MU, NVDA, NAVN, META, SKHY and FCX remain single-source on tone.",
+      "Options positioning is TODAY'S scan but returned only 3 market-wide rows (VOYA, APH, KHC), none of them candidates - so there is no options read on any name on this board. implied_move_pct is NULL board-wide: no straddle was priced this slot and no ATR- or IV-derived estimate was substituted. VOYA's put/call ratio was withheld by the liquidity gate.",
+      "The liquid-movers universe scan returned 0 rows again. At 10:15 that is still mechanical - its relative-volume filter compares day volume to a FULL-DAY 30-day average - not a quiet tape. The watchlists carried the breadth.",
+      "FUNDAMENTALS, ANALYST TARGETS AND GICS FOR THE 19 CARRY-FORWARD NAMES ARE CARRIED FROM THE 08:00 RUN UNCHANGED, per doctrine: fundamentals do not change in two hours. Only price, volume, gap, 52-week range and the derived technicals were refreshed. FCX and VRT are NEW this slot and were deep-dived fresh.",
+      "COO's $73.29 mean target still predates the five downgrades dated 2026-09-10, so its upside remains overstated. Carried forward from the pre-market board with the same caveat.",
+      "No IPO, insider or transcript work at this slot by design - both panels are absent rather than empty.",
+      "Sector ETF rotation was not collected this slot; the regime rests on VIX, the index prints, the dated macro shock above and the internal tape.",
+      "Sentiment-candidate bundle retired by decision 2026-09-02; no replacement model exists yet. Not searched for."
+    ],
+    "sentiment_meta": {
+      "generated_at": "2026-09-10T14:24:31+00:00",
+      "sources_present": {
+        "apewisdom": true,
+        "stocktwits_trending": true,
+        "stocktwits_gauges": false,
+        "reddit_raw": false,
+        "rh_watchlists": true,
+        "options_scan": true
+      },
+      "ticker_count": 98,
+      "corroborated_count": 19,
+      "reddit_newest_utc": null
+    },
+    "sources": [
+      "prices/quotes: Robinhood connector, regular-session prints 10:14-10:15 ET",
+      "bars: Robinhood connector daily bars through 2026-09-09 (265 sessions; SKHY 43, NAVN 215), SPY benchmark included",
+      "session open/high/low/volume and 52-week range: Robinhood get_equity_fundamentals, market_date 2026-09-10",
+      "indexes: Robinhood get_indexes + get_index_quotes, VIX 17.85 / SPX 7586.34 / NDX 29108.42 at 10:15 ET",
+      "universe: Robinhood Trending stocks + Daily movers watchlists; liquid-movers saved scan (0 rows, mechanical)",
+      "options positioning: Robinhood Options activity saved scan, live 2026-09-10 (3 rows market-wide)",
+      "retail: ApeWisdom WSB page 1 (live) + StockTwits trending (live) + Robinhood watchlists",
+      "macro: carried forward from claude/latest-scan.json (pre-market owns the calendar)",
+      "deep dives: stockanalysis, Schwab, TipRanks, Citi TMT transcripts, Reuters/copper (FCX, VRT + sector catalyst check)"
+    ],
+    "coverage_avg": 91.0,
+    "dropped": []
+  },
+  "ipo": null,
+  "insider_panel": null,
+  "sector_concentration": {
+    "Materials": 2,
+    "Information Technology": 7,
+    "Industrials": 1
+  },
+  "regime": {
+    "label": "Constructive",
+    "multiplier": 1.0,
+    "notes": [
+      "SPY -2.8% off its 52-week high \u2014 index at/near highs",
+      "VIX 17.9 \u2014 normal volatility"
+    ],
+    "vix": 17.85,
+    "spy": {
+      "price": 757.55,
+      "day_change_pct": -0.636,
+      "pct_off_52w_high": -2.8
+    },
+    "sector_etfs": {}
+  },
+  "results": [
+    {
+      "ticker": "SSL",
+      "name": "Sasol",
+      "sector": "Materials",
+      "price": 14.64,
+      "day_change_pct": 0.4115226337448652,
+      "market_cap": 9465697709.76,
+      "setup": "Momentum",
+      "setup_note": "Price above both MAs with 50 over 200 \u2014 trend intact and extended",
+      "pillars": {
+        "trend": 19.0,
+        "momentum": 8.5,
+        "fundamentals": 0,
+        "catalyst": 0,
+        "intelligence": 0
+      },
+      "raw_score": 27.5,
+      "normalized_score": 68.8,
+      "score": 68.8,
+      "coverage_pct": 40.0,
+      "missing_pillars": [
+        "catalyst",
+        "fundamentals",
+        "intelligence"
+      ],
+      "verdict": "Buy",
+      "verdict_note": "Solid setup with a clear edge",
+      "upside_pct": null,
+      "analyst_target": null,
+      "analyst_rating": null,
+      "ma_50": 11.440599999999996,
+      "ma_200": 10.279799999999998,
+      "vs_ma50_pct": 28.0,
+      "vs_ma200_pct": 42.4,
+      "week52_change_pct": 112.48185776487665,
+      "week52_low": 5.24,
+      "week52_high": 14.81,
+      "off_high_pct": -1.1,
+      "rel_volume": 0.46,
+      "forward_pe": null,
+      "peg": null,
+      "profit_margin_pct": null,
+      "roe_pct": null,
+      "revenue_growth_pct": null,
+      "eps_growth_pct": null,
+      "debt_to_equity": null,
+      "short_float_pct": null,
+      "beta": null,
+      "next_earnings": null,
+      "earnings_timing": null,
+      "implied_move_pct": null,
+      "rsi_14": 74.83026263743639,
+      "atr_14": 0.5051434379961024,
+      "atr_pct": 3.4646326337181232,
+      "gap_pct": 0.41152263374485937,
+      "gap_basis": "session_open",
+      "ret_20d_pct": 26.67245873153781,
+      "ret_60d_pct": 12.15384615384616,
+      "rs_20d_vs_spy": 27.731428831205577,
+      "rs_60d_vs_spy": 9.369889295066258,
+      "bars_used": 265,
+      "catalysts": [],
+      "reasons": {
+        "trend": [
+          "Above the 200-day by 42.4%",
+          "50-day above 200-day (golden-cross alignment)",
+          "+28.0% above the 50-day \u2014 very extended, poor risk/reward on entry"
+        ],
+        "momentum": [
+          "+112.5% over the last 52 weeks",
+          "98% up its 52-week range (-1.1% off the high) \u2014 near highs",
+          "Relative volume 0.46x (intraday partial \u2014 indicative only)",
+          "RSI 75 \u2014 overbought, trend intact but extended",
+          "Relative strength vs SPY +27.7 pts over 20 sessions \u2014 leading the tape",
+          "ATR 3.5% of price \u2014 moderate daily range"
+        ],
+        "fundamentals": [],
+        "catalyst": [],
+        "intelligence": [
+          "No measurable retail chatter \u2014 an institutional name, not a crowd trade",
+          "No recent earnings call analysed"
+        ]
+      },
+      "industry": null,
+      "gics": "Materials",
+      "sic": null,
+      "retail": {
+        "sentiment_checked": true,
+        "sources_count": 0
+      },
+      "transcript": null,
+      "confidence": "single",
+      "confidence_note": "One source only \u2014 price unconfirmed",
+      "price_disagreement_pct": null,
+      "score_trail": [
+        63.9,
+        68.8
+      ],
+      "score_delta": 4.9,
+      "is_new": false,
+      "entered_top5": false
+    },
+    {
+      "ticker": "AEHR",
+      "name": "Aehr Test Systems",
+      "sector": "Information Technology",
+      "price": 95.4,
+      "day_change_pct": -0.1674340728338164,
+      "market_cap": 3102861960.0,
+      "setup": "Momentum",
+      "setup_note": "Price above both MAs with 50 over 200 \u2014 trend intact and extended",
+      "pillars": {
+        "trend": 24.0,
+        "momentum": 9.5,
+        "fundamentals": 6.0,
+        "catalyst": 12.0,
+        "intelligence": 0
+      },
+      "raw_score": 51.5,
+      "normalized_score": 64.4,
+      "score": 64.4,
+      "coverage_pct": 80.0,
+      "missing_pillars": [
+        "intelligence"
+      ],
+      "verdict": "Buy",
+      "verdict_note": "Solid setup with a clear edge",
+      "upside_pct": 36.3,
+      "analyst_target": 130.0,
+      "analyst_rating": "Strong Buy",
+      "ma_50": 90.8184,
+      "ma_200": 63.470099999999995,
+      "vs_ma50_pct": 5.0,
+      "vs_ma200_pct": 50.3,
+      "week52_change_pct": 255.57212076034295,
+      "week52_low": 18.7,
+      "week52_high": 147.4,
+      "off_high_pct": -35.3,
+      "rel_volume": 0.37,
+      "forward_pe": null,
+      "peg": null,
+      "profit_margin_pct": 7.39,
+      "roe_pct": null,
+      "revenue_growth_pct": 33.7,
+      "eps_growth_pct": null,
+      "debt_to_equity": null,
+      "short_float_pct": null,
+      "beta": null,
+      "next_earnings": null,
+      "earnings_timing": null,
+      "implied_move_pct": null,
+      "rsi_14": 51.233570624020025,
+      "atr_14": 10.247535409896681,
+      "atr_pct": 10.723666188673796,
+      "gap_pct": -2.3754709083298406,
+      "gap_basis": "session_open",
+      "ret_20d_pct": -18.450247482505556,
+      "ret_60d_pct": -11.901908361759006,
+      "rs_20d_vs_spy": -17.39127738283779,
+      "rs_60d_vs_spy": -14.685865220538908,
+      "bars_used": 265,
+      "catalysts": [],
+      "reasons": {
+        "trend": [
+          "Above the 200-day by 50.3%",
+          "50-day above 200-day (golden-cross alignment)",
+          "+5.0% vs the 50-day \u2014 riding the trend line"
+        ],
+        "momentum": [
+          "+255.6% over the last 52 weeks",
+          "60% up its 52-week range (-35.3% off the high) \u2014 mid-range",
+          "Relative volume 0.37x (intraday partial \u2014 indicative only)",
+          "RSI 51 \u2014 momentum cooling",
+          "Gapped -2.4% at the open against the prior close",
+          "Relative strength vs SPY -17.4 pts over 20 sessions \u2014 lagging the tape",
+          "ATR 10.7% of price \u2014 high daily range"
+        ],
+        "fundamentals": [
+          "Revenue growth +33.7%",
+          "Profit margin 7.4% \u2014 thin"
+        ],
+        "catalyst": [
+          "Analyst consensus: Strong Buy",
+          "+36.3% to the average analyst target"
+        ],
+        "intelligence": [
+          "No measurable retail chatter \u2014 an institutional name, not a crowd trade",
+          "No recent earnings call analysed"
+        ]
+      },
+      "industry": null,
+      "gics": "Information Technology",
+      "sic": null,
+      "retail": {
+        "stocktwits_trending": true,
+        "sources": [
+          "stocktwits_trending"
+        ],
+        "sources_count": 1,
+        "corroborated": false,
+        "stocktwits_trending_position": 24,
+        "stocktwits_watchlist_count": 15014,
+        "sentiment_checked": true
+      },
+      "transcript": null,
+      "confidence": "single",
+      "confidence_note": "One source only \u2014 price unconfirmed",
+      "price_disagreement_pct": null,
+      "score_trail": [
+        59.9,
+        64.4
+      ],
+      "score_delta": 4.5,
+      "is_new": false,
+      "entered_top5": false
+    },
+    {
+      "ticker": "ANET",
+      "name": "Arista Networks",
+      "sector": "Information Technology",
+      "price": 191.3,
+      "day_change_pct": -0.8448660135800479,
+      "market_cap": 241448822338.41,
+      "setup": "Momentum",
+      "setup_note": "Price above both MAs with 50 over 200 \u2014 trend intact and extended",
+      "pillars": {
+        "trend": 24.0,
+        "momentum": 9.5,
+        "fundamentals": 14.0,
+        "catalyst": 13.0,
+        "intelligence": 1.0
+      },
+      "raw_score": 61.5,
+      "normalized_score": 61.5,
+      "score": 61.5,
+      "coverage_pct": 100.0,
+      "missing_pillars": [],
+      "verdict": "Buy",
+      "verdict_note": "Solid setup with a clear edge",
+      "upside_pct": 26.0,
+      "analyst_target": 241.04,
+      "analyst_rating": "Strong Buy",
+      "ma_50": 184.2552,
+      "ma_200": 152.63869999999997,
+      "vs_ma50_pct": 3.8,
+      "vs_ma200_pct": 25.3,
+      "week52_change_pct": 34.803748854908044,
+      "week52_low": 114.52,
+      "week52_high": 214.89,
+      "off_high_pct": -11.0,
+      "rel_volume": 0.08,
+      "forward_pe": 41.53,
+      "peg": 1.76,
+      "profit_margin_pct": 39.95,
+      "roe_pct": 31.48,
+      "revenue_growth_pct": 37.7,
+      "eps_growth_pct": null,
+      "debt_to_equity": 0.01,
+      "short_float_pct": 1.23,
+      "beta": null,
+      "next_earnings": null,
+      "earnings_timing": null,
+      "implied_move_pct": null,
+      "rsi_14": 52.300047441390305,
+      "atr_14": 7.946537414943083,
+      "atr_pct": 4.118870789894305,
+      "gap_pct": -2.35696884880527,
+      "gap_basis": "session_open",
+      "ret_20d_pct": -2.486732373009848,
+      "ret_60d_pct": 18.187944131340352,
+      "rs_20d_vs_spy": -1.4277622733420814,
+      "rs_60d_vs_spy": 15.40398727256045,
+      "bars_used": 265,
+      "catalysts": [
+        "No headline dated 2026-09-09 or 2026-09-10 explains ANET specifically. The only recent feed item is a Goldman Sachs Communacopia transcript (relative timestamp only) which is POSITIVE - FY revenue guidance raised to $12.6B on AI/data-centre demand."
+      ],
+      "reasons": {
+        "trend": [
+          "Above the 200-day by 25.3%",
+          "50-day above 200-day (golden-cross alignment)",
+          "+3.8% vs the 50-day \u2014 riding the trend line"
+        ],
+        "momentum": [
+          "+34.8% over the last 52 weeks",
+          "76% up its 52-week range (-11.0% off the high) \u2014 strong but not stretched",
+          "Relative volume 0.08x (intraday partial \u2014 indicative only)",
+          "RSI 52 \u2014 momentum cooling",
+          "Gapped -2.4% at the open against the prior close",
+          "Relative strength vs SPY -1.4 pts over 20 sessions",
+          "ATR 4.1% of price \u2014 moderate daily range"
+        ],
+        "fundamentals": [
+          "Revenue growth +37.7%",
+          "Profit margin 40.0% \u2014 highly profitable",
+          "PEG 1.76 \u2014 fairly valued for its growth",
+          "Debt/equity 0.01 \u2014 clean balance sheet"
+        ],
+        "catalyst": [
+          "Analyst consensus: Strong Buy",
+          "+26.0% to the average analyst target",
+          "1 active news catalysts in the last few weeks"
+        ],
+        "intelligence": [
+          "No measurable retail chatter \u2014 an institutional name, not a crowd trade",
+          "No recent earnings call analysed",
+          "1 distinct news items on the tape"
+        ]
+      },
+      "industry": null,
+      "gics": "Information Technology",
+      "sic": null,
+      "retail": {
+        "sentiment_checked": true,
+        "sources_count": 0
+      },
+      "transcript": null,
+      "confidence": "single",
+      "confidence_note": "One source only \u2014 price unconfirmed",
+      "price_disagreement_pct": null,
+      "score_trail": [
+        57.2,
+        61.5
+      ],
+      "score_delta": 4.3,
+      "is_new": false,
+      "entered_top5": false
+    },
+    {
+      "ticker": "VRT",
+      "name": "Vertiv Holdings",
+      "sector": "Industrials",
+      "price": 247.7943,
+      "day_change_pct": -5.742211571379663,
+      "market_cap": 95751563203.17,
+      "setup": "Broken Trend",
+      "setup_note": "Price below the 200-day \u2014 structural downtrend, avoid until reclaimed",
+      "pillars": {
+        "trend": 15.0,
+        "momentum": 7.0,
+        "fundamentals": 18.0,
+        "catalyst": 14.0,
+        "intelligence": 7.0
+      },
+      "raw_score": 61.0,
+      "normalized_score": 61.0,
+      "score": 61.0,
+      "coverage_pct": 100.0,
+      "missing_pillars": [],
+      "verdict": "Avoid",
+      "verdict_note": "Structure is broken \u2014 no long setup regardless of score",
+      "upside_pct": 36.5,
+      "analyst_target": 338.15,
+      "analyst_rating": "Strong Buy",
+      "ma_50": 281.55359999999996,
+      "ma_200": 258.49389999999994,
+      "vs_ma50_pct": -12.0,
+      "vs_ma200_pct": -4.1,
+      "week52_change_pct": 97.31987577639754,
+      "week52_low": 132.685,
+      "week52_high": 379.935,
+      "off_high_pct": -34.8,
+      "rel_volume": 0.78,
+      "forward_pe": 31.32,
+      "peg": 0.89,
+      "profit_margin_pct": 15.09,
+      "roe_pct": 43.94,
+      "revenue_growth_pct": 26.2,
+      "eps_growth_pct": 111.1,
+      "debt_to_equity": 0.7,
+      "short_float_pct": 3.4,
+      "beta": 2.08,
+      "next_earnings": null,
+      "earnings_timing": null,
+      "implied_move_pct": null,
+      "rsi_14": 46.305599173521294,
+      "atr_14": 15.303482750743225,
+      "atr_pct": 5.821249477250266,
+      "gap_pct": -1.4416676176347385,
+      "gap_basis": "session_open",
+      "ret_20d_pct": -6.713743302224906,
+      "ret_60d_pct": -13.200383002608385,
+      "rs_20d_vs_spy": -5.6547732025571396,
+      "rs_60d_vs_spy": -15.984339861388285,
+      "bars_used": 265,
+      "catalysts": [
+        "2026-09-09: VRT closed -8.17% on broad profit-taking across the AI data-centre infrastructure complex (valuation sensitivity, UtilityInnovation Group earnout, director share sales, Zacks downgrade to Hold). No Vertiv filing explained it.",
+        "2026-09-10: Management presented at Goldman Sachs Communacopia + Technology; transcript indicates revenue growth targets raised on strong global demand. NO dated headline explains today's intraday decline - cause unverified."
+      ],
+      "reasons": {
+        "trend": [
+          "Below the 200-day by 4.1% \u2014 structurally broken",
+          "50-day above 200-day (golden-cross alignment)",
+          "-12.0% below the 50-day \u2014 constructive pullback zone"
+        ],
+        "momentum": [
+          "+97.3% over the last 52 weeks",
+          "47% up its 52-week range (-34.8% off the high) \u2014 mid-range",
+          "Relative volume 0.78x (intraday partial \u2014 indicative only)",
+          "RSI 46",
+          "Relative strength vs SPY -5.7 pts over 20 sessions \u2014 lagging the tape",
+          "ATR 5.8% of price \u2014 high daily range"
+        ],
+        "fundamentals": [
+          "Revenue growth +26.2%",
+          "EPS growth +111.1%",
+          "Profit margin 15.1%",
+          "PEG 0.89 \u2014 growth is cheap relative to price"
+        ],
+        "catalyst": [
+          "Analyst consensus: Strong Buy",
+          "+36.5% to the average analyst target",
+          "2 active news catalysts in the last few weeks"
+        ],
+        "intelligence": [
+          "Reddit mentions 2->11 (+450%) \u2014 attention spike",
+          "Rank #48 on r/wallstreetbets",
+          "No recent earnings call analysed",
+          "2 distinct news items on the tape"
+        ]
+      },
+      "industry": "Electrical Equipment & Parts",
+      "gics": "Industrials",
+      "sic": null,
+      "retail": {
+        "wsb_mentions": 11,
+        "wsb_mentions_24h_ago": 2,
+        "wsb_rank": 48,
+        "sources": [
+          "apewisdom",
+          "rh_watchlist"
+        ],
+        "sources_count": 2,
+        "corroborated": true,
+        "wsb_upvotes": 60,
+        "wsb_rank_24h_ago": 110,
+        "wsb_rank_delta": 62,
+        "wsb_mention_change_pct": 450.0,
+        "wsb_new_entrant": false,
+        "rh_lists": [
+          "Trending stocks"
+        ],
+        "rh_best_position": 3,
+        "sentiment_checked": true
+      },
+      "transcript": null,
+      "confidence": "single",
+      "confidence_note": "One source only \u2014 price unconfirmed",
+      "price_disagreement_pct": null,
+      "score_trail": [
+        61.0
+      ],
+      "score_delta": null,
+      "is_new": true,
+      "entered_top5": true
+    },
+    {
+      "ticker": "AMD",
+      "name": "AMD",
+      "sector": "Information Technology",
+      "price": 506.65,
+      "day_change_pct": -2.77204732342472,
+      "market_cap": 826340970000.0,
+      "setup": "Momentum",
+      "setup_note": "Price above both MAs with 50 over 200 \u2014 trend intact and extended",
+      "pillars": {
+        "trend": 24.0,
+        "momentum": 12.0,
+        "fundamentals": 9.0,
+        "catalyst": 11.0,
+        "intelligence": 3.0
+      },
+      "raw_score": 59.0,
+      "normalized_score": 59.0,
+      "score": 59.0,
+      "coverage_pct": 100.0,
+      "missing_pillars": [],
+      "verdict": "Watch",
+      "verdict_note": "Constructive but wants confirmation before committing capital",
+      "upside_pct": 21.2,
+      "analyst_target": 613.84,
+      "analyst_rating": "Strong Buy",
+      "ma_50": 498.58960000000013,
+      "ma_200": 343.8627750000001,
+      "vs_ma50_pct": 1.6,
+      "vs_ma200_pct": 47.3,
+      "week52_change_pct": 225.15081504299835,
+      "week52_low": 149.85,
+      "week52_high": 584.73,
+      "off_high_pct": -13.4,
+      "rel_volume": 0.23,
+      "forward_pe": null,
+      "peg": null,
+      "profit_margin_pct": 19.91,
+      "roe_pct": null,
+      "revenue_growth_pct": 50.1,
+      "eps_growth_pct": null,
+      "debt_to_equity": null,
+      "short_float_pct": null,
+      "beta": null,
+      "next_earnings": "2026-11-04",
+      "earnings_timing": null,
+      "implied_move_pct": null,
+      "rsi_14": 60.432420646981456,
+      "atr_14": 23.21926480259753,
+      "atr_pct": 4.455860217925239,
+      "gap_pct": -2.321073892476425,
+      "gap_basis": "session_open",
+      "ret_20d_pct": 9.861485916680724,
+      "ret_60d_pct": 1.861915280411286,
+      "rs_20d_vs_spy": 10.92045601634849,
+      "rs_60d_vs_spy": -0.9220415783686153,
+      "bars_used": 265,
+      "catalysts": [],
+      "reasons": {
+        "trend": [
+          "Above the 200-day by 47.3%",
+          "50-day above 200-day (golden-cross alignment)",
+          "+1.6% vs the 50-day \u2014 riding the trend line"
+        ],
+        "momentum": [
+          "+225.2% over the last 52 weeks",
+          "82% up its 52-week range (-13.4% off the high) \u2014 strong but not stretched",
+          "Relative volume 0.23x (intraday partial \u2014 indicative only)",
+          "RSI 60 \u2014 healthy trend strength",
+          "Gapped -2.3% at the open against the prior close",
+          "Relative strength vs SPY +10.9 pts over 20 sessions \u2014 leading the tape",
+          "ATR 4.5% of price \u2014 moderate daily range"
+        ],
+        "fundamentals": [
+          "Revenue growth +50.1%",
+          "Profit margin 19.9%"
+        ],
+        "catalyst": [
+          "Analyst consensus: Strong Buy",
+          "+21.2% to the average analyst target"
+        ],
+        "intelligence": [
+          "Reddit mentions 39->31 (-21%) \u2014 steady",
+          "Rank #18 on r/wallstreetbets",
+          "No recent earnings call analysed"
+        ]
+      },
+      "industry": null,
+      "gics": "Information Technology",
+      "sic": null,
+      "retail": {
+        "wsb_mentions": 31,
+        "wsb_mentions_24h_ago": 39,
+        "wsb_rank": 18,
+        "stocktwits_trending": true,
+        "sources": [
+          "apewisdom",
+          "stocktwits_trending"
+        ],
+        "sources_count": 2,
+        "corroborated": true,
+        "wsb_upvotes": 50,
+        "wsb_rank_24h_ago": 14,
+        "wsb_rank_delta": -4,
+        "wsb_mention_change_pct": -20.5,
+        "wsb_new_entrant": false,
+        "stocktwits_trending_position": 3,
+        "stocktwits_watchlist_count": 564059,
+        "sentiment_checked": true
+      },
+      "transcript": null,
+      "confidence": "single",
+      "confidence_note": "One source only \u2014 price unconfirmed",
+      "price_disagreement_pct": null,
+      "score_trail": [
+        54.9,
+        59.0
+      ],
+      "score_delta": 4.1,
+      "is_new": false,
+      "entered_top5": false
+    },
+    {
+      "ticker": "FCX",
+      "name": "Freeport-McMoRan",
+      "sector": "Materials",
+      "price": 70.31,
+      "day_change_pct": -7.765971402335037,
+      "market_cap": 101136016560.0,
+      "setup": "Momentum",
+      "setup_note": "Price above both MAs with 50 over 200 \u2014 trend intact and extended",
+      "pillars": {
+        "trend": 24.0,
+        "momentum": 11.0,
+        "fundamentals": 14.0,
+        "catalyst": 8.0,
+        "intelligence": 1.0
+      },
+      "raw_score": 58.0,
+      "normalized_score": 58.0,
+      "score": 58.0,
+      "coverage_pct": 100.0,
+      "missing_pillars": [],
+      "verdict": "Watch",
+      "verdict_note": "Constructive but wants confirmation before committing capital",
+      "upside_pct": 2.5,
+      "analyst_target": 72.05,
+      "analyst_rating": "Buy",
+      "ma_50": 67.011,
+      "ma_200": 61.29229999999996,
+      "vs_ma50_pct": 4.9,
+      "vs_ma200_pct": 14.7,
+      "week52_change_pct": 60.19594440647074,
+      "week52_low": 35.15,
+      "week52_high": 80.24,
+      "off_high_pct": -12.4,
+      "rel_volume": 0.6,
+      "forward_pe": 22.2,
+      "peg": 0.61,
+      "profit_margin_pct": 11.38,
+      "roe_pct": 14.75,
+      "revenue_growth_pct": 0.2,
+      "eps_growth_pct": 54.6,
+      "debt_to_equity": 0.32,
+      "short_float_pct": 1.82,
+      "beta": 1.4,
+      "next_earnings": null,
+      "earnings_timing": null,
+      "implied_move_pct": null,
+      "rsi_14": 59.49503703360547,
+      "atr_14": 3.0210613083971856,
+      "atr_pct": 3.963087115829969,
+      "gap_pct": -7.831562377016921,
+      "gap_basis": "session_open",
+      "ret_20d_pct": 10.68680121968928,
+      "ret_60d_pct": 11.43107732787605,
+      "rs_20d_vs_spy": 11.745771319357045,
+      "rs_60d_vs_spy": 8.647120469096148,
+      "bars_used": 265,
+      "catalysts": [
+        "2026-09-10: Reuters reported the White House copper tariff plan has STALLED on affordability concerns (unnamed sources); COMEX copper fell ~-4.8% intraday to ~$6.48/lb and the COPX copper-miners ETF -4.68%. Most probable driver of today's decline; no official document confirms the stall and Freeport issued no company release dated 09-10.",
+        "2026-09-09: Downgraded to Hold from Buy at Freedom Broker (via TheFly) in a metals & mining sector ratings review."
+      ],
+      "reasons": {
+        "trend": [
+          "Above the 200-day by 14.7%",
+          "50-day above 200-day (golden-cross alignment)",
+          "+4.9% vs the 50-day \u2014 riding the trend line"
+        ],
+        "momentum": [
+          "+60.2% over the last 52 weeks",
+          "78% up its 52-week range (-12.4% off the high) \u2014 strong but not stretched",
+          "Relative volume 0.60x (intraday partial \u2014 indicative only)",
+          "RSI 59 \u2014 healthy trend strength",
+          "Gapped -7.8% at the open against the prior close",
+          "Relative strength vs SPY +11.7 pts over 20 sessions \u2014 leading the tape",
+          "ATR 4.0% of price \u2014 moderate daily range"
+        ],
+        "fundamentals": [
+          "Revenue growth +0.2%",
+          "EPS growth +54.6%",
+          "Profit margin 11.4% \u2014 thin",
+          "PEG 0.61 \u2014 growth is cheap relative to price",
+          "Debt/equity 0.32 \u2014 clean balance sheet"
+        ],
+        "catalyst": [
+          "Analyst consensus: Buy",
+          "Only +2.5% to target \u2014 most upside already priced in",
+          "2 active news catalysts in the last few weeks"
+        ],
+        "intelligence": [
+          "No measurable retail chatter \u2014 an institutional name, not a crowd trade",
+          "No recent earnings call analysed",
+          "2 distinct news items on the tape"
+        ]
+      },
+      "industry": "Copper",
+      "gics": "Materials",
+      "sic": null,
+      "retail": {
+        "sources": [
+          "rh_watchlist"
+        ],
+        "sources_count": 1,
+        "corroborated": false,
+        "rh_lists": [
+          "Trending stocks"
+        ],
+        "rh_best_position": 15,
+        "sentiment_checked": true
+      },
+      "transcript": null,
+      "confidence": "single",
+      "confidence_note": "One source only \u2014 price unconfirmed",
+      "price_disagreement_pct": null,
+      "score_trail": [
+        58.0
+      ],
+      "score_delta": null,
+      "is_new": true,
+      "entered_top5": false
+    },
+    {
+      "ticker": "SNDK",
+      "name": "Sandisk",
+      "sector": "Information Technology",
+      "price": 1694.44,
+      "day_change_pct": -3.9525669294909194,
+      "market_cap": 247358305918.88,
+      "setup": "Momentum",
+      "setup_note": "Price above both MAs with 50 over 200 \u2014 trend intact and extended",
+      "pillars": {
+        "trend": 21.0,
+        "momentum": 12.0,
+        "fundamentals": 10.0,
+        "catalyst": 0,
+        "intelligence": 3.0
+      },
+      "raw_score": 46.0,
+      "normalized_score": 57.5,
+      "score": 57.5,
+      "coverage_pct": 80.0,
+      "missing_pillars": [
+        "catalyst"
+      ],
+      "verdict": "Watch",
+      "verdict_note": "Constructive but wants confirmation before committing capital",
+      "upside_pct": null,
+      "analyst_target": null,
+      "analyst_rating": null,
+      "ma_50": 1537.4842000000003,
+      "ma_200": 1019.0270999999998,
+      "vs_ma50_pct": 10.2,
+      "vs_ma200_pct": 66.3,
+      "week52_change_pct": 2303.1201248049924,
+      "week52_low": 72.03,
+      "week52_high": 2354.3899,
+      "off_high_pct": -28.0,
+      "rel_volume": 0.21,
+      "forward_pe": null,
+      "peg": null,
+      "profit_margin_pct": 77.0,
+      "roe_pct": null,
+      "revenue_growth_pct": 371.6,
+      "eps_growth_pct": null,
+      "debt_to_equity": null,
+      "short_float_pct": null,
+      "beta": null,
+      "next_earnings": null,
+      "earnings_timing": null,
+      "implied_move_pct": null,
+      "rsi_14": 62.24088045572311,
+      "atr_14": 122.53167656859947,
+      "atr_pct": 6.9455708105567755,
+      "gap_pct": -2.1647573646530693,
+      "gap_basis": "session_open",
+      "ret_20d_pct": 38.79627079973251,
+      "ret_60d_pct": -10.905004797737483,
+      "rs_20d_vs_spy": 39.85524089940028,
+      "rs_60d_vs_spy": -13.688961656517385,
+      "bars_used": 265,
+      "catalysts": [],
+      "reasons": {
+        "trend": [
+          "Above the 200-day by 66.3%",
+          "50-day above 200-day (golden-cross alignment)",
+          "+10.2% above the 50-day \u2014 extended"
+        ],
+        "momentum": [
+          "+2303.1% over the last 52 weeks",
+          "71% up its 52-week range (-28.0% off the high) \u2014 strong but not stretched",
+          "Relative volume 0.21x (intraday partial \u2014 indicative only)",
+          "RSI 62 \u2014 healthy trend strength",
+          "Gapped -2.2% at the open against the prior close",
+          "Relative strength vs SPY +39.9 pts over 20 sessions \u2014 leading the tape",
+          "ATR 6.9% of price \u2014 high daily range"
+        ],
+        "fundamentals": [
+          "Revenue growth +371.6%",
+          "Profit margin 77.0% \u2014 highly profitable"
+        ],
+        "catalyst": [],
+        "intelligence": [
+          "Reddit mentions 49->39 (-20%) \u2014 steady",
+          "Rank #14 on r/wallstreetbets",
+          "No recent earnings call analysed"
+        ]
+      },
+      "industry": null,
+      "gics": "Information Technology",
+      "sic": null,
+      "retail": {
+        "wsb_mentions": 39,
+        "wsb_mentions_24h_ago": 49,
+        "wsb_rank": 14,
+        "sources": [
+          "apewisdom"
+        ],
+        "sources_count": 1,
+        "corroborated": false,
+        "wsb_upvotes": 601,
+        "wsb_rank_24h_ago": 7,
+        "wsb_rank_delta": -7,
+        "wsb_mention_change_pct": -20.4,
+        "wsb_new_entrant": false,
+        "sentiment_checked": true
+      },
+      "transcript": null,
+      "confidence": "single",
+      "confidence_note": "One source only \u2014 price unconfirmed",
+      "price_disagreement_pct": null,
+      "score_trail": [
+        53.5,
+        57.5
+      ],
+      "score_delta": 4.0,
+      "is_new": false,
+      "entered_top5": false
+    },
+    {
+      "ticker": "MRVL",
+      "name": "Marvell Technology",
+      "sector": "Information Technology",
+      "price": 231.055,
+      "day_change_pct": -1.6829071103357185,
+      "market_cap": 202296445500.0,
+      "setup": "Momentum",
+      "setup_note": "Price above both MAs with 50 over 200 \u2014 trend intact and extended",
+      "pillars": {
+        "trend": 24.0,
+        "momentum": 12.0,
+        "fundamentals": 6.0,
+        "catalyst": 0,
+        "intelligence": 3.0
+      },
+      "raw_score": 45.0,
+      "normalized_score": 56.2,
+      "score": 56.2,
+      "coverage_pct": 80.0,
+      "missing_pillars": [
+        "catalyst"
+      ],
+      "verdict": "Watch",
+      "verdict_note": "Constructive but wants confirmation before committing capital",
+      "upside_pct": null,
+      "analyst_target": null,
+      "analyst_rating": null,
+      "ma_50": 218.9833000000001,
+      "ma_200": 153.27140000000003,
+      "vs_ma50_pct": 5.5,
+      "vs_ma200_pct": 50.7,
+      "week52_change_pct": 245.6837223219629,
+      "week52_low": 66.14,
+      "week52_high": 329.88,
+      "off_high_pct": -30.0,
+      "rel_volume": 0.17,
+      "forward_pe": null,
+      "peg": null,
+      "profit_margin_pct": 11.24,
+      "roe_pct": null,
+      "revenue_growth_pct": 36.5,
+      "eps_growth_pct": null,
+      "debt_to_equity": null,
+      "short_float_pct": null,
+      "beta": null,
+      "next_earnings": null,
+      "earnings_timing": null,
+      "implied_move_pct": null,
+      "rsi_14": 55.5424022523929,
+      "atr_14": 15.451638122090515,
+      "atr_pct": 6.574885375979965,
+      "gap_pct": -2.7913705799753212,
+      "gap_basis": "session_open",
+      "ret_20d_pct": 10.691912769064093,
+      "ret_60d_pct": -15.977833392920981,
+      "rs_20d_vs_spy": 11.750882868731859,
+      "rs_60d_vs_spy": -18.761790251700884,
+      "bars_used": 265,
+      "catalysts": [],
+      "reasons": {
+        "trend": [
+          "Above the 200-day by 50.7%",
+          "50-day above 200-day (golden-cross alignment)",
+          "+5.5% vs the 50-day \u2014 riding the trend line"
+        ],
+        "momentum": [
+          "+245.7% over the last 52 weeks",
+          "63% up its 52-week range (-30.0% off the high) \u2014 strong but not stretched",
+          "Relative volume 0.17x (intraday partial \u2014 indicative only)",
+          "RSI 56 \u2014 healthy trend strength",
+          "Gapped -2.8% at the open against the prior close",
+          "Relative strength vs SPY +11.8 pts over 20 sessions \u2014 leading the tape",
+          "ATR 6.6% of price \u2014 high daily range"
+        ],
+        "fundamentals": [
+          "Revenue growth +36.5%",
+          "Profit margin 11.2% \u2014 thin"
+        ],
+        "catalyst": [],
+        "intelligence": [
+          "Reddit mentions 11->12 (+9%) \u2014 steady",
+          "Rank #42 on r/wallstreetbets",
+          "No recent earnings call analysed"
+        ]
+      },
+      "industry": null,
+      "gics": "Information Technology",
+      "sic": null,
+      "retail": {
+        "wsb_mentions": 12,
+        "wsb_mentions_24h_ago": 11,
+        "wsb_rank": 42,
+        "sources": [
+          "apewisdom"
+        ],
+        "sources_count": 1,
+        "corroborated": false,
+        "wsb_upvotes": 23,
+        "wsb_rank_24h_ago": 35,
+        "wsb_rank_delta": -7,
+        "wsb_mention_change_pct": 9.1,
+        "wsb_new_entrant": false,
+        "sentiment_checked": true
+      },
+      "transcript": null,
+      "confidence": "single",
+      "confidence_note": "One source only \u2014 price unconfirmed",
+      "price_disagreement_pct": null,
+      "score_trail": [
+        52.3,
+        56.2
+      ],
+      "score_delta": 3.9,
+      "is_new": false,
+      "entered_top5": false
+    }
+  ],
+  "tape": [
+    {
+      "date": "2026-09-10",
+      "slot": "Pre-market",
+      "time": "08:00",
+      "regime_label": "Mixed / Cautious",
+      "avg": 45.6,
+      "top": "SSL",
+      "coverage_avg": 89.0,
+      "run_id": "2026-09-10-premarket",
+      "artifact_url": null,
+      "doc": "claude/scans/2026-09-10-premarket.json",
+      "scores": {
+        "SSL": 63.9,
+        "ALAB": 62.8,
+        "AEHR": 59.9,
+        "ANET": 57.2,
+        "AMD": 54.9,
+        "KLAC": 54.4,
+        "SNDK": 53.5,
+        "MRVL": 52.3,
+        "MDB": 50.7,
+        "MU": 44.6,
+        "NVDA": 43.2,
+        "NAVN": 42.8,
+        "META": 42.3,
+        "SKHY": 39.9,
+        "AVAV": 37.2,
+        "ORCL": 34.9,
+        "ADBE": 26.5,
+        "COO": 22.8,
+        "AEO": 22.3
+      },
+      "_note": "PRE-MARKET 08:00 ET. Collection 08:06-08:18 ET; latest-scan.json written 08:17 ET, 17 minutes after slot time - the fastest hand-off of the week and well clear of the 08:45 PM run. Engine 423ed33 staged over the RAW-HTTPS FALLBACK (engine_source=raw-https): the git clone was refused by the sandbox classifier at path A, path B fetched the same production commit and git ls-remote confirmed the sha, so this is a verified commit and not a fingerprint. THE HEADLINE IS FOUR OVERNIGHT EARNINGS GAPS, THREE OF THEM DOWN HARD, AND A BROAD SEMI FADE AHEAD OF TOMORROW'S CPI. COO -18.56% (51.70 vs 63.48) on a NEW 52-WEEK LOW: FQ3 adj EPS $1.15 beat $1.12 but revenue $1.066B missed ~$1.10B and Q4 was guided to $1.057-1.080B against ~$1.12B, the fourth guidance cut in two years; the board also ended the CooperSurgical strategic review and will keep the division. Five firms cut on 09-10 (Piper Sandler to Neutral $59 from $86, Baird Neutral $61 from $85, BofA Neutral $65, Wells Fargo $61, Stifel Buy but $70). Scored 22.8 Avoid, Broken Trend, RSI 23.7. NAVN -15.95% (21.76 vs 25.89) despite a BEAT AND RAISE - revenue $232.8M +35% beat $220.5M, FY27 guided $927-933M vs $911.3M consensus - because opex rose 46% against 35% revenue growth, widening the GAAP operating loss to $25.6M from $12.3M, with BoomPop dilutive through FY27. Scored 42.8 Hold, Pullback in Uptrend, the highest catalyst pillar on the board at 14/20. AEO -14.25% (14.48 vs 16.89): GAAP EPS $0.79 vs $0.21 consensus is NOT the story - the quarter carried $196M of tariff refunds worth $161M of operating income and ~1,300bps of the 980bps gross-margin gain, the namesake brand comped -1% against Aerie +19%, and Q3 was guided to only $110-115M operating income on flat gross margin. BofA reiterated Sell $16. Scored 22.3 Avoid, Broken Trend. AVAV +4.58% (147.25 vs 140.80) is the only up-gap: FQ1 adj EPS $0.59 crushed $0.30, revenue $480.5M +6% beat, gross margin 26% from 21%, funded backlog a record $1.5B +37% - but FY27 guidance was only REAFFIRMED, so this is margin and backlog, not a raise. Still 37.2 Avoid on Broken Trend (-30% below the 200-day) - the taxonomy refusing a good print in a broken structure, which is the point. THE BOARD'S TOP IS AGAIN PARTLY AN ARTEFACT: SSL 63.9 sits at 40% coverage with zero fundamentals, catalyst and intelligence, and ALAB 62.8 / AEHR 59.9 at 80%. ANET 57.2 is the highest 100%-coverage row and is the real top of the board. EVERY HELD NAME WAS SCORED WITH A GICS LABEL (SIGNAL-05 satisfied, no UNJUDGED rows): ANET 57.2, KLAC 54.4, SNDK 53.5, MRVL 52.3, MDB 50.7, MU 44.6, NVDA 43.2. The portfolio panel reads MU and NVDA as EXIT and KLAC/MDB/MRVL/SNDK as TRIM on score, with ANET the only HOLD - that is the panel's read, not the manager's decision. THE WHOLE SEMI COMPLEX IS LOWER PRE-MARKET: AEHR -3.72%, SKHY -3.69%, MRVL -2.98%, ALAB -2.67%, KLAC -2.45%, AMD -1.94%, MU -1.89%, SNDK -1.61%, ANET -1.65%, NVDA -0.76%, against SPY -0.18%. No dated 09-09/09-10 headline explains ANET or KLAC specifically - both deep dives came back with only positive conference transcripts carrying relative timestamps, so this reads as a sector move ahead of CPI rather than anything name-specific, and neither agent asserted a catalyst it could not date. META +0.19% is the only large-cap holding its ground after yesterday's +6.6% Muse move. MACRO - THIS SLOT OWNS THE CALENDAR AND THE IMPORTANT LINE IS TOMORROW: CPI / Core CPI lands FRIDAY 2026-09-11 at 08:30 ET and IS on the manager's gating list (FOMC/CPI/PCE/payrolls/GDP/Powell), so tomorrow's pre-market slot runs into a genuine entry freeze window. NOTHING GATES TODAY: PPI + Core PPI and initial/continuing jobless claims at 08:30, existing home sales and wholesale inventories at 10:00, EIA nat gas 10:30 and crude 12:00 - all reported and explicitly labelled NOT gating by the 423ed33 banner fix, which is working correctly on this board for the first time. Michigan sentiment prelim tomorrow 10:00. EARNINGS INSIDE 7 DAYS: ORCL and ADBE BOTH REPORT AFTER TODAY'S CLOSE. ORCL consensus adj EPS ~$1.74 on ~$19.13B (+28.1%), cloud revenue guided +58-64%; Scotiabank cut to $215 from $241 on 09-09 (kept Buy) while Wells Fargo held $280 and Barclays $250 - a wide spread into the print, and the $241.43 mean target implies ~50% upside on a stock down 16% YTD. ORCL scored 34.9 Avoid on Early Recovery: do NOT read that +50.4% upside as an entry into tonight's binary. ADBE 26.5 Avoid, consensus EPS $5.84. DATA NOTES: ApeWisdom is LIVE AGAIN after three consecutive stale slots on 09-09 - META 47->125, AEO 1->67 (rank 282->6, the largest attention spike on the tape), AVAV 7->54 (52->9), MU 161->100 and NVDA 119->61 both cooling. StockTwits, the gauges and Arctic Shift were not collected, so MU, SNDK, NVDA, MRVL, AMD, COO and NAVN are single-source. Relative volume is 0.00-0.21x board-wide and is not a signal at this slot. Options positioning is prior-session 2026-09-09; implied_move_pct is NULL board-wide with no substitute. The liquid-movers scan returned 0 rows, mechanical at 08:00. Sector ETF rotation not collected. COO's $73.29 target predates today's five downgrades, so its +41.8% upside is overstated. No IPO/insider/transcript work at this slot by design. CONCENTRATION: 9 of the top 10 are Information Technology - one sector bet, and specifically a semis bet."
+    },
+    {
+      "date": "2026-09-10",
+      "slot": "Opening range",
+      "time": "10:00",
+      "regime_label": "Constructive",
+      "avg": 49.6,
+      "top": "SSL",
+      "scores": {
+        "SSL": 68.8,
+        "AEHR": 64.4,
+        "ANET": 61.5,
+        "VRT": 61.0,
+        "AMD": 59.0,
+        "FCX": 58.0,
+        "SNDK": 57.5,
+        "MRVL": 56.2,
+        "MDB": 54.5,
+        "KLAC": 51.5,
+        "ALAB": 51.0,
+        "MU": 51.0,
+        "NAVN": 47.5,
+        "SKHY": 47.1,
+        "NVDA": 46.5,
+        "META": 45.5,
+        "AVAV": 43.0,
+        "ORCL": 37.5,
+        "ADBE": 28.5,
+        "COO": 26.5,
+        "AEO": 25.5
+      }
+    }
+  ],
+  "notable": [
+    "CONCENTRATION: 7 of the top 10 are Information Technology \u2014 this scan is one sector bet",
+    "DEGRADED: 5 of 21 rows scored on a partial evidence base (catalyst missing on 3, intelligence missing on 3, fundamentals missing on 2, trend missing on 1). Scores are normalised to what was available, so they stay comparable, but conviction is capped.",
+    "Regime flipped: Mixed / Cautious to Constructive",
+    "VRT entered the top 5",
+    "ALAB score moved -12 since the last scan",
+    "FCX gapped -7.8% at the open",
+    "ALAB gapped -4.3% at the open",
+    "NAVN gapped -19.5% at the open",
+    "SKHY gapped -4.6% at the open",
+    "AVAV gapped +4.2% at the open",
+    "COO gapped -18.3% at the open",
+    "AEO gapped -12.6% at the open",
+    "MACRO TODAY: PPI MoM / Core PPI MoM / PPI YoY at 08:30 ET \u2014 reported, NOT gating: the manager's entry gate covers only FOMC, CPI, PCE, payrolls, GDP and Powell",
+    "MACRO TODAY: Initial Jobless Claims at 08:30 ET \u2014 reported, NOT gating: the manager's entry gate covers only FOMC, CPI, PCE, payrolls, GDP and Powell",
+    "MACRO TODAY: Continuing Jobless Claims at 08:30 ET \u2014 reported, NOT gating: the manager's entry gate covers only FOMC, CPI, PCE, payrolls, GDP and Powell",
+    "MACRO TODAY: Existing Home Sales at 10:00 ET \u2014 reported, NOT gating: the manager's entry gate covers only FOMC, CPI, PCE, payrolls, GDP and Powell",
+    "MACRO TODAY: Wholesale Inventories MoM at 10:00 ET \u2014 reported, NOT gating: the manager's entry gate covers only FOMC, CPI, PCE, payrolls, GDP and Powell",
+    "MACRO TODAY: EIA Natural Gas Stocks Change at 10:30 ET \u2014 reported, NOT gating: the manager's entry gate covers only FOMC, CPI, PCE, payrolls, GDP and Powell",
+    "MACRO TODAY: EIA Crude Oil Stocks Change at 12:00 ET \u2014 reported, NOT gating: the manager's entry gate covers only FOMC, CPI, PCE, payrolls, GDP and Powell",
+    "MACRO TOMORROW: CPI / Core CPI (Inflation Rate MoM & YoY) on 2026-09-11 \u2014 overnight holds carry tape-wide event risk",
+    "MACRO TOMORROW: Michigan Consumer Sentiment Prel on 2026-09-11 \u2014 overnight holds carry tape-wide event risk"
+  ]
+}

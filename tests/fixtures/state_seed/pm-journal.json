@@ -1,0 +1,534 @@
+{
+  "entries": [
+    {
+      "ts": "2026-09-09T20:03:10Z",
+      "date": "2026-09-09",
+      "slot": "power-hour",
+      "run_key": "2026-09-09#power-hour",
+      "mode": "paper",
+      "desk": "swing",
+      "sentinel": false,
+      "decisions": [],
+      "skipped": [
+        {
+          "symbol": "MU",
+          "reason": "Score 47 \u2014 weakening, but it was already trimmed today \u2014 one trim per name per session"
+        },
+        {
+          "symbol": "NVDA",
+          "reason": "Score 48 \u2014 weakening, but it was already trimmed today \u2014 one trim per name per session"
+        },
+        {
+          "symbol": "KLAC",
+          "reason": "trim wanted to fire \u2014 PDT guard: selling would be day trade 1/3 and this is not a stop \u2014 held"
+        },
+        {
+          "symbol": "*",
+          "reason": "power-hour places no new entries \u2014 a day-limit entry placed at the last slot expires unfilled at the session roll before it can ever fill. Exits, trims and rebalancing still ran."
+        }
+      ],
+      "warnings": [
+        "SNDK: not in this scan's universe \u2014 priced but unjudged",
+        "KLAC: PDT guard: selling would be day trade 1/3 and this is not a stop \u2014 held"
+      ],
+      "daily_pnl_pct": -0.61,
+      "scan_as_of": "2026-09-09 15:00",
+      "run_id": "2026-09-09-power-hour",
+      "book_revision": 32,
+      "book_fingerprint": "1becc57eb053f4c0",
+      "engine_sha": "45a753f",
+      "house": {
+        "equity": 15423.3,
+        "desks": 3,
+        "top_symbol_pct": {
+          "MU": 6.93,
+          "SNDK": 8.77,
+          "NVDA": 6.49,
+          "ANET": 9.9,
+          "KLAC": 8.8,
+          "MDB": 6.74,
+          "MRVL": 0.91
+        },
+        "sector_pct": {
+          "Information Technology": 24.57,
+          "Unclassified": 23.99
+        },
+        "caps": {
+          "symbol_pct": 15.0,
+          "sector_pct": 40.0
+        },
+        "peers": [
+          "pullback",
+          "momentum"
+        ]
+      },
+      "equity": 5120.93,
+      "cash": 2033.89,
+      "invested": 3087.04,
+      "realized_pnl": 52.23,
+      "halted": false,
+      "day_trades_used": 0,
+      "scan_stale": null,
+      "positions": 6,
+      "working_orders": 0,
+      "changed": true,
+      "change_reasons": [
+        "warnings raised"
+      ],
+      "attempt": 1,
+      "artifact_url": null,
+      "publish_snapshot": true,
+      "book_snapshot": "claude/book-history/2026-09-09-power-hour.json"
+    },
+    {
+      "ts": "2026-09-09T15:50:57Z",
+      "date": "2026-09-09",
+      "slot": "sentinel",
+      "run_key": "2026-09-09#sentinel-1550",
+      "mode": "paper",
+      "desk": "swing",
+      "sentinel": true,
+      "decisions": [
+        {
+          "action": "fill-buy",
+          "symbol": "KLAC",
+          "shares": 3.207581,
+          "price": 184.05,
+          "reason": "Score 65 Pullback in Uptrend \u2014 Buy",
+          "detail": "$590.36 filled at the resting limit"
+        },
+        {
+          "action": "fill-buy",
+          "symbol": "MDB",
+          "shares": 1.056346,
+          "price": 363.07,
+          "reason": "Score 61 Pullback in Uptrend \u2014 Buy",
+          "detail": "$383.53 filled at the resting limit"
+        }
+      ],
+      "skipped": [],
+      "warnings": [],
+      "daily_pnl_pct": -0.34,
+      "scan_as_of": null,
+      "run_id": "2026-09-09-sentinel-1550",
+      "book_revision": 30,
+      "book_fingerprint": "1becc57eb053f4c0",
+      "engine_sha": "45a753f",
+      "house": {
+        "equity": 15460.96,
+        "desks": 3,
+        "top_symbol_pct": {
+          "MU": 6.89,
+          "SNDK": 8.77,
+          "NVDA": 6.49,
+          "ANET": 10.02,
+          "KLAC": 8.8,
+          "MDB": 7.51,
+          "MRVL": 0.92
+        },
+        "sector_pct": {
+          "Information Technology": 25.25,
+          "Unclassified": 24.15
+        },
+        "caps": {
+          "symbol_pct": 15.0,
+          "sector_pct": 40.0
+        },
+        "peers": [
+          "pullback",
+          "momentum"
+        ]
+      },
+      "equity": 5134.85,
+      "cash": 2033.89,
+      "invested": 3100.96,
+      "realized_pnl": 52.23,
+      "halted": false,
+      "day_trades_used": 0,
+      "scan_stale": null,
+      "positions": 6,
+      "working_orders": 0,
+      "changed": true,
+      "change_reasons": [
+        "2 decisions taken",
+        "book state changed"
+      ],
+      "attempt": 1,
+      "artifact_url": null,
+      "publish_snapshot": false,
+      "book_snapshot": "claude/book-history/2026-09-09-sentinel-1550.json"
+    },
+    {
+      "ts": "2026-09-10T13:03:08Z",
+      "date": "2026-09-10",
+      "slot": "pre-market",
+      "run_key": "2026-09-10#pre-market",
+      "mode": "paper",
+      "desk": "swing",
+      "sentinel": false,
+      "decisions": [
+        {
+          "action": "fill-sell",
+          "symbol": "MU",
+          "shares": 0.268752,
+          "price": 997.3005,
+          "reason": "thesis",
+          "detail": "Score fell to 45 \u2014 the thesis that bought it is gone \u2014 realised $+10.17"
+        },
+        {
+          "action": "fill-sell",
+          "symbol": "SNDK",
+          "shares": 0.110105,
+          "price": 1715.2013,
+          "reason": "trim",
+          "detail": "Score 54 \u2014 weakening \u2014 cutting a third (trim 1 of 2 before a full exit) \u2014 realised $+15.94"
+        },
+        {
+          "action": "fill-sell",
+          "symbol": "NVDA",
+          "shares": 2.214922,
+          "price": 220.0784,
+          "reason": "thesis",
+          "detail": "Score fell to 43 \u2014 the thesis that bought it is gone \u2014 realised $+3.76"
+        },
+        {
+          "action": "fill-sell",
+          "symbol": "KLAC",
+          "shares": 1.058502,
+          "price": 175.0712,
+          "reason": "trim",
+          "detail": "Score 54 \u2014 weakening \u2014 cutting a third (trim 1 of 2 before a full exit) \u2014 realised $-9.50"
+        },
+        {
+          "action": "fill-sell",
+          "symbol": "MDB",
+          "shares": 0.348594,
+          "price": 353.3045,
+          "reason": "trim",
+          "detail": "Score 51 \u2014 weakening \u2014 cutting a third (trim 1 of 2 before a full exit) \u2014 realised $-3.40"
+        },
+        {
+          "action": "place-buy",
+          "symbol": "ALAB",
+          "shares": 1.245581,
+          "price": 288.0,
+          "reason": "Score 63 Pullback in Uptrend \u2014 Buy",
+          "detail": "$358.73, stop 253.44, target 391.68, risking $43.05"
+        }
+      ],
+      "skipped": [
+        {
+          "symbol": "AEHR",
+          "reason": "bid/ask spread 1.08% of price, over the 1.0% entry limit \u2014 too expensive to trade at this size"
+        },
+        {
+          "symbol": "NAVN",
+          "reason": "bid/ask spread 4.75% of price, over the 1.0% entry limit \u2014 too expensive to trade at this size"
+        },
+        {
+          "symbol": "COO",
+          "reason": "bid/ask spread 1.53% of price, over the 1.0% entry limit \u2014 too expensive to trade at this size"
+        },
+        {
+          "symbol": "SSL",
+          "reason": "Only 40% of the evidence base was available (catalyst, fundamentals, intelligence) \u2014 under the 70% floor. The score is normalised to what was there, so a thin row can outrank a complete one; it is not sized on that basis; Trimmed to the 15% max-position cap"
+        }
+      ],
+      "warnings": [
+        "Macro calendar today (not gating): PPI MoM / Core PPI MoM / PPI YoY at 08:30 ET, Initial Jobless Claims at 08:30 ET, Continuing Jobless Claims at 08:30 ET, Existing Home Sales at 10:00 ET, Wholesale Inventories MoM at 10:00 ET, EIA Natural Gas Stocks Change at 10:30 ET, EIA Crude Oil Stocks Change at 12:00 ET",
+        "MACRO TOMORROW: CPI / Core CPI (Inflation Rate MoM & YoY) at 08:30 ET, Michigan Consumer Sentiment Prel at 10:00 ET \u2014 overnight holds carry tape-wide event risk.",
+        "Not entered \u2014 bid/ask spread over the 1.0% limit: AEHR 1.08%, NAVN 4.75%, COO 1.53%"
+      ],
+      "daily_pnl_pct": -0.06,
+      "scan_as_of": "2026-09-10 08:00",
+      "run_id": "2026-09-10-pre-market",
+      "book_revision": 33,
+      "book_fingerprint": "925ae97f4a6d8a51",
+      "engine_sha": "423ed33",
+      "house": {
+        "equity": 15227.9,
+        "desks": 3,
+        "top_symbol_pct": {
+          "ANET": 9.76,
+          "SNDK": 7.42,
+          "KLAC": 7.34,
+          "MDB": 5.93,
+          "MU": 5.06,
+          "NVDA": 3.27,
+          "MRVL": 0.89,
+          "ALAB": 2.36
+        },
+        "sector_pct": {
+          "Unclassified": 21.57,
+          "Information Technology": 20.45
+        },
+        "caps": {
+          "symbol_pct": 15.0,
+          "sector_pct": 40.0
+        },
+        "peers": [
+          "pullback",
+          "momentum"
+        ]
+      },
+      "equity": 5039.36,
+      "cash": 3286.7,
+      "invested": 1752.66,
+      "realized_pnl": 69.2,
+      "halted": false,
+      "day_trades_used": 0,
+      "scan_stale": null,
+      "positions": 4,
+      "working_orders": 1,
+      "changed": true,
+      "change_reasons": [
+        "6 decisions taken",
+        "warnings raised",
+        "book state changed"
+      ],
+      "attempt": 1,
+      "artifact_url": null,
+      "publish_snapshot": true,
+      "book_snapshot": "claude/book-history/2026-09-10-pre-market.json"
+    },
+    {
+      "ts": "2026-09-10T15:04:45Z",
+      "date": "2026-09-10",
+      "slot": "opening-range",
+      "run_key": "2026-09-10#opening-range",
+      "mode": "paper",
+      "desk": "swing",
+      "sentinel": false,
+      "decisions": [
+        {
+          "action": "place-buy",
+          "symbol": "AEHR",
+          "shares": 2.208415,
+          "price": 98.02,
+          "reason": "Score 64 Momentum \u2014 Buy",
+          "detail": "$216.47, stop 86.26, target 133.30, risking $25.97"
+        }
+      ],
+      "skipped": [
+        {
+          "symbol": "KLAC",
+          "reason": "Score 52 \u2014 weakening, but it was already trimmed today \u2014 one trim per name per session"
+        },
+        {
+          "symbol": "MDB",
+          "reason": "Score 54 \u2014 weakening, but it was already trimmed today \u2014 one trim per name per session"
+        },
+        {
+          "symbol": "ALAB",
+          "reason": "trim wanted to fire \u2014 PDT guard: selling would be day trade 1/3 and this is not a stop \u2014 held"
+        },
+        {
+          "symbol": "SSL",
+          "reason": "Only 40% of the evidence base was available (catalyst, fundamentals, intelligence) \u2014 under the 70% floor. The score is normalised to what was there, so a thin row can outrank a complete one; it is not sized on that basis; Trimmed to the 15% max-position cap"
+        }
+      ],
+      "warnings": [
+        "ALAB: PDT guard: selling would be day trade 1/3 and this is not a stop \u2014 held",
+        "Macro calendar today (not gating): PPI MoM / Core PPI MoM / PPI YoY at 08:30 ET, Initial Jobless Claims at 08:30 ET, Continuing Jobless Claims at 08:30 ET, Existing Home Sales at 10:00 ET, Wholesale Inventories MoM at 10:00 ET, EIA Natural Gas Stocks Change at 10:30 ET, EIA Crude Oil Stocks Change at 12:00 ET",
+        "MACRO TOMORROW: CPI / Core CPI (Inflation Rate MoM & YoY) at 08:30 ET, Michigan Consumer Sentiment Prel at 10:00 ET \u2014 overnight holds carry tape-wide event risk."
+      ],
+      "daily_pnl_pct": 0.69,
+      "scan_as_of": "2026-09-10 10:00",
+      "run_id": "2026-09-10-opening-range",
+      "book_revision": 35,
+      "book_fingerprint": "c22a70567ed245f6",
+      "engine_sha": "423ed33",
+      "house": {
+        "equity": 15301.86,
+        "desks": 3,
+        "top_symbol_pct": {
+          "ANET": 9.94,
+          "KLAC": 5.83,
+          "SNDK": 5.71,
+          "ALAB": 4.75,
+          "MDB": 3.71,
+          "AEHR": 1.41
+        },
+        "sector_pct": {
+          "Unclassified": 19.48,
+          "Information Technology": 11.87
+        },
+        "caps": {
+          "symbol_pct": 15.0,
+          "sector_pct": 40.0
+        },
+        "peers": [
+          "pullback",
+          "momentum"
+        ]
+      },
+      "equity": 5077.48,
+      "cash": 2927.97,
+      "invested": 2149.51,
+      "realized_pnl": 69.2,
+      "halted": false,
+      "day_trades_used": 0,
+      "scan_stale": null,
+      "positions": 5,
+      "working_orders": 1,
+      "changed": true,
+      "change_reasons": [
+        "1 decision taken",
+        "warnings raised",
+        "book state changed"
+      ],
+      "attempt": 1,
+      "artifact_url": null,
+      "publish_snapshot": true,
+      "book_snapshot": "claude/book-history/2026-09-10-opening-range.json"
+    },
+    {
+      "ts": "2026-09-10T17:31:47Z",
+      "date": "2026-09-10",
+      "slot": "midday",
+      "run_key": "2026-09-10#midday",
+      "mode": "paper",
+      "desk": "swing",
+      "sentinel": false,
+      "decisions": [],
+      "skipped": [
+        {
+          "symbol": "MDB",
+          "reason": "Score 54 \u2014 weakening, but it was already trimmed today \u2014 one trim per name per session"
+        },
+        {
+          "symbol": "*",
+          "reason": "1 working buy order(s) (AEHR) counted against the sector, position, risk and deployment caps as if already filled \u2014 committed capital is not free capital (CAP-01)"
+        },
+        {
+          "symbol": "AEHR",
+          "reason": "already has a working order \u2014 excluded before sizing so its cash cannot be counted against the budget twice"
+        },
+        {
+          "symbol": "AMD",
+          "reason": "Sector limit: already 3 positions in Information Technology (max 3)"
+        }
+      ],
+      "warnings": [
+        "Macro calendar today (not gating): PPI MoM / Core PPI MoM / PPI YoY at 08:30 ET, Initial Jobless Claims at 08:30 ET, Continuing Jobless Claims at 08:30 ET, Existing Home Sales at 10:00 ET, Wholesale Inventories MoM at 10:00 ET, EIA Natural Gas Stocks Change at 10:30 ET, EIA Crude Oil Stocks Change at 12:00 ET",
+        "MACRO TOMORROW: CPI / Core CPI (Inflation Rate MoM & YoY) at 08:30 ET, Michigan Consumer Sentiment Prel at 10:00 ET \u2014 overnight holds carry tape-wide event risk."
+      ],
+      "daily_pnl_pct": 0.45,
+      "scan_as_of": "2026-09-10 12:30",
+      "run_id": "2026-09-10-midday",
+      "book_revision": 36,
+      "book_fingerprint": "c22a70567ed245f6",
+      "engine_sha": "423ed33",
+      "house": {
+        "equity": 15276.49,
+        "desks": 3,
+        "top_symbol_pct": {
+          "SNDK": 5.72,
+          "ANET": 9.82,
+          "KLAC": 5.79,
+          "MDB": 3.74,
+          "ALAB": 4.75,
+          "AEHR": 4.85
+        },
+        "sector_pct": {
+          "Information Technology": 15.33,
+          "Unclassified": 19.35
+        },
+        "caps": {
+          "symbol_pct": 15.0,
+          "sector_pct": 40.0
+        },
+        "peers": [
+          "pullback",
+          "momentum"
+        ]
+      },
+      "equity": 5065.18,
+      "cash": 2927.97,
+      "invested": 2137.21,
+      "realized_pnl": 69.2,
+      "halted": false,
+      "day_trades_used": 0,
+      "scan_stale": null,
+      "positions": 5,
+      "working_orders": 1,
+      "changed": true,
+      "change_reasons": [
+        "warnings raised"
+      ],
+      "attempt": 1,
+      "artifact_url": null,
+      "publish_snapshot": true,
+      "book_snapshot": "claude/book-history/2026-09-10-midday.json"
+    },
+    {
+      "ts": "2026-09-10T13:52:14Z",
+      "date": "2026-09-10",
+      "slot": "sentinel",
+      "run_key": "2026-09-10#sentinel-1352",
+      "mode": "paper",
+      "desk": "swing",
+      "sentinel": true,
+      "decisions": [
+        {
+          "action": "fill-buy",
+          "symbol": "ALAB",
+          "shares": 1.245581,
+          "price": 288.0,
+          "reason": "Score 63 Pullback in Uptrend \u2014 Buy",
+          "detail": "$358.73 filled at the resting limit"
+        }
+      ],
+      "skipped": [],
+      "warnings": [],
+      "daily_pnl_pct": 0.06,
+      "scan_as_of": null,
+      "run_id": "2026-09-10-sentinel-1352",
+      "book_revision": 34,
+      "book_fingerprint": "7e28254803b30448",
+      "engine_sha": "423ed33",
+      "house": {
+        "equity": 15239.78,
+        "desks": 3,
+        "top_symbol_pct": {
+          "SNDK": 5.74,
+          "ANET": 9.9,
+          "KLAC": 5.74,
+          "MDB": 3.59,
+          "ALAB": 4.68
+        },
+        "sector_pct": {
+          "Information Technology": 10.42,
+          "Unclassified": 19.23
+        },
+        "caps": {
+          "symbol_pct": 15.0,
+          "sector_pct": 40.0
+        },
+        "peers": [
+          "pullback",
+          "momentum"
+        ]
+      },
+      "equity": 5045.34,
+      "cash": 2927.97,
+      "invested": 2117.37,
+      "realized_pnl": 69.2,
+      "halted": false,
+      "day_trades_used": 0,
+      "scan_stale": null,
+      "positions": 5,
+      "working_orders": 0,
+      "changed": true,
+      "change_reasons": [
+        "1 decision taken",
+        "book state changed"
+      ],
+      "attempt": 1,
+      "artifact_url": null,
+      "publish_snapshot": false,
+      "book_snapshot": "claude/book-history/2026-09-10-sentinel-1352.json"
+    }
+  ],
+  "updated": "2026-09-10T17:31:47Z"
+}
