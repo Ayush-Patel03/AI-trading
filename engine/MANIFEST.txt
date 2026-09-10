@@ -12,6 +12,7 @@ house.py
 ic.py
 ladder.py
 ledger.py
+memo.py
 mirror.py
 paper_mirror.py
 pm.py

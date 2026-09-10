@@ -25,6 +25,14 @@ the 60-point proposal floor blocked every order. Scores are now comparable acros
 scans regardless of which sources answered. Rows carry `coverage_pct`, and a row
 under 70% coverage cannot be called Strong Buy - thin evidence is not conviction.
 
+LLM MEMOS (P-07, 2026-09-10). A scheduled session may leave `memos/<SYMBOL>.json` in the
+run dir — a structured extraction from an ANONYMISED news payload (`news_payload.json`).
+memo.py validates each one against that payload (latency, numerals copied not computed,
+verbatim quote, temperature 0, post-cutoff) and the valid ones put `llm_*` keys on the
+row's `features`, exactly like the S-04 technical features: logged, scored by nothing.
+Every probability call goes to archive/calibration.jsonl for history.py --resolve-memos.
+See docs/LLM.md.
+
 Paths resolve from SCAN_DIR, else from this file's own directory, so the bundle
 runs wherever it is copied.
 """
@@ -567,8 +575,25 @@ def scan_date_of(meta):
     return str(d)
 
 
-def scan(data):
+def attach_memos(data, run_dir, archive_dir=None):
+    """P-07: LLM memos as logged features. `memos/<SYMBOL>.json` in the run dir, validated
+    by memo.py against `news_payload.json` (the staged raw news the session was given);
+    valid ones put `llm_*` keys on the candidate's `features`, rejections land in
+    `meta.memo_rejections`, probability calls go to `<archive>/calibration.jsonl`. No pillar
+    reads any of it — the row's score is the same with or without a memo. Never raises."""
+    try:
+        import memo
+        return memo.apply_memos(data, run_dir, archive_dir)
+    except Exception as exc:                      # noqa: BLE001 — a memo never kills a scan
+        data.setdefault("meta", {}).setdefault("data_warnings", []).append(
+            f"MEMO: processing failed and was skipped: {type(exc).__name__}: {exc}")
+        return {"accepted": [], "rejected": {}, "logged": [], "error": str(exc)}
+
+
+def scan(data, run_dir=None):
     today = datetime.strptime(scan_date_of(data["meta"]), "%Y-%m-%d").date()
+    if run_dir:
+        attach_memos(data, run_dir, os.path.join(run_dir, "archive"))
     mult, regime_label, regime_notes = score_regime(data["regime"])
 
     # Prior scans from earlier slots today: [{slot, time, regime_label, avg, scores:{TKR:score}}]
@@ -779,12 +804,17 @@ if __name__ == "__main__":
     import shutil
     import archive
     src = sys.argv[1] if len(sys.argv) > 1 else os.path.join(BASE, "scan_data.json")
-    out = scan(json.load(open(src, encoding="utf-8")))
+    data = json.load(open(src, encoding="utf-8"))
     # Every run owns its own file names. The unstamped scan_results.json stays as the
     # "latest" copy the rest of the pipeline reads; the stamped copy is the one that is
     # still here after the next slot runs. The input is snapshotted too, so a board can
-    # be re-derived from exactly what it was scored on.
-    rid = archive.run_id(out["meta"])
+    # be re-derived from exactly what it was scored on. The id is fixed before scoring so
+    # the memo calibration rows (P-07) carry it.
+    scan_date_of(data["meta"])
+    rid = archive.run_id(data["meta"])
+    data["meta"]["run_id"] = rid
+    # BASE is the run dir: memos/<SYMBOL>.json + news_payload.json are read from it (P-07).
+    out = scan(data, run_dir=BASE)
     out["meta"]["run_id"] = rid
     fn = archive.files_for(rid)
     json.dump(out, open(os.path.join(BASE, "scan_results.json"), "w", encoding="utf-8"), indent=2)
@@ -811,7 +841,14 @@ if __name__ == "__main__":
     for name in ("scan_results.json", fn["results"]):
         json.dump(out, open(os.path.join(BASE, name), "w", encoding="utf-8"), indent=2)
     print(f"RUN {rid}  ->  {fn['results']} + {fn['data']}")
-    print(f"{snap_note}\n")
+    print(snap_note)
+    mm = out["meta"].get("memos")
+    if mm:
+        print(f"memos: {len(mm['accepted'])} accepted ({', '.join(mm['accepted']) or '-'}), "
+              f"{mm['rejected']} rejected; calibration advisory={mm.get('advisory', True)}")
+        for sym, errs in sorted((out["meta"].get("memo_rejections") or {}).items()):
+            print(f"  ! {sym}: " + "; ".join(errs))
+    print()
     print(f"REGIME: {out['regime']['label']} (x{out['regime']['multiplier']})   "
           f"coverage avg {out['meta']['coverage_avg']:.0f}%\n")
     print(f"{'#':<3}{'TKR':<7}{'SCORE':>6}  {'VERDICT':<12}{'SETUP':<22}{'T/M/F/C/I':<16}"

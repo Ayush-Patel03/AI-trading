@@ -234,6 +234,15 @@ within 120 minutes of the print: see PM.md, "The macro gate", retuned 2026-09-01
 first version would have frozen every entry slot on two consecutive real calendars.
 Collect the whole calendar anyway — the non-gating items are still reported.
 
+**LLM memos (P-07, 2026-09-10).** The same `features` dict can carry five `llm_*` keys
+(`llm_event_type`, `llm_direction`, `llm_magnitude`, `llm_confidence`, `llm_p_up_5d`) from a
+structured memo the session wrote off an *anonymised* news payload — `memos/<SYMBOL>.json`
+validated by `engine/memo.py` against `news_payload.json` in the run dir. Same rule as the
+technical features: logged on the row, scored by nothing, `null` where there is no valid
+memo. Rejections are listed in `meta.memo_rejections`; probability calls go to
+`archive/calibration.jsonl` for `history.py --resolve-memos`. The whole design, the exact
+extractor prompt and the calibration rule are in `docs/LLM.md`.
+
 ### 3b. Archive the run — designed on 2026-08-31, executed by nothing until 2026-09-01
 
 `archive.py --record` writes a compact (~10 KB) record of the run — scores, pillars, verdicts,
