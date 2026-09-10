@@ -74,6 +74,20 @@ trial counter, then prints "trial N of the ledger". Without it the run is NOT co
 says so — every configuration tried on the same data spends evidence whether or not it was
 written down, so write it down. docs/BACKTEST.md, "Trial ledger and IC".
 
+THE ROTATION DESK (D-01 / E26)
+------------------------------
+    python3 backtest.py --desk rotation --bars bars_etf.json --start 2016-01-01 --end 2026-08-31 \\
+                        [--tbill tbill.json | --tbill-pct 4.2] [--corr-with paper_book.json] \\
+                        --summary rotation.json --ledger --experiment-id E26
+
+`--desk rotation` runs rotation.replay() instead of the scoring replay: the sector-rotation
+rule walked monthly over the ETF bars (rank on 12-1 momentum, Antonacci's absolute filter
+against the bill, top-3 equal sleeves or TLT, a weekly check, fills at the next open plus a
+stated cost). It reports monthly returns, the equity curve, max drawdown, the rebalance count,
+turnover and the correlation with SPY — no Sharpe, no win rate. `--corr-with` adds the
+correlation of its daily returns with another equity curve (a paper book, say) — the plan's
+acceptance is rho < 0.6 against the swing desk. The ledger row is id E26 by default.
+
 Exit 0 wrote records. Exit 2 wrote nothing and said why.
 """
 import argparse
@@ -89,6 +103,7 @@ if BASE not in sys.path:
 import archive
 import ic
 import ledger
+import rotation
 import scanner
 import technicals
 import universe_history
@@ -407,8 +422,25 @@ def main(argv=None):
                     help="{SYMBOL: shares} for turnover_20d. A STATIC snapshot (today's "
                          "share count applied to every date), so the feature is approximate "
                          "and every record says so. Absent = turnover_20d null.")
-    ap.add_argument("--out-records", required=True)
+    ap.add_argument("--out-records", default=None,
+                    help="directory for the replay records (required unless --desk rotation)")
     ap.add_argument("--summary")
+    # D-01 / E26: the rotation desk's purpose-built replay.
+    ap.add_argument("--desk", default=None, choices=["rotation"],
+                    help="rotation: replay the sector-rotation rule (rotation.replay) over "
+                         "--bars instead of the scoring model")
+    ap.add_argument("--tbill", default=None, metavar="JSON",
+                    help="rotation: {date: tbill_3m_pct} series, or a macro.json with "
+                         "tbill_3m_pct; absent and without --tbill-pct the bill rate is 0")
+    ap.add_argument("--tbill-pct", dest="tbill_pct", type=float, default=None,
+                    help="rotation: a constant 3-month bill yield in percent")
+    ap.add_argument("--cost-bps", dest="cost_bps", type=float, default=5.0,
+                    help="rotation: one-way cost per trade in basis points (default 5)")
+    ap.add_argument("--no-weekly", dest="weekly", action="store_false",
+                    help="rotation: skip the weekly rank-6 / filter-flip check")
+    ap.add_argument("--corr-with", dest="corr_with", default=None, metavar="JSON",
+                    help="rotation: another equity curve (a paper book, a replay summary or "
+                         "[{date, equity}]) to correlate daily returns with")
     # The trial ledger. `--ledger` alone uses the default path; omitted, the run is not
     # counted and says so out loud.
     ap.add_argument("--ledger", nargs="?", const=ledger.DEFAULT_PATH, default=None,
@@ -420,6 +452,11 @@ def main(argv=None):
     ap.add_argument("--horizons", default="5,10,20",
                     help="forward horizons in sessions for the ledger's IC summary")
     a = ap.parse_args(argv)
+
+    if a.desk == "rotation":
+        return rotation_main(a, argv)
+    if not a.out_records:
+        ap.error("--out-records is required")
 
     bars = load_bars(a.bars)
     if a.benchmark not in bars:
@@ -505,6 +542,104 @@ def main(argv=None):
         for h, m in (row["in_sample"] or {}).items():
             print(f"    {h:>3}d  IC {m.get('ic_mean')}  t(NW) {m.get('ic_tstat_nw')}  "
                   f"pooled rho {m.get('pooled_spearman')}  spread {m.get('spread_pct')}%")
+    else:
+        print("  LEDGER  not counted: no --ledger given. This trial spent evidence anyway; "
+              "re-run with --ledger to record it.")
+    return 0
+
+
+def rotation_main(a, argv):
+    """D-01 / E26 — the sector-rotation replay and its ledger row."""
+    bars = rotation.load_bars(json.load(open(a.bars, encoding="utf-8")))
+    missing = [s for s in rotation.UNIVERSE if s not in bars]
+    if rotation.BENCHMARK not in bars:
+        print(f"REFUSED: {rotation.BENCHMARK} is not in the bars file. It sets the calendar "
+              "and the absolute-momentum filter.", file=sys.stderr)
+        return 2
+    if missing:
+        print(f"note: bars file is missing {', '.join(missing)} of the 14-symbol universe — "
+              "they cannot be ranked or held in this replay", file=sys.stderr)
+    tbill = a.tbill_pct
+    if a.tbill:
+        raw = json.load(open(a.tbill, encoding="utf-8"))
+        if isinstance(raw, dict) and "tbill_3m_pct" in raw:
+            tbill = float(raw["tbill_3m_pct"])
+        elif isinstance(raw, dict):
+            tbill = {str(k): float(v) for k, v in raw.items()}
+        else:
+            print("REFUSED: --tbill must be {date: pct} or a macro.json with tbill_3m_pct",
+                  file=sys.stderr)
+            return 2
+    try:
+        out = rotation.replay(bars, a.start, a.end, tbill_series=tbill, cost_bps=a.cost_bps,
+                              weekly=a.weekly)
+    except ValueError as exc:
+        print(f"REFUSED: {exc}", file=sys.stderr)
+        return 2
+    out["_warnings"].append(
+        "The parameters (12-1 window, top 3, rank-6 weekly trigger, TLT bond leg) are the "
+        "literature's, not fitted here; a re-run with other parameters is another trial.")
+    corr_other = None
+    if a.corr_with:
+        other = rotation.load_equity_curve(a.corr_with)
+        corr_other = rotation.corr_with(out["equity_curve"], other)
+        corr_other["with"] = os.path.basename(a.corr_with)
+        corr_other["acceptance_rho_lt_0_6"] = (corr_other["corr"] is not None
+                                               and corr_other["corr"] < 0.6
+                                               and not corr_other["not_a_sample"])
+    out["corr_with_other"] = corr_other
+    out["bars_file"] = os.path.basename(a.bars)
+    out["missing_symbols"] = missing
+    if a.summary:
+        with open(os.path.join(BASE, a.summary), "w", encoding="utf-8") as f:
+            json.dump(out, f, indent=2)
+
+    print(f"ROTATION  {out['start']} -> {out['end']}  {out['sessions']} sessions, "
+          f"{out['n_months']} months, {out['n_decisions']} decisions, "
+          f"{out['n_rebalances']} rebalances ({out['bond_months']} month-ends in the bond leg)")
+    print(f"  monthly mean {out['monthly_mean_pct']}%  median {out['monthly_median_pct']}%  "
+          f"total {out['total_return_pct']}%  max drawdown {out['max_dd_pct']}%")
+    print(f"  corr with SPY {out['corr_with_spy']}   turnover one-way mean "
+          f"{out['turnover']['mean_one_way']} over {out['turnover']['n']} rebalance(s)   "
+          f"cost {out['cost_bps_one_way']} bp one-way")
+    if corr_other:
+        print(f"  corr with {corr_other['with']}: {corr_other['corr']} on n={corr_other['n']} "
+              f"daily returns" + ("  (not a sample)" if corr_other["not_a_sample"] else "")
+              + f"  acceptance rho<0.6: {corr_other['acceptance_rho_lt_0_6']}")
+    for w in out["_warnings"]:
+        print(f"  {w}")
+
+    if a.ledger:
+        ins = {"monthly_mean_pct": out["monthly_mean_pct"],
+               "monthly_median_pct": out["monthly_median_pct"],
+               "total_return_pct": out["total_return_pct"],
+               "max_dd_pct": out["max_dd_pct"], "corr_with_spy": out["corr_with_spy"],
+               "corr_with_other": (corr_other or {}).get("corr"),
+               "corr_other_n": (corr_other or {}).get("n"),
+               "turnover_mean_one_way": out["turnover"]["mean_one_way"],
+               "n_rebalances": out["n_rebalances"], "bond_months": out["bond_months"],
+               "cost_bps_one_way": out["cost_bps_one_way"],
+               "tbill_default_used": out["tbill_default_used"]}
+        row = {
+            "id": a.experiment_id or "E26",
+            "hypothesis": a.hypothesis or ("Sector rotation (12-1 momentum, top 3 equal "
+                                           "sleeves, Antonacci absolute filter vs the 3m bill, "
+                                           "TLT bond leg, monthly) earns its keep at rho < 0.6 "
+                                           "to the swing desk"),
+            "config_diff": a.config_diff or {"desk": "rotation", **out["config"],
+                                             "cost_bps_one_way": a.cost_bps,
+                                             "weekly": a.weekly},
+            "harness_cmd": ["backtest.py"] + list(argv if argv is not None else sys.argv[1:]),
+            "window": {"start": out["start"], "end": out["end"]},
+            "universe": {"name": os.path.basename(a.bars),
+                         "n_symbols": len([s for s in rotation.UNIVERSE if s in bars])},
+            "universe_bias": None,
+            "n": out["n_months"], "horizons": [], "in_sample": ins, "out_of_sample": None,
+            "decision": None, "replays": out["n_decisions"],
+        }
+        row = ledger.append(a.ledger, row)
+        print(f"  LEDGER  trial {row['n_trials_to_date']} of the ledger ({a.ledger}) "
+              f"-> {row['id']}")
     else:
         print("  LEDGER  not counted: no --ledger given. This trial spent evidence anyway; "
               "re-run with --ledger to record it.")

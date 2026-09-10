@@ -74,17 +74,18 @@
     "scan": {
       "required": ["scan_data.json"],
       "optional": ["bars.json", "fundamentals.json", "quotes.json", "apewisdom.json",
-                   "st_trending.json", "st_gauges.json", "reddit_posts.json",
+                   "st_trending.json", "st_gauges.json", "trends.json",
                    "rh_watchlists.json", "quotes_min.json", "options_scan.json",
-                   "earnings_days.json", "option_chains.json"]
+                   "earnings_days.json", "option_chains.json"],
+      "optional_globs": ["st_symbol_*.json"]
     },
     "pm": {
       "required": ["pm_quotes.json"],
-      "optional": ["scan_results.json", "pm_broker.json", "pm_prices.json", "option_chains.json"]
+      "optional": ["scan_results.json", "pm_broker.json", "pm_prices.json", "option_chains.json", "vix.json"]
     },
     "sentinel": {
       "required": ["pm_quotes.json"],
-      "optional": ["pm_broker.json"]
+      "optional": ["pm_broker.json", "option_chains.json", "vix.json", "bars_5m.json", "bars.json"]
     },
     "watch": {
       "required": ["pm_quotes.json"],

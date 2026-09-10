@@ -1103,6 +1103,7 @@ class rather than to the blend. `claude/engine/desks.json` defines them:
 | `momentum` | setup *Momentum*, RSI 50–72 — trend continuation, not exhaustion | `claude/paper-book-momentum.json`, `claude/pm-journal-momentum.json` |
 | `rotation` | **inactive template** (E26) — sector-ETF momentum, monthly, `time_catastrophe` | none — section 16 |
 | `orb` | **inactive template** (E24) — opening-range breakout, intraday, `chandelier` k_init 0.1, flatten at close | none — section 16 |
+| `options` | **inactive template** (E27, D-02) — XSP/SPY put credit spreads, paper, `kind: options` | none until activated — section 19 |
 
 Every desk starts from the same $5,000 of paper capital, runs under the same paper lock,
 account lock, risk rules (`portfolio.RULES`, overridable per desk in `desks.json` but not
@@ -1261,6 +1262,86 @@ N_eff, and staging bars turns it into a measurement.
 
 ---
 
+## 14c. VaR and stress — what the desk stands to lose (K-04, added 2026-09-10)
+
+Section 7's kill switch and the K-02 ladder react to a loss after it has happened; section
+14b says how crowded the house is. Neither says how much THIS desk's book stands to lose on
+an ordinary bad day, or what it would have done through the sessions this decade that broke
+the most books. `engine/var.py` answers both, once per run, for one desk's marked positions
+(working buys are not exposure until they fill). It is pure — weights and per-symbol daily
+returns in, a dict out — and nothing in it reads a file, mutates a book or touches an order.
+
+### The numbers
+
+Weights are position market value over **desk** equity, so cash carries a return of 0 and a
+40%-invested book's VaR is a share of desk equity, not of the invested slice.
+
+| Field | Definition | Without `bars.json` |
+|---|---|---|
+| `var.var_pct` | **1-day 99% historical-simulation VaR**: over the dates every held name shares (newest 504 at most — two trading years), the portfolio return Σ wᵢ rᵢ is sorted and the loss at the k-th worst observation, k = ⌊(1−α)·n⌋ (at least 1), is the VaR. 500 days at α = 0.99 is the 5th-worst day. Positive percent of desk equity. **Null with a reason under 120 overlapping days**, or when no held name has bars, or when the book is flat — an unmeasured VaR is never 0. | `null`, reason `no bars.json staged this run` |
+| `var.cvar_pct` | the mean loss of those k worst observations. Never below the VaR. | `null` |
+| `var.n_days`, `var.window`, `var.coverage_pct`, `var.uncovered` | how many shared days, their span, what share of the invested weight had bars, and which names had none (left out of the series, named, never counted as 0). | 0 / null |
+| `stress[<window>].pnl_pct` | the book's cumulative P&L, % of desk equity, had each holding repeated its **own** return through the window (`coverage: "own"`). When the staged bars do not reach that far — a two-year file covers neither 2020 nor 2022 — the holding's contribution is **β₂₅₂ × the benchmark's window return**, from SPY's own bars when they cover it (`benchmark_basis: "bars"`) else the index return recorded in `var.BENCH_WINDOW_RET` (`"index"`), and the window is labelled `coverage: "proxy"`. A name with neither bars nor a beta is unmeasured and `measured_pct` says how much of the book was (`"partial"`); a name is never given β = 1. | `{}` |
+| `worst_stress`, `worst_stress_window` | the most negative **long-side** window. | `null` |
+
+The five windows, inclusive of the return dated on each bound:
+
+| Window | What | Side |
+|---|---|---|
+| `2020-03-16` | the COVID crash's worst single session (S&P 500 −11.98%) | long |
+| `2022` | 2022-01-03 → 2022-12-30 cumulative, the rate-shock bear (−19.4%) | long |
+| `2024-08-05` | the yen-carry unwind session (−3.0%) | long |
+| `2025-04-03/04` | the two tariff sessions, cumulative (−10.5%) | long |
+| `2025-04-09` | the +9.5% tariff-pause squeeze | **short** — a long book gains; `short_pnl_pct` is the loss a short book (the options desk, later) would take. It never counts toward `worst_stress`. |
+
+`bars.json` is the same file `technicals.py` and section 14b read — the raw
+`get_equity_historicals` payload with SPY in the same call — staged in `$SCAN_DIR` when a
+slot fetched bars. It is optional and usually absent: the sentinel and most slots stage
+none, and the block says `"bars": "absent"`.
+
+### Thresholds, and what they do
+
+| `PM_RULES["var"]` | Default | Flag when |
+|---|---|---|
+| `alpha` | **0.99** | — |
+| `max_var_pct_of_desk` | **3.0** | `var_pct` above it |
+| `max_stress_multiple_of_halt` | **2.0** | `−worst_stress` above it × `halt_pct` (16% by default) |
+| `halt_pct` | **8.0** | the ladder's rung-3 halt, restated here |
+| `enforce` | **`false`** | — |
+
+A null VaR or an unmeasured stress never flags. **With `enforce` off — the default — the
+block is reported and gates nothing**: the full block goes to `state["risk"]`, the compact
+summary to the journal's `risk` block, and `var_pct` / `worst_stress` /
+`worst_stress_window` to every heartbeat (quiet or not) and from there onto the desk's
+coverage row, all additive; the console prints one line:
+
+```
+risk: VaR99 1.84% (cvar 2.61%, 498d) · worst stress 2022 -9.4% (proxy)   FLAGS var  [reported]
+risk: VaR n/a (no bars.json staged this run)
+```
+
+As with 14b, a reported-only flag raises **no** journal warning, so a standing flag does
+not publish a board every slot.
+
+**With `enforce` on, a flagged breach refuses NEW ENTRIES on that desk** and journals a
+`skipped` reason starting `VaR / stress (enforced):` plus a `VAR / STRESS` warning
+(`report.py` files it under `var_stress`). The gate sits in `entry_pass` after the K-03
+house-exposure check and **after** the exit pass has already run. Exits are never touched
+by anything in `var.py` or by this gate, in either mode: a book that could lose too much is
+a reason not to add, never a reason not to sell. The sentinel measures and reports the block
+and takes no entry decision either way, so a quiet sentinel stays quiet.
+
+### What the fixture book measures today
+
+The swing fixture (four names, MU 7.6%, NVDA 8.8%, SCHW 11.2%, SNDK 10.2% of desk equity)
+with no bars: everything null with the reason, nothing flagged, nothing refused. The 3%
+cap and the 2× halt multiple are risk-policy choices and they are Vishal's to change;
+staging a bars file that reaches back two years turns the April 2025 windows into
+measurements of the names' own moves and leaves 2020 / 2022 / 2024-08-05 on the labelled
+proxy until a longer file is staged.
+
+---
+
 ## 15. The chain snapshot — the option chain as priced (S-01, added 2026-09-10)
 
 When an option chain payload is staged in the run directory (`option_chains.json`,
@@ -1368,14 +1449,17 @@ stop is exactly the Kaminski–Lo failure — and stays on `fixed_atr` until it 
 
 `desks.json` now also carries two desks with a top-level `"inactive": true`: `rotation`
 (E26 — sector-ETF momentum, monthly, `time_catastrophe` with `max_sessions` 25 and `k_cat`
-3.5, a `universe: sector-etfs` filter the scan does not carry yet) and `orb` (E24 — opening-
-range breakout, `chandelier` with `k_init` 0.1 for the paper's 10%-of-ATR stop,
-`flatten_at_close` so nothing is held overnight, `intraday_margin` because every trade is a
-day trade). They are mandates written down with their exits so they can be wired later, not
-desks that trade: `pm.py --desk rotation` exits 2 with the reason unless `--allow-inactive`
-is passed, **no book is created** for them, and the peer loader, the paper mirror and the
-runner's peer staging all skip them. Activating one is: remove `inactive`, create the two
-project docs, add the desk to `runner/slots.json`.
+3.5, a `universe: sector-etfs` filter that routes its candidates to `engine/rotation.py`
+instead of the scan — section 18) and `orb` (E24 — opening-range breakout, `chandelier`
+with `k_init` 0.1 for the paper's 10%-of-ATR stop, `flatten_at_close` so nothing is held
+overnight, `intraday_margin` because every trade is a day trade). They are mandates written
+down with their exits so they can be wired later, not desks that trade: `pm.py --desk
+rotation` exits 2 with the reason unless `--allow-inactive` is passed, **no book is
+created** for them, and the peer loader, the paper mirror and the runner's peer staging all
+skip them. Activating one is: set `inactive` to false, seed its book and the two project
+docs, add the desk to `runner/slots.json` (the rotation desk's exact steps are in section
+18). The `orb` template's wiring — its entries, fills, trail and flatten — is built (D-03)
+and described in section 20; it still ships inactive.
 
 ## 17. Live guardrails — doctrine, validators, and the paper-mode audit (K-07)
 
@@ -1439,3 +1523,348 @@ fixture the one proposal (SCHW, $557.94) clears every default ceiling and the au
 `tests/test_stops.py` proves the same run journals the refusal when the ceiling is lowered
 under it. `pm.py` never calls `live_mode_allowed`, `check_day` or `check_circuit` — a static
 test pins that.
+
+## 18. The rotation desk — sector ETF momentum, monthly (D-01 / E26, added 2026-09-10)
+
+**Status: INACTIVE.** `desks.json` ships `rotation` with `"inactive": true`, no book exists,
+and `pm.py --desk rotation` exits 2 unless `--allow-inactive` is passed. Everything below is
+wired and tested (`tests/test_rotation.py`); nothing below trades until the activation steps
+at the end are taken, and those should not be taken before the E26 harness in
+`docs/BACKTEST.md` § "E26" has been run and read.
+
+### The mandate
+
+- **Universe.** The eleven SPDR sector ETFs — XLK XLF XLV XLY XLP XLE XLI XLB XLU XLRE XLC —
+  plus VEU (ex-US equity, ranked alongside them as the world's twelfth sector), SPY (the
+  absolute-momentum reference; never held) and TLT (the bond leg; held only when the filter
+  is off). Fourteen symbols; `rotation.UNIVERSE`.
+- **Signal.** 12-1 month return, `technicals.features()["ret_12_1"]` =
+  close[t−21] / close[t−252] − 1 (Jegadeesh & Titman 1993; Faber 2010's sector rotation).
+  A symbol with fewer than 253 bars is *unranked* — never a 0 that would rank it.
+- **Rule.** Rank the twelve risk names on `ret_12_1`. When SPY's trailing 12-month return
+  exceeds the 3-month T-bill return over the same window (Antonacci 2014, absolute
+  momentum) hold the **top 3, equal weight**; otherwise hold **TLT only**. The bill rate is
+  `tbill_3m_pct` in `macro.json`; absent, it defaults to **0** and the journal and every
+  replay summary say so (`tbill_default_used`). An unmeasurable SPY (short history) is
+  treated as filter OFF — an unmeasured market is not a bull market.
+- **Cadence.** Decisions only at the **last power-hour slot of the calendar month** — the
+  last trading day on a weekday calendar with the NYSE's rule-based holidays
+  (`rotation.nyse_holidays`; the first holiday table in the engine) — plus
+  `--force-rebalance`. A **weekly check** at the last power-hour of the week acts only if a
+  held sector ETF has dropped below rank 6 (or out of the ranking) or the absolute filter has
+  flipped against what the book holds. Every other slot only manages holdings by their stops;
+  its journal carries the compact decision block (`jrn["rotation"]`) with `acts: false` and
+  the next decision date.
+- **Stops.** `time_catastrophe`, `k_cat` 3.5, `max_sessions` 25 (section 16). The rank IS
+  the exit; the catastrophe stop and the time stop are the safety net. A holding the rank
+  re-affirms at a decision gets `hold_from` reset to that date, so the 25-session clock
+  counts from the last decision, not the original fill.
+- **Sizing.** Equal **sleeves** of desk equity — a third each — times the desk vol scalar
+  (`portfolio.desk_vol_scalar` on SPY's `rv_20d`) when `rules.vol_target.enabled` is on,
+  capped at the cash left this run. The bond leg takes all three sleeves (Antonacci's rule;
+  `rules.rotation.bond_sleeves` 1 keeps two in cash). The pipeline's risk-based figure stays
+  on the order as `meta.unscaled_shares`; the sleeve replaces it.
+- **House caps.** The ETFs are sector-level by construction (XLK *is* Information
+  Technology), so they are **exempt from HOUSE-01's per-name and per-sector caps**
+  (`house_exposure` leaves them out of `by_symbol` / `by_sector`; `entry_pass` never asks
+  `house_block` about them) and **included in K-03's exposure metrics** (they stay in
+  `house["holdings"]`, so the beta and N_eff see them).
+
+### Inputs
+
+| File | Shape | Used for |
+|---|---|---|
+| `bars_etf.json` | the Robinhood `get_equity_historicals` payload (or `runner/fetch_bars.py` output) for the 14 symbols, **≥ 13 months of daily bars** | the rank, the filter, the candidate rows (`rotation.proposals`), and the K-03 beta (folded into the house bars) |
+| `macro.json` | `{"tbill_3m_pct": 4.1}` | the absolute filter's hurdle; absent = 0, logged |
+| `pm_quotes.json` | the usual broker quotes, **including the 14 ETFs** | the only price an entry or a rotation-exit may trade on — a bar close values, never trades (section 6), and the entry pass refuses an ETF without a fresh quote |
+
+`rotation.proposals()` produces candidate rows in the exact shape `entry_pass` consumes
+(`setup` "Sector Rotation", `verdict` "Buy", `coverage_pct` 100, `_source` "rotation") and
+`pm.rotation_scan()` wraps them as this run's own scan, so the desk goes through the same
+sizing, spread, drift, broker-policy and guardrail gates as every other desk. Its filter
+`{"universe": "sector-etfs"}` admits only rows the rotation module produced — a
+`scan_results.json` row can never reach this desk's sizing, and a scan row that claims to
+be one is just a row to the swing desk (`tests/test_rotation.py` pins both).
+
+### What a decision run writes
+
+- Entries are placed as **marketable next-session orders** (`expires: "next-session"`,
+  `fill_rule: "marketable"`): decided at 15:45, they survive exactly one session roll and
+  fill at the next slot's quote plus the exit-slippage assumption, whatever the limit — the
+  limit stays on the order as the decision price. A second roll expires them. The
+  power-hour no-entry rule (section 2) is right for a day-limit and wrong for a monthly
+  rotation; this is the one exception and it is gated on the desk's decision block.
+- Holdings that left the target set are sold whole at the slot price less slippage,
+  journaled **`rotation-exit`** with the rank that dropped them or the filter that flipped.
+- Re-affirmed holdings are journaled as skipped ("re-affirmed in the target set — held,
+  time stop restarts today").
+- The journal entry and the state carry the compact decision block: `acts`, `mode`
+  (`monthly` | `weekly` | `forced`), `why`, `filter_on`, `tbill_3m_pct`,
+  `tbill_default_used`, `ranks`, `target`, `held`, `exits`, `affirmed`, `entries`,
+  `sleeves_by_symbol`, `vol_scalar`, `next_rebalance`, `notes`. The bill-rate default and a
+  short history are a **warning** on the run that acts and a journal line otherwise.
+
+```bash
+# a dry run against a staged book, any day, without activating the desk
+python3 engine/rotation.py --bars bars_etf.json --macro macro.json --held XLK,XLE --as-of 2026-09-30
+python3 engine/pm.py --allow-inactive --desk rotation --slot power-hour --now 2026-09-30T19:45:00Z \
+    --quotes pm_quotes.json --bars-etf bars_etf.json --macro macro.json [--force-rebalance]
+```
+
+### Activation — in this order
+
+1. **Read the harness.** `python3 engine/backtest.py --desk rotation --bars bars_etf.json
+   --start 2016-01-01 --end <yesterday> --tbill tbill.json --corr-with <swing paper book>
+   --ledger --summary rotation.json` (docs/BACKTEST.md § E26). The plan's acceptance is
+   rho < 0.6 against the swing desk's curve and a drawdown the house can carry; a re-run with
+   other parameters is another ledger trial.
+2. **`engine/desks.json`**: set `rotation.inactive` to `false`.
+3. **Seed the book**: `python3 engine/rotation.py --seed-book > <state repo>/books/rotation.json`
+   (the same $5,000 every desk starts from), and create the two project docs
+   `claude/paper-book-rotation.json` and `claude/pm-journal-rotation.json` (the mirror's
+   targets, `doc_book` / `doc_journal` in desks.json).
+4. **`runner/slots.json`**: add `"rotation"` to the top-level `desks` list and to the
+   `desks` of `power-hour` (the decision slot) and `sentinel` (stop management); adding it
+   to the other three slots is optional — the desk only manages holdings there. List
+   `bars_etf.json` and `macro.json` under `inputs.pm.optional` for the record.
+5. **Stage the inputs** with every power-hour run: `bars_etf.json` (the 14 symbols, ≥ 13
+   months) and `macro.json` in the input manifest, and the 14 ETFs in `pm_quotes.json`. A
+   run without `bars_etf.json` takes no decision and says so on stderr and in the journal;
+   holdings are still managed by their stops.
+6. The first decision is the next last-power-hour-of-the-month, or `--force-rebalance` once.
+## 19. The paper options desk — XSP/SPY put credit spreads (E27, D-02, added 2026-09-10)
+
+`engine/options_desk.py` is the fourth desk and the first that is not the equity engine. It
+is **paper only, by construction**: the module imports nothing that can reach a broker
+(`tests/test_options_desk.py` pins its import list), it writes no order file, and `pm.py
+--desk options` runs it under exactly the protocol every other desk gets — revision,
+`--check`, heartbeat, journal merge, `pm_book_next-options.json` / `pm_state-options.json`.
+`desks.json` carries it as `"kind": "options"` with `"inactive": true`: `pm.py` refuses it
+without `--allow-inactive`, no book is created for it, and the peer loader, the paper mirror
+and the runner's peer staging skip it. The equity engine (`pm.run`) and the three equity desks
+are untouched.
+
+### The mandate (plan §6, Appendix H §2 / §7) — as implemented
+
+| Rule | Implementation |
+|---|---|
+| Structure | XSP put credit spread; SPY when XSP has no usable chain. 30–45 DTE, the expiry nearest 40; short strike nearest 20Δ (chain delta, else Black–Scholes at the row's IV), ties to the lower strike; long strike = short − width |
+| Width | **$5 is the maximum.** A 20Δ short collects less than 20% of the width as credit — always, at every IV — so a $5-wide risks over $400 per contract and the mandate's two numbers cannot both hold. The risk cap is the risk rule; the width is a structure parameter: the desk takes the widest of $5, $4, $3, $2 whose (width − credit) × 100 fits the cap, and journals the narrowing (`rules.width_fallback`; off, it does not trade under the cap) |
+| Risk per structure | ≤ 8% of desk equity ($400 on $5k) = (width − credit) × 100 × contracts; contracts = ⌊cap / loss per contract⌋, at least 1 or no trade. The ladder's `entry_size_mult` scales the cap |
+| Total risk | Σ max loss of open structures ≤ 40% of desk equity |
+| Concurrency | ≤ 5 structures; ≤ 2 per sector (index underlyings are the `Index` sector); never on an underlying a stock desk holds or has a working buy on — SPY, XSP and SPX are aliases of one exposure for that test |
+| Exits | 50% of max profit (debit to close ≤ half the credit) or 21 DTE, whichever first; **defensive close** when spot < short strike; a structure that reaches expiry anyway is cash-settled at intrinsic |
+| Regime gates | no new short vol when VIX > VIX3M, VIX > 30, or SPY GEX < 0. GEX = Σ gamma × OI × 100 × spot² × 1% (calls +, puts −) from the chain snapshot; **no gamma/OI in the chain → the gate is skipped and the skip journaled**. No `vix.json` → the gate fails: an unmeasured regime is not a benign one |
+| Portfolio limits | β-weighted delta (Σ net Δ × 100 × contracts × spot × β × 1%) within ±0.5% of **house NAV** (this desk + every peer stock desk's cash and marked positions; the desk alone when no peer is staged) per 1% SPY move; net short vega ≤ 0.5% of desk equity per vol point; \|net theta\| ≤ 0.3% of desk equity per day |
+| Paper fill | net credit = (short mid − long mid) − $0.02 per leg; a leg with bid = 0 or (ask − bid)/mid > 10% is refused at entry. A close is **never** refused for width — protection does not sit unfilled — the width is journaled and the fill goes through at mid ± $0.02/leg |
+| Mark | every slot from the chain mids; a leg the chain does not carry is marked by Black–Scholes at its last IV (`value_source: model`) and the journal says so; no IV and no spot → carried at the last mark and reported UNPRICED |
+| Stress | weekly (first decision slot ≥ 7 days after the last): instantaneous shocks repriced leg by leg by Black–Scholes, S′ = S(1 + shift), σ′ = max(σ + shift, floor), T unchanged. Stored on `book["stress"]` and the journal; a scenario costing more than half the total-risk cap raises a warning |
+| Ladder / kill switch | K-02 unchanged: rung 1 halves the per-structure cap, rung 2 blocks entries, rung 3 **flattens every structure at its mark** and cools off; the −3% daily kill blocks entries. Exits stay live at every rung |
+| Broker policy | a credit spread is defined-risk: under `intraday_margin` (and `legacy_pdt`) the maintenance requirement **is** the max loss; under `cash_settled` the full width is reserved. `margin_state()` reports requirement and projected deficit; an entry that would leave the requirement over equity is refused. The 40% cap binds first |
+| Shadow fills | **not applicable** — the paper fill (mid less slippage, plus fees, both ways) is the conservative model. `jrn["shadow"].applicable` is false |
+| House exposure | when a stock desk runs with the options book staged as a peer, each open structure enters HOUSE-01's tally as its **beta-weighted-delta equity equivalent**: \|net Δ\| × 100 × contracts × spot × β, under the underlying's symbol and the `Index` sector, `kind: options-delta` (`house.options_holdings`). A short put spread is a hidden long and is counted as one; its cash (less the debit to close) is house equity |
+
+### Fees (`rules.fees`, charged per contract per leg, on the open **and** the close)
+
+| | Regulatory pass-through | Index-option fee | Commission |
+|---|---|---|---|
+| XSP (and SPX, NDX, RUT, VIX, DJX) | $0.04 | $0.35 | $0 |
+| SPY (equity options) | $0.04 | — | $0 |
+
+A one-contract XSP spread costs $0.78 to open and $0.78 to close; SPY $0.08 each way. The
+$0.35 is Robinhood's index-option contract fee as researched on 2026-09-10 (Appendix H §5);
+the regulatory line is the OCC/ORF/FINRA order of magnitude. Fees accumulate on the
+structure (`fees`) and the book (`fees_paid`) and are inside every P&L number.
+
+### Black–Scholes, in the standard library
+
+`bs_price(S, K, T, r, sigma, put=True)` is the European price with T in years;
+`bs_greeks()` returns delta, gamma, **theta per day** and **vega per vol point**;
+`implied_vol()` is a bisection on [1e-4, 5.0] and returns None outside the no-arbitrage
+band. `r` is `rules.risk_free` (4%). XSP is European and cash-settled, so the model is
+exact in kind; SPY is American and the early-exercise premium on a 20Δ put is ignored. The
+stress scenarios, the delta derivation when a chain row has no delta, and the mark of an
+unquoted leg all go through these three functions and nothing else.
+
+### What a slot needs staged
+
+| File | Content | Without it |
+|---|---|---|
+| `option_chains.json` | any shape `snapshots.py` accepts (Robinhood rows, a Cboe payload, `{SYMBOL: {...}}`) with **puts for XSP and/or SPY at three or more expiries**, carrying bid, ask, `implied_volatility` and — for the delta pick and the GEX gate — delta, gamma, open_interest. Spot from `underlying_price` / `current_price` on the payload | structures are marked by model and no entry is possible |
+| `vix.json` | `{"vix": 17.4, "vix3m": 19.2, "as_of": "2026-09-10"}` — from the Cboe CSVs in `docs/DATA.md` §1c (any key casing; `{close, date}` objects or `[{date, close}]` rows per index are accepted) | no new short vol (the gate fails closed) |
+| `pm_quotes.json` | optional; the SPY spot fallback when the chain carries no spot | XSP only from the chain |
+| the stock desks' books | `pm.load_peers` stages them; held underlyings are excluded, their equity is the house NAV | the desk's own equity is the NAV; nothing is excluded |
+
+**Robinhood's XSP chain — assumed, not verified.** `get_option_quotes` still returns 403 on
+this account and `get_option_chains` has not been called for an index root, so whether
+XSP appears in it at all, under what `chain_symbol`, with what strike increments (the
+reader assumes 1-point strikes near the money) and whether the rows carry greeks and open
+interest are all assumptions the first staged chain will settle. The reader tolerates
+every one of them being wrong: no delta → derived from IV; no IV → implied from the mid;
+no gamma/OI → GEX gate skipped; no XSP → SPY.
+
+### Activating it
+
+1. Remove `inactive` from the desk in `desks.json`.
+2. Seed the book: `python3 engine/options_desk.py --init-book paper_book_options.json`
+   ($5,000, no structures) and `project_write` it to `claude/paper-book-options.json`; an
+   empty `{"entries": []}` to `claude/pm-journal-options.json`.
+3. Add `options` to `runner/slots.json` `desks` (and to the PM slots' desk lists), and have
+   the scheduled task stage `option_chains.json` and `vix.json` with every PM slot.
+4. The coverage row then carries the desk like any other; the heartbeat's `positions` count
+   is the number of open structures.
+
+The dead-man's switch (K-05) stamps no stop on a spread — defined risk bounds it, and the
+21-DTE / breach exits fire on the next slot the runner reaches.
+
+### The 60-session paper trial and the review
+
+The desk runs paper-forward for 60 sessions (there is no chain archive to replay yet; the
+S-01 chain snapshot is being accumulated for exactly that harness). The review, against the
+Cboe PUT index's risk profile (Ennis Knupp / Cboe: ~10.3%/yr at ~9.9% SD over 1986–2008,
+losing less than the S&P in big-down months but still losing), asks: realised P&L after fees
+per structure and per session; win rate and the ratio of 50%-profit exits to DTE, breach and
+flatten exits; the worst stress result recorded each week against what the mark actually did
+on the worst session; net vega and theta against their caps; how often each gate blocked an
+entry; and whether the desk's daily P&L correlates with the equity desks' — the plan's own
+framing is that a short-vol sleeve is a higher-Sharpe form of equity beta, **not**
+diversification, and the house tally counts it as the hidden long it is. Keep, resize or
+retire at the review; `n` is stated.
+
+## 20. The ORB desk — stocks-in-play opening-range breakout (D-03, E24; added 2026-09-10)
+
+**Status: built, tested, INACTIVE.** `desks.json` still carries `orb` with `"inactive":
+true`; `pm.py --desk orb` exits 2 without `--allow-inactive`, no book exists, and no slot
+runs it. What changed is that the engine now knows how to run it: `engine/orb.py` and the
+D-03 branches in `pm.py`. Activation is a config change (below), not a code change.
+
+### The mandate
+
+Zarattini, Barbon & Aziz (2024) — the "stocks in play" opening-range breakout, Appendix E
+§1a of the research synthesis, plan §6. Each morning:
+
+1. **Rank** the scan universe plus the held names by **opening relative volume**: the volume
+   of the 09:30–09:35 bar divided by the 14-session average of *that same* 5-minute bucket
+   (`orb.opening_rvol`). A 09:35 bar the size of a session does not move the 09:30 baseline;
+   fewer than 5 prior sessions with the bucket is no baseline at all.
+2. **Filter**: opening-bar close > $5, 14-day ADV > 1M shares, ATR14 > $0.50. ATR14 and ADV14
+   come from `bars.json` (daily, strictly before today) when it is staged, else from the scan
+   row's `atr_14` / `avg_volume_20d`, and the row says which (`stats_source`). No stats
+   anywhere: rejected, never sized on a guess.
+3. **Top 20** by RVOL are the stocks in play (`orb.stocks_in_play`; `orb.screen` also returns
+   every rejected name with its reason, and the journal carries all of them).
+4. **Direction** from the first candle: close > open → long. Close < open → the paper goes
+   **short; this account cannot**, so the name is skipped and journaled (`red opening candle
+   — the paper shorts it; this account is long-only`). Doji → skipped.
+5. **Entry** = a buy-stop one tick (`breakout_tick` $0.01) above the opening-range high,
+   placed at the **09:35 sentinel and no other run** (`orb.in_entry_window`: 09:30–10:00
+   ET), live until **10:30** and cancelled unfilled by the 10:35 sentinel.
+6. **Stop** = entry − **0.10 × ATR14** (the paper's stop; `stop_policy: chandelier`,
+   `k_init 0.1`). **Size** for 1% of desk equity at risk on that distance, whole shares
+   (Robinhood takes no fractional stop orders), **capped at 25% of desk equity notional**
+   and at the cash available; the cap is journaled when it binds (`ORB notional cap binds:
+   1% risk sized 500 sh ($25,305); capped at 25% of equity = 24 sh …`). On a $5,000 book
+   at a 10%-of-ATR stop the cap binds on nearly every name — the risk actually carried is
+   then a fraction of 1%, and the journal line says exactly how much. At most **5 concurrent**
+   names (open positions plus working stop-buys); the desk's `pm_rules` raises
+   `max_new_entries_per_run` to 5 to match.
+7. **Management** — every hourly sentinel walks the 5-minute bars since its last visit
+   (`orb.manage_position`): a bar whose low reaches the stop is a hit, exited at
+   min(stop, that bar's open) — a gap through the stop exits at the open — otherwise the
+   highest 5-minute **high** ratchets a chandelier trail **0.5 × ATR14** below it, up only
+   (Chande & Kroll's chandelier hangs from the highest high; inside one bar the low is
+   tested before the high can raise the trail, because the order of prints within a bar is
+   unknown). **`k_trail 0.5` is a desk-specific parameter**: the `stops.py` chandelier
+   default is 3.0 × ATR under the highest close the book has seen, a multi-day momentum
+   trail; a trade that lives six hours trails six times tighter. The print still counts — a quote at or under the stop fires it
+   even when the bars said nothing — and with no bars staged the generic chandelier update
+   runs on the quote as it does for any other desk.
+8. **Exit at the close**: `flatten_at_close` at the power-hour slot closes every position
+   (`time` / "Flatten at close"), nothing is held overnight, and `max_sessions 1` closes
+   anything that somehow survived at the next session. The ORB desk's positions are never
+   exited on a scan score: the exit pass does not consult the scan row for them, and the
+   standard entry pass places nothing on this desk at any decision slot.
+9. **Broker policy** `intraday_margin`: every trade is a day trade and nothing counts them
+   (section 4); `day_trades_used` is reported and gates nothing.
+
+### The evidence, and the long-only caveat
+
+The paper reports the strategy on US equities 2016–2023 with the top-20 RVOL universe, the
+10%-of-ATR stop and the close as the exit, **long and short**. The short leg is a large part
+of that result: a universe selected on opening volume contains as many gap-downs as gap-ups,
+and the red-candle names are exactly the ones this desk skips. **The expectation for the
+long-only half is a weaker result than the paper's, not a reproduction of it**, and the
+skipped red candles are journaled so the weekly review can count what the missing leg
+would have traded. Nothing here has been measured on this system's data yet; the harness
+(`orb.replay`, docs/BACKTEST.md E24) exists so that it can be, and its data caveat is stated
+there: IEX-only 5-minute volume biases the RVOL rank, so the replay is a directional check.
+
+### What the engine does — the D-03 wiring in `pm.py`
+
+- **`DESK.rules.orb`** is the switch: every ORB branch is gated on `_orb_rules()`, which is
+  None for `swing`, `pullback` and `momentum`. Their behaviour is byte-identical (the K-06
+  and K-07 goldens still pass); `tests/test_orb.py` pins that none of the three carries an
+  `orb` block.
+- **Working orders of type `"stop-buy"`** carry `trigger_price` (and `limit_price` equal to
+  it, so reserved cash, the house tally, the margin projection and the board all read them
+  unchanged), `valid_from_et` 09:35, `cancel_after_et` 10:30, `meta.stop`, `meta.stop_policy
+  chandelier`, `meta.stop_params` and `meta.orb` (rank, rvol, or_high, or_low, direction,
+  adv14, atr14, whether the notional cap or cash bound the size, the unscaled shares).
+  `simulate_fills` works them against the 5-minute bars (`orb.check_stop_buy`): the first
+  completed bar from 09:35 whose **high reaches the trigger** fills at **max(trigger, that
+  bar's open) + the shadow haircut** — `fill_k` (1.0) half-spreads of the quote when there is
+  a two-sided one, `fill_half_spread_bps` (5) of price otherwise — never in the run that
+  placed it, and never on the 09:30 bar. Unfilled past 10:30: cancelled. No bars staged: the
+  quote stands in (a print at or through the trigger fills at the print plus the haircut)
+  and the journal says so. The fill bar is recorded on the position (`orb_entry_bar`,
+  `orb_managed_through`) so management walks only the bars after it.
+- **The exit pass** for an ORB position with bars: `orb.manage_position` on the bars after
+  `orb_managed_through`, the raise journaled as `raise-stop` ("orb: stop raised from 50.51
+  to 51.70 — chandelier trail: 0.5x ATR (1.00) under the $52.20 highest 5-min high"), a hit
+  booked as a `stop` at the bar's exit price less `exit_slippage_pct` with the detail saying
+  "A 5-min low broke the … stop — exit at … (the open, gap through | the stop)".
+  The anchor lives in `highest_high` on the position (the bars' highs, never the print);
+  the generic `highest_close` is kept at least that high so a bar-less visit — the quote
+  path through `stops.py` — trails from the same anchor and never lowers it.
+- **The 09:35 sentinel** (`orb_entry_pass`) honours every gate a standard entry honours —
+  the kill switch, the ladder (entries blocked, or the size multiplier), the broker policy's
+  entry gate, the house caps and the house-exposure block — and journals every name that
+  did not make it (`jrn["orb"]` carries the ranked list; `report.classify` maps the desk's
+  refusals to the `orb` rule). A flat ORB book at 09:35 is **not** a quiet sentinel: that is
+  its entry slot, and `main()` runs it.
+- **No `bars_5m.json`**: the desk logs `no intraday bars — no ORB today (bars_5m.json was not
+  staged)` as a skip and a warning, prints it, and enters nothing. Holdings are still managed
+  on the quote.
+
+### Inputs per slot, when the desk is active
+
+| Slot | Staged by the session | Read by the ORB desk |
+|---|---|---|
+| Pre-market scan (08:00) | `scan_data.json`, `bars.json` (daily, a year, SPY included) — as today | the scan universe (`scans/latest.json` → `scan_results.json`, staged by the runner for every slot) and the daily bars for ATR14 / ADV14 |
+| **09:35 sentinel** | `pm_quotes.json` for held + working names as today, **plus `bars_5m.json`** = raw `get_equity_historicals` at `interval "5minute"`, `bounds regular`, `start_time` 15 sessions back, for the scan universe + held names (10 symbols per call) | ranks, sizes, places the stop-buys |
+| 10:35 – 15:35 sentinels | `pm_quotes.json` as today, plus `bars_5m.json` for the held and working names (today's bars suffice: `start_time` today 09:30 UTC-equivalent) | fills the stop-buys, cancels the unfilled at 10:35, trails, fires stops on 5-minute lows |
+| Power-hour PM (15:45) | `pm_quotes.json` as today | `flatten_at_close` closes everything; the entry pass places nothing |
+| Other decision slots | — | not scheduled for this desk; if run, they manage holdings and place nothing |
+
+**Connector budget for a 20-name universe at 09:35**: 2 × `get_equity_historicals` (10
+symbols per call, 15 sessions × 78 bars ≈ 1,170 bars per symbol) + 1 × `get_equity_quotes`
+(20 per call) + `get_accounts` = **4 calls**. If the upstream bar cap refuses 15 sessions at
+5 minutes for 10 symbols, split the range in two (the file accepts a list of responses):
+6 calls. Every later sentinel is 1 historicals call (today only, ≤ 10 held + working names)
++ the quotes call.
+
+### Activation
+
+1. Remove `"inactive": true` from `desks.json` → `orb`.
+2. Create `claude/paper-book-orb.json` (a fresh $5,000 book, `broker_policy
+   intraday_margin`) and `claude/pm-journal-orb.json`; mirror them to
+   `C:\ai-trading-state\books\orb.json` and `journals\orb.json`.
+3. Add `"orb"` to `runner/slots.json` under the **sentinel** and **power-hour** desks only
+   (`bars_5m.json` is already an optional sentinel input).
+4. In `docs/runner/prompts/sentinel.md` the "WHEN THE ORB DESK IS ACTIVE" lines take effect
+   — the 09:35 session stages `bars_5m.json` for the universe; later sentinels for the held
+   and working names.
+5. Run `orb.replay` on real 5-minute history first (BACKTEST.md E24) and read it before
+   the desk trades a single paper dollar. The desk ships inactive because that has not
+   been done.
+

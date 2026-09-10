@@ -441,7 +441,7 @@ the books and the bars, and it writes nothing but its own `--md` / `--json`.
 
 1. *Refusals taxonomy.* `report.classify(reason)` maps every `skipped` reason string the
    engine emits to one rule — `sector_cap`, `house_symbol_cap`, `house_sector_cap`, `spread`,
-   `price_drift`, `scan_stale`, `macro_gate`, `broker_policy`, `ladder`, `house_exposure`,
+   `price_drift`, `scan_stale`, `macro_gate`, `broker_policy`, `ladder`, `house_exposure`, `var_stress`,
    `earnings_gate`, `min_notional`, `max_entries`, `kill_switch`, `halt`, `coverage`, plus
    `stop_policy`, `slot`, `desk_mandate`, `working_order`, `once_per_session`, `deadband` for
    what the journal says that is not a gate, and `other` with the raw text kept. The mapping
@@ -491,6 +491,143 @@ needs the scan archive's candidate lists on those dates, which is a later step.
 says *not a sample*, and there is no win rate and no Sharpe anywhere in the output — at this
 size neither is evidence and both flatter. It describes the paper record and forecasts
 nothing.
+
+## 6d. E26 — the sector-rotation desk's own replay (D-01, 2026-09-10)
+
+**The question.** The rotation desk (docs/PM.md section 18) is a monthly rule, not a scored
+scan: rank the eleven SPDR sector ETFs and VEU on 12-1 month return, hold the top three
+equal-weight when SPY's 12-month return beats the 3-month bill, else TLT. The scoring replay
+above cannot test it — there is no score, no quintile and no per-trade horizon — so
+`engine/rotation.py` carries its own harness, `rotation.replay()`, and `backtest.py --desk
+rotation` runs it in place of the scoring replay and writes the ledger row **E26**.
+
+**What it does.** SPY's sessions in the bars file are the calendar. At the last session of
+each calendar month (and, with the weekly check on, at the last session of each ISO week)
+it ranks, reads the filter against the bill rate as of that date, and decides; the trade is
+booked at the **next session's open** (its close when the bar has no open) with a stated
+one-way cost on every buy and sell (`--cost-bps`, default 5 — a liquid ETF's spread plus
+fees; the engine's 25 bp no-quote fallback would be an order of magnitude too pessimistic
+here). A re-affirmed holding is not re-trimmed, which is what the paper desk does too. The
+weekly check acts only on a rank-6 drop or a filter flip against the holdings, as live.
+
+**What it reports — and only this.** `monthly_returns`, `equity_curve`, `max_dd`,
+`n_rebalances`, `corr_with_spy`, `turnover` (mean and total one-way), plus the counts
+(`n_month_ends`, `n_decisions`, `bond_months`) and the decision `log`. **No Sharpe, no win
+rate** — the honesty budget of section 6c applies unchanged. `--corr-with <curve>` adds the
+Pearson correlation of its daily returns with another equity curve on their common dates — a
+paper book (`equity_curve`, the last slot of each date wins), a replay summary, or a bare
+`[{date, equity}]` — with its n and a `not_a_sample` flag under 30 points. The plan's
+acceptance for the desk is **rho < 0.6 against the swing desk**, and the summary says
+`acceptance_rho_lt_0_6` true or false with the n beside it.
+
+**The bill rate.** `--tbill tbill.json` is either `{date: pct}` (looked up as-of each
+decision date) or a `macro.json` with `tbill_3m_pct`; `--tbill-pct 4.2` is a constant.
+Neither given, the rate is **0** and both the summary's `_warnings` and the ledger row's
+`tbill_default_used` say so. A filter measured against zero is a different experiment from
+one measured against the bill — do not compare the two as if they were one trial.
+
+```bash
+# bars_etf.json: the 14 symbols (XLK XLF XLV XLY XLP XLE XLI XLB XLU XLRE XLC VEU SPY TLT),
+# daily, from at least 253 sessions before --start
+python3 runner/fetch_bars.py --symbols SPY,TLT,VEU,XLK,XLF,XLV,XLY,XLP,XLE,XLI,XLB,XLU,XLRE,XLC \
+    --start 2015-01-01 --end today --keyfile alpaca.env --out bars_etf.json
+python3 engine/backtest.py --desk rotation --bars bars_etf.json \
+    --start 2016-01-01 --end 2026-08-31 --tbill tbill.json \
+    --corr-with books/swing.json --summary rotation.json --ledger --experiment-id E26
+# variants are their own trials: --no-weekly, --cost-bps 10, --tbill-pct 0
+```
+
+**How to read it.** `bond_months` over `n_month_ends` is how often the filter was off;
+`n_rebalances` over `n_decisions` is how often a decision actually traded (a re-affirmed
+top three trades nothing); `turnover.mean_one_way` × 2 × `cost_bps_one_way` is the cost
+drag per rebalance. `corr_with_spy` near 1 in the bull months is expected — three sector
+sleeves are a beta — and the number that matters is `corr_with_other` against the swing
+book, which is the diversification the desk was proposed for. `max_dd` is the drawdown the
+house would have had to carry; read it against the K-02 ladder before activating.
+
+**What it does not do.** It fills at the open, not at the next slot's quote plus slippage —
+the paper desk's number is different and the summary says so. XLRE and XLC start in 2015 and
+2018 respectively; before that they are unranked and the top three come from fewer names, so
+a window that starts before 2018 is a ten-or-eleven-sector rule, not a twelve-sector one.
+The parameters (12-1, top 3, rank 6, TLT) are the literature's, not fitted here; every re-run
+with other parameters is another ledger trial and spends evidence like any other.
+
+## 6e. E24 — the ORB desk replay (D-03, 2026-09-10)
+
+**The question.** Zarattini, Barbon & Aziz (2024) report a positive opening-range-breakout
+result on the top-20 opening-RVOL "stocks in play", stop at 10% of ATR14, flat at the close,
+**long and short**. This account cannot short. E24 asks the narrower question: *does the
+long half alone — a buy-stop above the opening-range high on the green-candle names, the
+same stop, a 0.5 × ATR chandelier trail on 5-minute highs, flat at 15:45 — come out
+positive after a one-half-spread haircut on every fill?* The desk's mechanics are in
+docs/PM.md section 20; `engine/orb.py` is both the desk's functions and this harness, so
+what the replay runs is what the 09:35 sentinel runs.
+
+**What `orb.replay` does, per session.** Rank every symbol in the file by opening RVOL
+(the 09:30 bar's volume over the 14-session average of the same bucket), apply the three
+filters, keep the top 20, skip the red and doji candles (counted under `skips.short` /
+`skips.doji`), size the rest against the *running* equity — 1% risk at the 10%-of-ATR stop,
+whole shares, 25% notional cap (`skips.cap_bound` counts how often it binds; on a $5,000
+book, nearly always) — then walk the 5-minute buckets in order: a pending stop-buy fills on
+the first bar from 09:35 whose high reaches the trigger at **max(trigger, that bar's open) +
+haircut**, `max_concurrent` 5 enforced in RVOL rank order at fill time; an open position
+ratchets the trail on each bar's high and exits on a low through the stop at min(stop, open),
+less the haircut; anything still open exits at the open of the 15:45 bar (the last close if
+there is none); pending orders die at 10:30. The haircut is `fill_k` (1) × the half-spread,
+and with no quote in a bars file the half-spread is `fill_half_spread_bps` (5) of price —
+**10 bp per round trip**, reported as `cost_bps_assumed`.
+
+**What it reports.** `daily_pnl`, `equity_curve`, `n_trades`, `n_days_traded`, `avg_r`
+(mean of P&L over initial dollar risk, per trade), `max_dd` (peak-to-trough on the equity
+curve, %), the `skips` counts and every trade. **No Sharpe and no win rate**, deliberately:
+a few weeks of this is dozens of trades, and at that size both numbers flatter.
+
+```bash
+# 1. the 5-minute bars: ~20 names, a year, IEX feed (Basic plan), same file shape as bars.json;
+#    ~78 bars a session × 250 sessions × 20 names ≈ 400k points → budget ~250 requests
+python3 runner/fetch_bars.py --timeframe 5Min --symbols AAPL,NVDA,TSLA,... \
+    --start 2025-09-01 --end today --keyfile C:\ai-trading-runner\alpaca.env \
+    --out bars_5m_year.json --batch 10 --resume
+# 2. the daily bars for ATR14 / ADV14 (the usual bars.json; the same names, from 30 sessions earlier)
+python3 runner/fetch_bars.py --symbols AAPL,NVDA,TSLA,... --start 2025-07-15 --end today \
+    --keyfile C:\ai-trading-runner\alpaca.env --out bars_year.json --resume
+# 3. the replay — counted on the ledger as E24 (omit --ledger for a dry run, which says so)
+python3 engine/orb.py --bars-5m bars_5m_year.json --bars bars_year.json \
+    --start 2025-10-01 --end 2026-08-31 --equity 5000 \
+    --json e24.json --ledger experiments/ledger.jsonl
+# a parameter check is a config diff, not a new hypothesis: pass it and say so on the row
+python3 engine/orb.py --bars-5m bars_5m_year.json --bars bars_year.json --start … --end … \
+    --rules '{"k_trail": 1.0}' --experiment-id E24 --hypothesis "…k_trail 1.0 instead of 0.5…" \
+    --ledger experiments/ledger.jsonl
+python3 engine/ledger.py --path experiments/ledger.jsonl --set-decision E24 "<what it said>"
+```
+
+**How to read it.** `avg_r` is the number that matters, with `n_trades` beside it: an
+average R above zero after the 10 bp haircut, on a hundred-plus trades over a window that
+contains both a rising and a falling month, is the bar for turning the template on;
+`max_dd` on a $5,000 book says whether the 25% cap and the 5-name limit actually bound the
+day's exposure the way the desk description claims. Read `skips.short` next to `n_trades`:
+that is the leg the paper had and this desk does not, and if it is the larger number the
+result is the *smaller* half of the paper's edge by construction. `skips.unfilled` counts
+breakouts that never came by 10:30 — a high count is not a fault, it is the filter working.
+
+**Two caveats stated up front, not in the fine print.**
+
+1. **IEX-only volume.** Alpaca's Basic feed reports IEX's share of the tape, a fraction of
+   consolidated volume that varies by name and by morning. Opening RVOL computed from it is a
+   *biased* rank: a name whose IEX share happened to be high that day ranks higher than the
+   consolidated tape would put it. The live desk reads Robinhood's consolidated 5-minute
+   bars, so **the replay's universe on any given day is not the live desk's universe**. The
+   replay is a directional check of the mechanics — fills, stops, the trail, the flatten,
+   the sizing — not a measurement of the edge, and the ledger row carries that under
+   `data_caveat`.
+2. **Long-only.** The paper's return is long and short; every red opening candle here is a
+   skip. The expectation is a weaker result than the paper's, and a replay that reproduces
+   the paper's figure on the long half alone should be doubted, not celebrated.
+
+Everything in section 2 applies as well: the symbol list is today's, so a name that was in
+play a year ago and has since delisted is not in the file (`bars_missing.json` names what
+was requested and not served); costs are the model's, not the tape's.
 
 ---
 

@@ -63,8 +63,10 @@ From `docs/PM.md` §9, `docs/SCAN.md` §1/§12 and `runner/slots.json`:
   GICS sector, analyst rating/target, short float, catalysts, `next_earnings`), regime
   (`get_index_quotes`), `meta.macro_events`; `get_equity_historicals` (10/call, SPY included),
   `get_equity_fundamentals` (10/call), `get_equity_quotes` (20/call, last); ApeWisdom page 1,
-  StockTwits trending + gauges, Arctic Shift, RH watchlists, `quotes_min.json`, the options
-  saved scan `cc3b6743-…`, `get_earnings_calendar`. The runner runs `technicals.py`
+  StockTwits trending + gauges, RH watchlists, `quotes_min.json`, the options saved scan
+  `cc3b6743-…`, `get_earnings_calendar`; optional since P-04: one `st_symbol_<SYM>.json` per
+  finalist (the raw symbol stream, bull share only) and `trends.json`. The runner stages
+  `archive/attention_history.json` from the state repo before `sentiment.py` and writes it back after. The runner runs `technicals.py`
   (`--premarket` on the 08:00 slot), `sentiment.py`, `scanner.py`, `paper_mirror.py`,
   `portfolio.py`, `render.py`, `archive.py`, `history.py`.
 - **PM**: `get_equity_quotes` for every held/working symbol (books read from

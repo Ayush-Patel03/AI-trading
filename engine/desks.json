@@ -1,6 +1,6 @@
 {
   "_what": "Strategy desks for the Portfolio Manager. Same engine, same risk rules unless overridden, different candidate mandate, SEPARATE paper book and journal per desk — so the weekly review can attribute results to a setup class instead of to the blend. pm.py --desk <name> loads this file from $SCAN_DIR. The default desk 'swing' is the unfiltered book on the unsuffixed files and is what the Trade Desk board shows.",
-  "_rules": "Every desk starts from the same $5,000 of paper capital, runs under the same account lock and paper lock, and is written back under the same revision/--check protocol. Desk books live at claude/paper-book-<desk>.json and journals at claude/pm-journal-<desk>.json. A desk with no candidates in its mandate simply reports that and manages its own holdings. A desk may name its day-trade / margin regime as rules.broker_policy (legacy_pdt | intraday_margin | cash_settled, see docs/PM.md section 4); unset, the book, engine-config.json and finally the default intraday_margin decide. A desk names its stop policy as rules.stop_policy (fixed_atr | chandelier | time_catastrophe, parameters in rules.stop_params — docs/PM.md 'Stops by desk type'); unset, fixed_atr. A desk with top-level \"inactive\": true is a TEMPLATE: pm.py --desk refuses it without --allow-inactive, no book is created for it, and the peer loader and paper mirror skip it.",
+  "_rules": "Every desk starts from the same $5,000 of paper capital, runs under the same account lock and paper lock, and is written back under the same revision/--check protocol. Desk books live at claude/paper-book-<desk>.json and journals at claude/pm-journal-<desk>.json. A desk with no candidates in its mandate simply reports that and manages its own holdings. A desk may name its day-trade / margin regime as rules.broker_policy (legacy_pdt | intraday_margin | cash_settled, see docs/PM.md section 4); unset, the book, engine-config.json and finally the default intraday_margin decide. A desk names its stop policy as rules.stop_policy (fixed_atr | chandelier | time_catastrophe, parameters in rules.stop_params — docs/PM.md 'Stops by desk type'); unset, fixed_atr. A desk with top-level \"inactive\": true is a TEMPLATE: pm.py --desk refuses it without --allow-inactive, no book is created for it, and the peer loader and paper mirror skip it. A desk with \"kind\": \"options\" is the paper options desk (D-02 / E27): pm.py --desk dispatches it to options_desk.run_slot under the same write protocol; its book carries `structures` (defined-risk spreads) instead of `positions`, and the house tally counts each structure as its beta-weighted-delta equity equivalent.",
   "desks": {
     "swing": {
       "label": "Swing — the unfiltered book",
@@ -38,38 +38,84 @@
     },
     "rotation": {
       "inactive": true,
-      "label": "Rotation — sector ETF momentum, monthly (E26) — INACTIVE TEMPLATE",
+      "label": "Rotation — sector ETF momentum, monthly (E26) — INACTIVE until the harness is read",
       "doc_book": "claude/paper-book-rotation.json",
       "doc_journal": "claude/pm-journal-rotation.json",
       "book": "paper_book_rotation.json",
       "journal": "pm_journal_current_rotation.json",
       "rules": {
         "stop_policy": "time_catastrophe",
-        "stop_params": {"k_cat": 3.5, "max_sessions": 25, "target_pct": null}
+        "stop_params": {"k_cat": 3.5, "max_sessions": 25, "target_pct": null},
+        "max_positions": 3,
+        "max_risk_per_trade_pct": 0.5,
+        "min_risk_per_trade_pct": 0.5,
+        "max_position_pct": 100.0,
+        "max_deployed_pct": 100.0,
+        "min_cash_reserve_pct": 0.0,
+        "rotation": {"top_n": 3, "sleeves": 3, "bond_sleeves": 3, "drop_below_rank": 6, "bond": "TLT"}
       },
       "filter": {"universe": "sector-etfs"},
       "publishes_board": false,
-      "_cadence": "Monthly: rank the sector ETF universe on 12-1 month momentum at the first slot of the month, hold the top ranks for ~25 sessions, rotate. The four daily slots only manage holdings between rebalances.",
-      "_thesis": "Cross-sectional sector momentum in liquid ETFs (E26). No tight stop — a 3.5x ATR catastrophe stop and the 25-session time stop are the only exits; the rank IS the exit. The `universe: sector-etfs` filter is a placeholder: the scan does not carry that universe yet, so this desk has no candidates and no book until it does.",
-      "_note": "Template only (E26). No book exists; pm.py refuses --desk rotation without --allow-inactive. Activate by removing `inactive`, creating the two project docs and adding the desk to runner/slots.json."
+      "_cadence": "Monthly: at the LAST power-hour slot of each calendar month (engine/rotation.py is_rebalance_slot — weekday calendar plus the NYSE holidays) rank XLK XLF XLV XLY XLP XLE XLI XLB XLU XLRE XLC and VEU on 12-1 month return; hold the top 3 in equal sleeves when SPY's 12-month return beats the 3-month bill (macro.json tbill_3m_pct, 0 when absent), else TLT alone. The weekly check (last power-hour of the week) acts only if a held ETF fell below rank 6 or the filter flipped. Every other slot manages holdings by their stops. `--force-rebalance` applies the rule at any slot.",
+      "_thesis": "Cross-sectional sector momentum in liquid ETFs (E26; Faber 2010, Antonacci 2014). No tight stop — a 3.5x ATR catastrophe stop and the 25-session time stop are the only exits; the rank IS the exit (rotation-exit). Candidates come from a staged bars_etf.json (14 symbols, >= 13 months of daily bars), never from scan_results.json; entries are sized by SLEEVE (equity / 3, the bond leg takes all 3 sleeves), scaled by the desk vol scalar when vol_target is on, and placed as marketable next-session orders. The position and deployment caps above are set so a sleeve fits, and the risk-per-trade floor is the pipeline's pre-size only (the sleeve replaces it, never the other way); the ETFs are exempt from the HOUSE-01 per-name / per-sector caps and counted in the K-03 exposure metrics.",
+      "_note": "INACTIVE (E26). pm.py refuses --desk rotation without --allow-inactive and no book exists. Read the harness first: `python3 engine/backtest.py --desk rotation --bars bars_etf.json --start ... --end ... --ledger --corr-with <swing book>` (docs/BACKTEST.md § E26). Activate by setting `inactive` to false, seeding books/rotation.json and the two project docs, adding \"rotation\" to runner/slots.json (power-hour and sentinel desks) and staging bars_etf.json (+ macro.json) with the power-hour inputs — docs/PM.md § 'The rotation desk'."
     },
     "orb": {
       "inactive": true,
-      "label": "ORB — opening-range breakout, intraday (E24) — INACTIVE TEMPLATE",
+      "label": "ORB — stocks-in-play opening-range breakout, intraday, long-only (E24) — INACTIVE TEMPLATE",
       "doc_book": "claude/paper-book-orb.json",
       "doc_journal": "claude/pm-journal-orb.json",
       "book": "paper_book_orb.json",
       "journal": "pm_journal_current_orb.json",
       "rules": {
         "stop_policy": "chandelier",
-        "stop_params": {"k_init": 0.1, "k_trail": 3.0, "max_sessions": 1, "target_r": null},
+        "stop_params": {"k_init": 0.1, "k_trail": 0.5, "max_sessions": 1, "target_r": null},
         "flatten_at_close": true,
+        "broker_policy": "intraday_margin",
+        "orb": {
+          "lookback_days": 14, "top_n": 20,
+          "min_price": 5.0, "min_adv_shares": 1000000, "min_atr": 0.5,
+          "stop_atr_mult": 0.1, "risk_pct": 1.0, "max_notional_pct": 25.0, "max_concurrent": 5,
+          "k_trail": 0.5, "breakout_tick": 0.01,
+          "entry_window_et": ["09:30", "10:00"], "valid_from_et": "09:35", "cancel_after_et": "10:30",
+          "flatten_at_et": "15:45",
+          "fill_k": 1.0, "fill_half_spread_bps": 5.0, "fractional": false
+        }
+      },
+      "pm_rules": {"max_new_entries_per_run": 5},
+      "filter": {},
+      "publishes_board": false,
+      "_thesis": "Stocks-in-play opening-range breakout (E24; Zarattini, Barbon & Aziz 2024). Each morning the 09:35 sentinel ranks the scan universe plus the held names by opening relative volume (the 09:30 bar's volume over the 14-session average of that same bucket), keeps price > $5, 14-day ADV > 1M shares and ATR14 > $0.50, takes the top 20 and goes LONG the names whose first candle closed green with a buy-stop just above the opening-range high, live until 10:30. Stop at 10% of ATR14 (chandelier k_init 0.1), sized for 1% of desk equity at risk under a 25% notional cap, at most 5 names, trailed 0.5x ATR under the highest 5-minute high (k_trail 0.5 is DESK-SPECIFIC — the chandelier default of 3.0 is a multi-day trail), flat at the 15:45 power-hour slot. LONG-ONLY: the paper's edge was long AND short; this account cannot short, so a weaker result than the paper's is the expectation, and every red-candle skip is journaled.",
+      "_note": "Template only (E24). No book exists; pm.py refuses --desk orb without --allow-inactive. The wiring is in engine/orb.py and pm.py (D-03): stop-buy fills against bars_5m.json, the 10:35 cancel, the 5-minute trail, flatten_at_close at power-hour; intraday_margin because every trade is a day trade and nothing counts them. Activate by removing `inactive`, creating the two project docs, adding the desk to runner/slots.json under sentinel and power-hour ONLY, and staging bars_5m.json at the sentinel (docs/PM.md section 20)."
+    },
+    "options": {
+      "inactive": true,
+      "kind": "options",
+      "label": "Options — XSP/SPY put credit spreads, paper (E27) — INACTIVE TEMPLATE",
+      "doc_book": "claude/paper-book-options.json",
+      "doc_journal": "claude/pm-journal-options.json",
+      "book": "paper_book_options.json",
+      "journal": "pm_journal_current_options.json",
+      "starting_equity": 5000.0,
+      "rules": {
+        "underlyings": ["XSP", "SPY"],
+        "dte_min": 30, "dte_max": 45, "dte_target": 40,
+        "short_delta": 0.20, "width": {"XSP": 5.0, "SPY": 5.0},
+        "max_risk_per_structure_pct": 8.0, "max_total_risk_pct": 40.0,
+        "max_structures": 5, "max_per_sector": 2,
+        "profit_take_pct": 50.0, "exit_dte": 21, "defensive_close_on_breach": true,
+        "vix_max": 30.0, "require_vix_below_vix3m": true, "require_gex_positive": true,
+        "beta_delta_limit_pct_nav": 0.5, "vega_limit_pct": 0.5, "theta_limit_pct": 0.3,
+        "fill": {"slip_per_leg": 0.02, "max_spread_over_mid": 0.10, "min_bid": 0.01},
+        "fees": {"regulatory_per_contract": 0.04, "index_per_contract": 0.35,
+                 "equity_commission_per_contract": 0.0,
+                 "index_underlyings": ["XSP", "SPX", "NDX", "RUT", "VIX", "DJX"]},
         "broker_policy": "intraday_margin"
       },
-      "filter": {"setups": ["Momentum"]},
+      "filter": {},
       "publishes_board": false,
-      "_thesis": "Opening-range breakout (E24): enter on a break of the first bar's range in the direction of the gap, stop at 10% of ATR (the paper's stop, implemented as chandelier k_init 0.1), flatten at the close — never held overnight. Needs intraday bars and an entry slot the engine does not have yet.",
-      "_note": "Template only (E24). No book exists; pm.py refuses --desk orb without --allow-inactive. `flatten_at_close` closes every position at the power-hour slot; intraday_margin is required because every trade is a day trade."
+      "_thesis": "E27, plan §6 / Appendix H §2, §7. XSP (fallback SPY) put credit spreads, 30–45 DTE, short strike nearest 20Δ, $5 wide. Premium at risk per structure ≤ 8% of desk equity ($400 on $5k: width×100 − credit×100); total defined risk ≤ 40%; ≤ 5 concurrent, ≤ 2 per sector; never on an underlying a stock desk holds. Exit at 50% of max profit or 21 DTE, whichever first; defensive close when spot trades under the short strike. No new short vol when VIX > VIX3M, VIX > 30, or SPY GEX < 0 (GEX from the chain snapshot; skipped and logged when the chain carries no gamma/OI). Portfolio limits: β-weighted delta within ±0.5% of house NAV per 1% SPY move, net short vega ≤ 0.5% of desk equity per vol point, theta ≤ 0.3%/day. Paper fills at the spread mid − $0.02/leg, legs with bid = 0 or spread/mid > 10% refused; fees $0.04/contract regulatory + $0.35 index ($0 equity commission). Marked every slot from chain mids; stress replay weekly (2024-08-05, 2025-04-07/08) by Black–Scholes. Reviewed at 60 sessions against the Cboe PUT benchmark's risk profile. The short-vol sleeve is a higher-Sharpe form of equity beta, not diversification — the house tally counts it as the hidden long it is.",
+      "_note": "Template only (D-02). No book exists; pm.py refuses --desk options without --allow-inactive. Activate by removing `inactive`, creating the two project docs (python3 options_desk.py --init-book paper_book_options.json for the seed), adding the desk to runner/slots.json, and staging option_chains.json (XSP/SPY puts) and vix.json ({vix, vix3m}) with every PM slot. Shadow fills do not apply — the paper fill is the conservative model. The dead-man's switch stamps no stop on a spread: defined risk bounds it."
     }
   }
 }

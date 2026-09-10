@@ -361,6 +361,19 @@
     "mode": "paper",
     "positions": 4,
     "realized_pnl": -48.57,
+    "risk": {
+     "alpha": 0.99,
+     "block_new_entries": false,
+     "cvar_pct": null,
+     "enforce": false,
+     "flags": [],
+     "n_days": 0,
+     "reason": "no bars.json staged this run",
+     "stress": {},
+     "var_pct": null,
+     "worst_stress": null,
+     "worst_stress_window": null
+    },
     "run_id": "2026-09-10-opening-range",
     "run_key": "2026-09-10#opening-range",
     "scan_as_of": "2026-09-10 10:15",
@@ -505,6 +518,19 @@
     "mode": "paper",
     "positions": 4,
     "realized_pnl": -53.95,
+    "risk": {
+     "alpha": 0.99,
+     "block_new_entries": false,
+     "cvar_pct": null,
+     "enforce": false,
+     "flags": [],
+     "n_days": 0,
+     "reason": "no bars.json staged this run",
+     "stress": {},
+     "var_pct": null,
+     "worst_stress": null,
+     "worst_stress_window": null
+    },
     "run_id": "2026-09-10-midday",
     "run_key": "2026-09-10#midday",
     "scan_as_of": "2026-09-10 10:15",
@@ -1017,6 +1043,19 @@
    "mode": "paper",
    "positions": 4,
    "realized_pnl": -53.95,
+   "risk": {
+    "alpha": 0.99,
+    "block_new_entries": false,
+    "cvar_pct": null,
+    "enforce": false,
+    "flags": [],
+    "n_days": 0,
+    "reason": "no bars.json staged this run",
+    "stress": {},
+    "var_pct": null,
+    "worst_stress": null,
+    "worst_stress_window": null
+   },
    "run_id": "2026-09-10-midday",
    "run_key": "2026-09-10#midday",
    "scan_as_of": "2026-09-10 10:15",
@@ -1116,6 +1155,13 @@
     "enabled": false
    },
    "trim_pct": 33.0,
+   "var": {
+    "alpha": 0.99,
+    "enforce": false,
+    "halt_pct": 8.0,
+    "max_stress_multiple_of_halt": 2.0,
+    "max_var_pct_of_desk": 3.0
+   },
    "warn_price_drift_pct": 3.0
   },
   "positions": [
@@ -1278,6 +1324,38 @@
     "unrealized_pct": -0.11
    }
   ],
+  "risk": {
+   "bars": "absent",
+   "block_new_entries": false,
+   "enforce": false,
+   "flags": [],
+   "reasons": [],
+   "rules": {
+    "alpha": 0.99,
+    "enforce": false,
+    "halt_pct": 8.0,
+    "max_stress_multiple_of_halt": 2.0,
+    "max_var_pct_of_desk": 3.0
+   },
+   "stress": {},
+   "var": {
+    "alpha": 0.99,
+    "cvar_pct": null,
+    "horizon_days": 1,
+    "n_days": 0,
+    "reason": "no bars.json staged this run",
+    "var_pct": null,
+    "window": null
+   },
+   "weights_pct": {
+    "MU": 7.56,
+    "NVDA": 8.84,
+    "SCHW": 11.16,
+    "SNDK": 10.2
+   },
+   "worst_stress": null,
+   "worst_stress_window": null
+  },
   "rules": {
    "atr_stop_multiple": 1.5,
    "cumulative_risk_cap_pct": 20.0,

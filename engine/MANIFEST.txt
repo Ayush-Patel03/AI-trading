@@ -13,6 +13,8 @@ ic.py
 ladder.py
 ledger.py
 mirror.py
+options_desk.py
+orb.py
 paper_mirror.py
 pm.py
 portfolio.py
@@ -20,6 +22,7 @@ render.py
 render_pm.py
 render_portfolio.py
 report.py
+rotation.py
 scanner.py
 sentiment.py
 snapshots.py
@@ -28,4 +31,5 @@ technicals.py
 universe.py
 universe_history.py
 validate.py
+var.py
 watch.py

@@ -36,6 +36,7 @@ absent from every replay (see `docs/BACKTEST.md` §1).
 | Earnings calendar (am/pm, estimate, actual) | `get_earnings_calendar` | earnings gate, catalyst pillar | daily | 31-day window | Forward calendar; consensus is as-of-announcement only, no revision history |
 | News with full bodies | `get_equity_news` | catalyst, analyst targets | per slot | 1 symbol/call | Minute-stamped articles. Analyst targets appear only in article text, so they are not a series |
 | VIX / SPX / NDX | `get_indexes` → `get_index_quotes` | regime | per slot | many | Live to the second. **Not scraped.** No history through the connector; the backtest leaves `vix` absent rather than proxied |
+| VIX, VIX3M term structure (history) | Cboe CSVs — §1c | options desk gates (`vix.json`), regime | daily | one GET per index | Dated daily closes; the one VIX series with a real date column. Stage the last close as `vix.json` |
 | Level 2 depth | `get_equity_price_book` | PM fills sanity | on demand | 4 symbols | Live only |
 | Options: chains, IV, volume, OI, put/call | Options-activity saved scan `cc3b6743-…` (`get_option_quotes` is 403) | intelligence pillar | per slot | market-wide | Live only; `sentiment.py` gates thin chains. `implied_move_pct` stays null without a straddle |
 | Retail attention (RH) | `get_popular_watchlists` + `get_watchlist_items` | universe (live) | per slot | per list | Live only. **This is the attention universe `universe.py` exists to replace** |
@@ -50,7 +51,10 @@ absent from every replay (see `docs/BACKTEST.md` §1).
 | Sector rotation YTD | `stockanalysis.com/etf/compare/xlk-vs-…` | regime | daily | one call | Has served untimestamped prior-session rows; day-changes from individual pages |
 | WSB mentions | `apewisdom.io/api/v1.0/filter/wallstreetbets/page/1` | `sentiment.py` | per slot | **page 1 only** (ranks recompute between requests) | **No vendor timestamp**; snapshot per slot is the only history that exists |
 | StockTwits trending + gauge | `api.stocktwits.com/api/2/trending/symbols.json`, `stocktwits.com/symbol/<T>` | `sentiment.py` | per slot | keyless; never the `streams/symbol` endpoint (variable-TTL cache, 50 h stale observed) | No timestamp; snapshot per slot |
-| Reddit raw posts | `arctic-shift.photon-reddit.com/api/posts/search?…&sort=desc` | `sentiment.py` | per slot | ~120k req/h; `sort=desc` mandatory | `created_utc` per post — the one attention feed with real timestamps |
+| StockTwits symbol stream (optional, P-04) | `api.stocktwits.com/api/2/streams/symbol/<T>.json` → `st_symbol_<T>.json` | `sentiment.py` | per finalist per slot, when budget allows | keyless; bull share ONLY, never attention | `created_at` per message — `st_stream_age_min` / `st_stream_stale` carry the age of the newest one |
+| Google Trends (optional, P-04) | any route yielding `{date, value}` per symbol → `trends.json` | `sentiment.py` | per slot | no keyless API | dated series; `trends_z` is the newest point against the trailing 20 |
+| Attention history (state, P-04) | `archive/attention_history.json` in the state repo, maintained by `sentiment.py` | `sentiment.py` | every scan | last 20 scans per symbol | stamped per scan hour; `attention_z` is today against the prior 20 |
+| ~~Reddit raw posts~~ | ~~Arctic Shift~~ | — | — | **removed 2026-09-10 (P-04)** — a dump, not a feed; `docs/scan-sources.md` keeps the note | — |
 | Insider purchases | `marketbeat.com/insider-trades/purchases/`; `efts.sec.gov` full-text search | scan | daily | efts is open JSON | Filing date is the signal time (~1 day lag on marketbeat) |
 | Breadth ($ADDN, $ADRN, $S5FI, $S5TW), highs/lows | `barchart.com` | regime | daily | — | **Timestamp does not render — undated** |
 | Market-wide put/call, off-exchange share | `cboe.com/us/options/market_statistics/daily/`, `/us/equities/market_statistics/` | regime | daily | — | Put/call carries no date stamp; label prior-session |
@@ -58,6 +62,30 @@ absent from every replay (see `docs/BACKTEST.md` §1).
 | IPO calendar | `iposcoop.com/ipo-calendar/`, RH *IPO Access* list | scan | daily | — | Forward; lockups estimated as IPO + 90/180 d |
 | Earnings transcripts | `stockanalysis.com/stocks/<T>/transcripts/` → alphastreet / fool.com | deep dives | on demand | 2 calls per name | Dated by call |
 | **Index membership history** | **Wikipedia S&P 500 / S&P 400 pages — `universe_history.py`** | **backtest universe** | **weekly, or before a harness run** | **one GET per page, project User-Agent** | **Add/remove effective dates per ticker — see §3** |
+
+### 1c. Cboe VIX / VIX3M daily history — the options desk's regime gate (D-02)
+
+The paper options desk (`docs/PM.md` §19) refuses new short vol when VIX > VIX3M or VIX > 30
+and reads both from `vix.json` in the run directory. Cboe publishes the full daily history of
+each index as a CSV on the CDN host that is already on the egress allowlist:
+
+```
+https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv
+https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX3M_History.csv
+```
+
+Columns `DATE,OPEN,HIGH,LOW,CLOSE` (VIX from 1990, VIX3M from 2007-12), one row per session,
+updated after the close. The scheduled task stages the last row of each as
+
+```json
+{"vix": 17.42, "vix3m": 19.31, "as_of": "2026-09-09", "source": "cdn.cboe.com daily_prices"}
+```
+
+`options_desk.parse_vix` also accepts `{"vix": {"close", "date"}}` objects or `[{date, close}]`
+rows per index, and any key casing. **PIT:** the CSV is the prior session's close during the
+day — label it so; the live VIX from `get_index_quotes` is the intraday number and may be
+used for `vix` when the session fetched it, with the CSV close for `vix3m` (the connector
+does not serve VIX3M). Absent `vix.json` the gate fails closed: no new structures.
 
 Dead and never-retry sources are listed in `docs/scan-sources.md`; do not re-probe them from a
 scheduled task.

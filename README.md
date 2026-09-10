@@ -30,10 +30,11 @@ health record — lives in a private claude.ai project and never appears here.
 | `engine/paper_mirror.py` | projects the paper books into `portfolio.json` so Scan Desk sees the real book |
 | `engine/backtest.py` | replays the scoring model over historical bars into `validate.py`'s own record format |
 | `engine/fills.py` | the honest cost model — bid, ask, and gaps through a stop. Wired into nothing yet |
+| `engine/var.py` | K-04: 1-day 99% historical-simulation VaR / CVaR and the five named stress windows per desk; reported, gates entries only with `enforce` on |
 | `engine/universe.py` | screens a stated index membership instead of retail attention. Wired into nothing yet |
 | `engine/ic.py`, `ledger.py` | per-date rank IC with a Newey–West t-stat, and the append-only trial ledger (`experiments/ledger.jsonl`) |
 | `engine/history.py`, `validate.py` | the score trail and the weekly validation |
-| `engine/sentiment.py` | retail sentiment parsers (ApeWisdom, StockTwits, Reddit) |
+| `engine/sentiment.py` | retail sentiment parsers (ApeWisdom, StockTwits, optional Trends) and the attention-fade features (P-04) |
 | `engine/render*.py` | the HTML boards |
 | `runner/` | the entry point on the box: `run.py` verifies a session's inputs, stages a run, runs the engine, writes the state repo back, commits. `selftest.py` proves it on the machine it is on. See `runner/README.md` |
 | `docs/` | the doctrine. `PM.md` governs; read it before changing anything in `engine/`. `BACKTEST.md` covers measuring the edge |

@@ -136,17 +136,23 @@ prior-session rows three sessions running** — take day-changes from the indivi
 | ~~`apewisdom.io/api/v1.0/filter/stocks/page/1`~~ | **Works but no signal** — top ticker had 21 mentions, rank 18 had 1. |
 | `api.stocktwits.com/api/2/trending/symbols.json` | **WORKS, live.** `trending_score` does NOT sort the ranks — do not use it as the ranking key. |
 | `stocktwits.com/symbol/<T>` | **WORKS** — the 0-100 gauge is live. Price is reliable; **its day change % is not**. |
-| ~~`api.stocktwits.com/api/2/streams/symbol/<T>.json`~~ | **NEVER USE.** Cached with a variable TTL: NVDA's newest message was **50 hours old** on 2026-09-01, TSLA 31h, a small cap 10h, while `trending.json` was current to the minute. `sentiment.py` refuses this payload shape. |
-| `arctic-shift.photon-reddit.com/api/posts/search?subreddit=<sub>&limit=100&sort=desc` | **[NEW 09-01] WORKS.** Pushshift successor, keyless, ~120k req/hr, raw post AND comment bodies. Verified 24 minutes fresh. **`sort=desc` is mandatory** — without it the default ordering returns ~55-day-old records. Server-side `query=` returns 500; filter locally. |
+| `api.stocktwits.com/api/2/streams/symbol/<T>.json` | **NEVER as attention.** Cached with a variable TTL: NVDA's newest message was **50 hours old** on 2026-09-01, TSLA 31h, a small cap 10h, while `trending.json` was current to the minute. `sentiment.py` refuses this payload shape under `--stocktwits-trending`. **[P-04 09-10]** Staged as `st_symbol_<T>.json` it is read for ONE thing — the Bullish/Bearish split of `entities.sentiment.basic` (`st_bull_pct`) — reported with the age of its newest message. COLLECTION.md §3b. |
+| ~~`arctic-shift.photon-reddit.com/api/posts/search?…`~~ | **REMOVED 09-10 (P-04)** — see the Reddit paragraph below. |
+| Google Trends → `trends.json` | **[P-04 09-10] optional.** No keyless API; any route that yields a dated `{date, value}` series per symbol is fine, including a hand transcription. `trends_z` only, reported not scored. COLLECTION.md §3b. |
 | ~~`altindex.com/wallstreetbets`~~ | **Demoted.** Stamped "August 31 6:00 PM PST" while claiming a 5-minute refresh; counts are 2-3x ApeWisdom's for the same tickers. Different corpus — never mix absolute numbers. |
 | ~~`tradestie.com/api/v1/apps/reddit`~~ | **DEAD 09-01** — DNS does not resolve. |
 | ~~`swaggystocks.com`~~ | **DEAD** — JS shell, `api.swaggystocks.com` 404s. |
 
-**Reddit's own hosts are blocked by OUR egress allowlist, not by Reddit.** **[CORRECTED 09-01]**
-`reddit.com/robots.txt` is itself `PROXY_REJECTED` with `source: proxy`; Reddit serves that file
-to everyone, so a robots block would have had to report itself as one. This is an admin request
-(`claude/engine/allowlist-request.md`), not a permanent dead end. redlib, teddit, PullPush and
-r.jina.ai were all tested and all fail.
+**Reddit is out of the pipeline (P-04, 2026-09-10).** The 09-01 probe found Arctic Shift
+(the Pushshift successor) "24 minutes fresh", but that was one lucky sample: the route is a
+periodic dump, not a feed, and its freshness varied by days between slots. Reddit's own hosts
+are blocked by OUR egress allowlist (`reddit.com/robots.txt` is itself `PROXY_REJECTED`), and
+the official API needs an app approval this account does not have (research Appendix B).
+Nothing the scanner scored ever read a Reddit field — `reddit_raw_mentions` and `reddit_tone`
+were reported only — so `sentiment.py`'s `--reddit` flag, `reddit_posts.json` and the
+`reddit_*` keys were deleted rather than left to rot. redlib, teddit, PullPush and r.jina.ai
+were all tested on 09-01 and all fail; if the allowlist request is ever granted, the attention
+machinery (`attention_z` over a rolling history) is the shape a Reddit count would plug into.
 
 **Neither ApeWisdom nor StockTwits publishes a timestamp**, so a stalled feed is undetectable
 from the payload. And they do not corroborate each other: on 2026-09-01 they shared 4 of 15 top
