@@ -150,6 +150,7 @@ foot-gun. The checklist is kept as the *target*, not the procedure:
 | Take profit | Price at or above the 3R target | half, then stop to breakeven |
 | Trim | Score 45-55, or trading through the analyst target | a third |
 | Rebalance | Position value over the 15% cap | back to the cap |
+| Flatten | Book 8% under its high-water mark — rung 3 of the drawdown ladder (section 7) | every position with a fresh price |
 
 **Sizing, stops and every risk limit come from `portfolio.py` unchanged.** The manager
 imports it; it does not fork it, re-derive it, or "improve" it. That file mirrors
@@ -460,6 +461,61 @@ halt that blocked stop-losses would be the opposite of a safety feature.
 
 The reference is the session's opening equity, set at the first run of each trading day.
 The halt clears at the next session roll.
+
+### Drawdown ladder — graded de-risking under the kill switch (K-02, 2026-09-10)
+
+The kill switch is a cliff, and it was the only control against losing money. A desk could
+bleed 7% over two weeks without any rule noticing, then lose 3% on the eighth day and halt
+for one afternoon. Practitioners run a ladder instead — halve size at −5%, shut at −7.5% —
+so the book de-risks *as* it loses rather than after. This is that pattern at the book's
+own numbers, and it sits **under** the kill switch: it refuses earlier and never allows
+more. The 3% daily kill above is untouched.
+
+The yardstick is the **high-water mark** — the highest marked equity the book has ever
+reached, kept on the book as `hwm` and only ever raised. Drawdown is
+`(hwm − equity) / hwm`. The equity curve is capped at 400 points, so the HWM is stored
+rather than re-derived from the curve; on a book that has never carried one it is seeded
+from the highest equity on the curve, else from the seed capital.
+
+| Level | Trigger | What changes | What does not |
+|---|---|---|---|
+| soft daily | session P&L at or below **−2%** (same day-P&L definition as the kill switch) | no **new** entries for the rest of the session — sticky until the roll | exits, trims, rebalancing; the 3% kill still trips on its own |
+| rung 1 | **−4%** from the HWM | every new entry sized **× 0.5** | nothing else |
+| rung 2 | **−6%** from the HWM | **no new entries**, reason journaled in `skipped` | exits, trims, rebalancing all still run |
+| rung 3 | **−8%** from the HWM | **halt** through the kill switch's own path (`day.halted`, working buys cancelled) — then **flatten**: every position with a fresh price is sold at the slot price less exit slippage, through the broker policy; `cool_until` is set **5 business days** out | a position with no fresh price is reported `UNPROTECTED`, never sold on a stale mark |
+| cool-off | any session on or before `cool_until` | no new entries | exits still run; the day halt itself clears at the roll as always |
+| re-entry | after `cool_until`, equity still under the HWM | entries allowed again at **× 0.5** (`reentry_size_mult`) | the rungs re-arm from the post-halt equity: another 8% down from there halts again — the old HWM is not the yardstick for a cliff the book could never reach |
+| regained | equity back at or above the HWM | full size, `cool_until` and the halt record cleared | — |
+
+The multiplier is applied at exactly one place — where the entry pass fixes an order's
+share count, after `build_proposals` has sized it — so `portfolio.py` stays byte-identical.
+An order carries `meta.ladder_mult` and `meta.unscaled_shares` for the audit; a halved
+order that falls under the broker minimum is skipped with the reason. The constants live in
+`PM_RULES["ladder"]` (so the board and the alerts page read what the engine gates on):
+
+```
+"ladder": {"soft_daily_pct": 2.0,
+           "rungs": [{"dd_pct": 4.0, "entry_size_mult": 0.5},
+                     {"dd_pct": 6.0, "entry_size_mult": 0.0},
+                     {"dd_pct": 8.0, "flatten": true, "cool_sessions": 5}],
+           "reentry_size_mult": 0.5}
+```
+
+**Fields.** On the book: `hwm`, `cool_until` (ISO date or null), `ladder_halt`
+(`{date, hwm, dd_pct, equity_after, cool_until}` — the re-entry base — or null),
+`day.ladder_soft_hit`. On every journal entry and in `pm_state.json` under
+`book.ladder` (plus `book.hwm`, `book.cool_until`): `dd_pct`, `hwm`, `rung` (0–3),
+`entry_size_mult`, `entries_blocked`, `reason`, `soft_daily_hit`, `cool_until`,
+`cool_active`, `reentry_active`, `reentry_base`, `base_dd_pct`, `halt`/`flatten` (true only
+on the run that tripped rung 3), `regained`, and the `rules` it was judged under. The
+console prints a `LADDER` line whenever the rung is above zero, entries are blocked or the
+book is in re-entry. The ladder is judged once per run, on the same mark the kill switch
+saw, on decision slots and sentinels alike — a rung-3 flatten is an exit, and the sentinel
+exists to honour exits within the hour. The pure evaluation is `engine/ladder.py`;
+`tests/test_ladder.py` walks one book down every rung and back.
+
+Known limit: a withdrawal lowers equity without lowering the HWM and reads as drawdown.
+Record it as a negative deposit and, if the ladder trips on it, reset `hwm` by hand.
 
 ---
 
