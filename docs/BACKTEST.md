@@ -494,6 +494,62 @@ nothing.
 
 ---
 
+## 6d. E16 — 10-K / 10-Q text change, "Lazy Prices" (P-02, 2026-09-10)
+
+**The question.** Cohen, Malloy & Nguyen (2020) find that firms whose filings changed a lot
+against last year's (changers) underperform those whose filings barely moved, by up to
+188 bp/month on the Risk Factors section, over about three months. Does that hold on this
+universe, on this record, forward? `engine/filings.py` computes the change score from the two
+documents (`docs/DATA.md` §4: sections, cosine, the provisional 0.15 changer threshold) and
+`scanner.py` logs it on every row as `features.filing_change_score` / `filing_changer` /
+`filing_days_since` when `filings_signal.json` is staged. **Scored by nothing.** The intended
+use, if the test passes, is a slow negative screen — a changer is not a swing-desk candidate
+for the next ~60 sessions — and nothing is wired for that until the test has been read.
+
+**The recipe.** Stage the filings file (`docs/COLLECTION.md` §4a) so the live archive records
+carry the features from the next slot on. For a replay, `backtest.py --filings` lays the
+same file over every replay date **point-in-time**: `filings.features_for` nulls any filing
+dated after the scan date, so a record on 2025-03-01 sees only what had been filed by then.
+The replay wants the file in its **history form** — `{SYMBOL: [row, row, ...]}`, one row per
+filing with its own `filed` and `change_score`, which the fetch step produces by running the
+batch once per (filing, year-earlier filing) pair back to the window's start; with the
+single-row live form a replay date before the latest filing is simply null. Then, exactly the
+E10 machinery at the paper's horizons:
+
+```bash
+# the live record (records/ = the archive's compact records) — 20 and 60 sessions forward
+python3 engine/ic.py --records records/ --bars bars.json --horizons 20,60 --by-feature \
+    --md ic_e16.md --json ic_e16.json
+# a replay, once the fetch step has pulled filings back to the replay window's start
+python3 engine/backtest.py --bars bars_all.json --start 2025-01-02 --end 2025-12-31 --every 5 \
+    --filings filings_history.json --out-records records_e16/ --summary e16.json \
+    --ledger --experiment-id E16 --hypothesis "changers underperform non-changers over 20/60 sessions"
+python3 engine/ic.py --records records_e16/ --bars bars_all.json --horizons 20,60 --by-feature \
+    --md ic_e16.md --json ic_e16.json
+```
+
+Read two rows of the `--by-feature` table: `filing_change_score` (continuous, does not depend
+on the threshold) and `filing_changer` (the two-group split, 1.0 / 0.0). The paper predicts a
+**negative** IC and a negative top-minus-bottom spread at both horizons, larger at 60 than
+at 20. Write the expected signs down before running, as §6b requires.
+
+**Sample floor.** One observation per (date, name) only changes when a new filing arrives —
+four times a year per name — so nearby dates repeat the same feature value and the effective
+sample is filings, not rows. Count distinct `(symbol, filed)` pairs behind the table; under
+**100 filings**, or fewer than **20 changers**, the row is *not a sample* and the interval is
+decoration. That is roughly two quarters of a 150-name universe.
+
+**Promotion rule.** The negative screen is wired only if (a) the 60-session IC of
+`filing_change_score` is negative with |t| ≥ 2 on the live record, (b) the changer/non-changer
+spread is negative with its 90% interval below zero, and (c) the same signs hold on the
+replay's hold-out half — the paper's 2020 publication date is a reason to expect decay, and a
+large-cap universe is read faster than the paper's all-CRSP sample. If it passes, the screen is
+a `pm.py` entry gate refusing changers for 60 sessions after `filed`, reported through
+`report.py` like every other gate (§6c). If it fails, the features stay logged and nothing
+else changes.
+
+---
+
 ## 7. Where this sits in the plan
 
 Phase 2 of the roadmap (`claude/health/2026-09-02-system-review-and-roadmap.md`) is *prove the

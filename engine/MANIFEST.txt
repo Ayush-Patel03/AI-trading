@@ -4,6 +4,7 @@ backtest.py
 broker_policy.py
 config.py
 desks.json
+filings.py
 fills.py
 guardrails.py
 health.py
