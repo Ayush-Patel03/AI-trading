@@ -16,6 +16,13 @@ Inputs
                       call, so a month of scans is usually two or three calls).
   --horizons 5,10,20  forward windows in TRADING sessions.
   --out FILE          JSON results.   --md FILE  the human-readable report.
+  --archive DIR       optional: the archive dir holding followed.json (S-03). Every symbol
+                      whose horizon is still open at --as-of and has no bars is listed
+                      under `followed_without_bars` — the bar fetch missed a name that
+                      left the universe. The observations themselves are unaffected: each
+                      (date, ticker) comes from the records, so a name that stopped
+                      scanning is still scored on every day it did scan; what it needs
+                      from outside is its bars, and that is what the followed set tracks.
 
 Method
 ------
@@ -333,6 +340,8 @@ def main():
     ap.add_argument("--horizons", default="5,10,20")
     ap.add_argument("--out", default="validation.json")
     ap.add_argument("--md", default="validation.md")
+    ap.add_argument("--archive", default=None, help="archive dir with followed.json (S-03)")
+    ap.add_argument("--as-of", default=None, help="date the followed horizons are judged at")
     a = ap.parse_args()
     horizons = [int(x) for x in a.horizons.split(",") if x.strip()]
 
@@ -345,6 +354,11 @@ def main():
     res = analyse(obs, horizons)
     res["records_used"] = len(recs)
     res["tickers_without_bars"] = missing
+    if a.archive:
+        import history
+        followed = history.followed_symbols(a.archive, a.as_of or date.today().isoformat())
+        res["followed_open"] = followed
+        res["followed_without_bars"] = sorted(s for s in followed if not series.get(s.upper()))
     json.dump(res, open(a.out, "w", encoding="utf-8"), indent=2)
     open(a.md, "w", encoding="utf-8").write(markdown(res, horizons))
     for h in horizons:
@@ -354,6 +368,9 @@ def main():
               + ("" if H["enough_data"] else "   (not enough data)"))
     if missing:
         print("no bars for: " + ", ".join(missing), file=sys.stderr)
+    if res.get("followed_without_bars"):
+        print("FOLLOWED but no bars fetched (names that left the universe still need "
+              "their prices): " + ", ".join(res["followed_without_bars"]), file=sys.stderr)
     print(f"-> {a.out}, {a.md}")
 
 

@@ -23,6 +23,7 @@ health record — lives in a private claude.ai project and never appears here.
 | `engine/technicals.py` | Wilder ATR(14), RSI, moving averages from daily bars |
 | `engine/portfolio.py` | sizing and every per-book risk rule |
 | `engine/pm.py` | the Portfolio Manager: fills, exits, rebalancing, entries, house caps |
+| `engine/broker_policy.py` | the day-trade / margin regime the PM trades under: `intraday_margin` (FINRA Reg. Notice 26-10, default), `legacy_pdt`, `cash_settled` |
 | `engine/watch.py` | the read-only extended-session watch; no write path to a book, by construction |
 | `engine/archive.py` | run identity, book fingerprints, when a run earns a frozen board |
 | `engine/config.py` | reads identifiers from the private `engine-config.json` |
@@ -30,14 +31,21 @@ health record — lives in a private claude.ai project and never appears here.
 | `engine/backtest.py` | replays the scoring model over historical bars into `validate.py`'s own record format |
 | `engine/fills.py` | the honest cost model — bid, ask, and gaps through a stop. Wired into nothing yet |
 | `engine/universe.py` | screens a stated index membership instead of retail attention. Wired into nothing yet |
+| `engine/ic.py`, `ledger.py` | per-date rank IC with a Newey–West t-stat, and the append-only trial ledger (`experiments/ledger.jsonl`) |
 | `engine/history.py`, `validate.py` | the score trail and the weekly validation |
 | `engine/sentiment.py` | retail sentiment parsers (ApeWisdom, StockTwits, Reddit) |
 | `engine/render*.py` | the HTML boards |
+| `runner/` | the entry point on the box: `run.py` verifies a session's inputs, stages a run, runs the engine, writes the state repo back, commits. `selftest.py` proves it on the machine it is on. See `runner/README.md` |
 | `docs/` | the doctrine. `PM.md` governs; read it before changing anything in `engine/`. `BACKTEST.md` covers measuring the edge |
+| `docs/runbooks/` | one page per failure class — symptom, where it shows, the exact recovery, who may do it |
 
 ## How it runs
 
-Scheduled tasks clone this repo and execute it:
+On the box, a clone of `production` lives under `C:\ai-trading-runner\engine` and every
+scheduled slot is one call to `runner/run.py`, which stages the engine, the books from the
+private `ai-trading-state` clone and the session's verified inputs into a run directory —
+the same layout `tests/conftest.py` builds. Before the box, scheduled tasks cloned this repo
+into the session sandbox and executed it there:
 
 ```bash
 git clone --depth 1 --branch production https://github.com/Ayush-Patel03/AI-trading "$SCAN_DIR/repo"

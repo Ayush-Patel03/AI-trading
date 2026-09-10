@@ -54,6 +54,8 @@ def desk_books(desks_path="desks.json", only=None):
     for name, cfg in desks.items():
         if only and name != only:
             continue
+        if (cfg or {}).get("inactive"):
+            continue              # K-07: a template desk has no book and is not missing one
         book = (cfg or {}).get("book")
         if not book:
             continue

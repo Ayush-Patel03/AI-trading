@@ -160,6 +160,9 @@ ROW_KEEP = (
     "rs_20d_vs_spy", "rs_60d_vs_spy",
     "next_earnings", "earnings_timing", "implied_move_pct",
     "confidence", "score_delta", "is_new", "entered_top5",
+    # Optional per-row feature dict (e.g. ret_12_7, rs_20d_vs_spy) for ic.py --by-feature.
+    # Nothing emits it yet; when something does, it rides through unchanged.
+    "features",
 )
 REGIME_KEEP = ("label", "multiplier", "vix", "notes", "spy", "qqq", "iwm", "breadth")
 

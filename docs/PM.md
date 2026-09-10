@@ -150,6 +150,7 @@ foot-gun. The checklist is kept as the *target*, not the procedure:
 | Take profit | Price at or above the 3R target | half, then stop to breakeven |
 | Trim | Score 45-55, or trading through the analyst target | a third |
 | Rebalance | Position value over the 15% cap | back to the cap |
+| Flatten | Book 8% under its high-water mark — rung 3 of the drawdown ladder (section 7) | every position with a fresh price |
 
 **Sizing, stops and every risk limit come from `portfolio.py` unchanged.** The manager
 imports it; it does not fork it, re-derive it, or "improve" it. That file mirrors
@@ -162,8 +163,8 @@ The manager was built against the 18:48Z rebuild of `portfolio.py`, in which
 function directly — `build_proposals` does — but a future change to its signature is the
 kind of thing that breaks quietly, so check it if the engine is rebuilt again.
 
-What lives in `pm.py` is execution policy only: order lifecycle, fills, the PDT guard, the
-kill switch, the journal.
+What lives in `pm.py` is execution policy only: order lifecycle, fills, the broker policy
+(section 4), the kill switch, the journal.
 
 ### No entries at power hour
 
@@ -309,32 +310,194 @@ for going live on its own.
 
 ---
 
-## 4. Pattern day trading — the constraint that actually binds
+## 3b. Shadow fills and execution cost (K-06, added 2026-09-10)
 
-The Agentic account is **limited margin**, which means intraday buying power and also means
-PDT applies: under $25,000 equity, **three day trades per five rolling business days**. A
-fourth restricts the account for ninety days. On a $50 book that is not a theoretical risk,
-because entries fill at slot N+1 and an exit can fire at slot N+2 of the same session.
+The booked fill model above is unchanged, and its output is byte-identical to what it was
+before this section existed — `tests/test_shadow_fills.py` proves it against a frozen
+pre-change output. What changed is that the book now carries a **second price next to
+every fill**, and a running total of the difference.
 
-The guard, in `pm.py`:
+### What a shadow fill is
 
+Every booked fill — an entry filling at its resting limit, a stop, a thesis exit, a target
+scale-out, a trim, a rebalance, a ladder flatten — gets a `shadow_price`: what a marketable
+order of that size would have paid **against the quote the engine actually saw**.
+
+    buy   →  ask + k × half_spread + add_on
+    sell  →  bid − k × half_spread − add_on
+
+- `half_spread` is (ask − bid) / 2 from the broker quote the run was priced on.
+- `k` is how many half-spreads beyond the touch the order pays, **by slot**
+  (`PM_RULES["shadow"]["k_by_slot"]`): 1.0 at pre-market, opening-range and power-hour,
+  where the spread is wide and the tape is moving; 0.0 at midday, where a marketable order
+  on a liquid name really does fill at the touch; 0.5 for the sentinel and ad-hoc runs.
+- `add_on` is the size/impact cost the spread does not carry, in bps of the mid, by
+  liquidity tier: **2 bp** for a large cap, **15 bp** for a name under $10m of dollar ADV
+  (`small_cap_adv_usd`). The tier comes from the candidate's `adv_usd`, else
+  `avg_volume_20d × price`, else `volume × price`; when none is known the name is treated as
+  large and the basis string says so. The guess errs toward the smaller cost on purpose —
+  a tier nobody measured must not manufacture a penalty.
+- **Gap through a stop** (`gap_through_stops: True`): a stop's shadow touch is capped at
+  min(last, stop). A stop is not resting at the broker (section 5); when the tape has
+  printed through it, the print is the witness — never the stop price, and never a stale
+  bid sitting above the print.
+- **No two-sided quote** (the price came from the scan, or the quote was crossed): the
+  shadow *is* the booked price, basis `no-quote`, gap zero. A missing quote records
+  nothing rather than inventing something.
+
+### Why never fill at mid
+
+A model that fills at the mid is claiming the desk earns half the spread on every trade.
+Nobody paying for liquidity earns the spread. A marketable order crosses it: the buyer
+pays the ask, the seller hits the bid, and on a moving tape or a thin book the fill is
+worse than the touch, not better. Half-spread guide, as a fraction of price:
+
+| Tier | Half-spread | What it means on a $1,000 fill |
+|---|---|---|
+| Mega-cap (AAPL, NVDA, MSFT) | 0.5–2 bp | 5–20 cents |
+| S&P 500 average | 2–5 bp | 20–50 cents |
+| Russell 2000 | 10–40 bp | $1–$4 |
+
+The flat 0.25% (25 bp) exit haircut is therefore **pessimistic** on a mega-cap at midday
+and **optimistic** on a small cap at the open — and the whole point of the shadow ledger is
+to find out which of those the book has actually been doing. On 2026-09-10's frozen
+sequence (three large-cap midday fills) the shadow came in *inside* the booked haircut:
+`cum_gap_usd` was negative. That is a finding about the book, not a reason to loosen it.
+
+### What is recorded
+
+Per fill, on the journal decision and (for sales) on the `closed_trades` record:
+
+- `shadow_price` — the price above.
+- `shadow_gap_usd` — `(booked − shadow) × shares` for a sale, `(shadow − booked) × shares`
+  for a buy. **Positive means the paper book flattered itself**, in either direction.
+- `implementation_shortfall_bps` — `|shadow_fill − decision mid| / mid × 1e4`, where the
+  decision mid is `(bid + ask) / 2` **at the time of the decision**. For an entry that is
+  the quote the order was *placed* on; `entry_pass` writes it onto the working order as
+  `decision_mid`, and `simulate_fills` reads it back when the resting limit fills on a
+  later slot. For every same-run sale the decision and the fill share one quote. `null`
+  when there was no two-sided quote. The shortfall is measured on the *shadow* fill, not
+  the booked one: it is the execution cost a real desk would report, and the booked
+  haircut is a bookkeeping convention, not a cost.
+- `shadow_basis` — the formula in words, so a board can never show a number without its
+  provenance (`ask + 1×half-spread + 2bp (large cap)`, or `no-quote`).
+
+Book level, `book["shadow"]`: `cum_gap_usd`, `n_fills`, `gap_share_of_realized_pct`
+(cumulative gap as a percentage of |realised P&L|, null while nothing is realised) and a
+per-year cost accumulator. State and the journal carry the same summary plus
+**`equity_shadow` = equity − cum_gap_usd** — the equity the book would show if it had paid
+the shadow price on every fill. The console prints `shadow gap $x (y% of realized)` on
+every run.
+
+### The execution-cost budget
+
+`PM_RULES["cost_budget_bps_per_year"] = 200` per desk. `fills.cost_budget_status(book,
+today)` returns `ytd_cost_bps` = Σ(shortfall × notional) over the calendar year ÷ average
+equity (the mean of the year's equity-curve points) × 1e4, the `budget_bps`, and
+`share_used_pct`. Over 100% the run warns `EXECUTION COST BUDGET EXCEEDED` — the desk is
+paying more to trade than its edge is likely worth, and the answer is to trade less or
+trade wider names at quieter slots, not to lower the budget. 200 bp/year is deliberately
+tight for a book that turns over as often as this one; if it binds, that is information.
+
+### The plan
+
+The book keeps booking at the old model until the shadow gap is *understood*: a few weeks
+of `gap_share_of_realized_pct` across all three desks, split by slot and by tier, so the
+switch is made on a measurement rather than on a feeling. Then, on a session boundary,
+with a doctrine note here and a line in the journal, `pm.py` switches its booked fill to
+the shadow price and the pre-switch equity curve is labelled as such on every board. Not
+before: a silent change to the cost model makes yesterday's curve and today's incomparable
+for a reason nobody can see. To switch the *recording* off — never the reason to do it —
+set `PM_RULES["shadow"]["enabled"] = False`; the engine then writes exactly the pre-K-06
+bytes.
+
+---
+
+## 4. Day-trade / broker policy — the regime the book trades under
+
+Until 2026-09-10 the manager carried one regime, hard-wired: the FINRA pattern-day-trader
+rule. It no longer describes the account. **FINRA Regulatory Notice 26-10** amended Rule
+4210, **effective 2026-06-04**, and replaced pattern-day-trader counting with an intraday
+margin requirement; **Robinhood adopted it on 2026-06-04**, and the Agentic account is under
+it. The regime is now a **policy object** in `engine/broker_policy.py`, chosen by name, and
+`pm.py` asks it four things: may this sale go and how much of it, may this slot place
+entries at all, how much of the cash is spendable, and what to record after a fill. Every
+note a policy writes into the journal is prefixed with its name (`intraday_margin: …`,
+`legacy_pdt: …`) so a line can never be misread as coming from a regime the book is not
+under. The journal entry and `pm_state.json` carry `broker_policy` on every run.
+
+**Selection, in order of precedence:** `--broker-policy` on the command line, then
+`broker_policy` in the book, then `rules.broker_policy` for the desk in `desks.json`, then
+`broker_policy` in the private `engine-config.json`, then the default. **The default is
+`intraday_margin`** — Vishal's decision, because that is the rule the account is actually
+under. An unknown name is fatal (exit 2, naming the three valid ones); it is never silently
+replaced with a default.
+
+### `intraday_margin` — FINRA 4210 as amended by Notice 26-10 (default)
+
+- **No day-trade count and no $25,000 threshold.** Day trades are still recorded in the
+  book (`day_trades`) because the weekly review reads them, but nothing gates on them.
+- **Sales are always allowed.** A stop, target, trim or rebalance on shares bought the same
+  session goes through. The `UNPROTECTED … policy refused the sale` state of the old guard
+  cannot arise under this policy.
+- **The constraint is an intraday margin deficit.** After any proposed transaction, equity
+  must cover the maintenance requirement — 25% of long market value (`maintenance_pct`),
+  counting working buy orders as if filled. A shortfall is a call: `entries_allowed` refuses
+  new entries while it stands, and the deficit is booked in `book["imd_events"]` with its
+  date and amount. A deficit under **min(5% of equity, $1,000)** is *de minimis* — still a
+  call, but not counted against the account's record.
+- **A practice freezes the book.** A deficit still unmet on the **fifth business day**, on
+  a book that already has **two counted deficits inside 90 days**, sets
+  `book["freeze_until"]` to today + 90 calendar days. While frozen: no new entries, exits
+  untouched. The freeze thaws on its own on the date stamped.
+- The **$2,000 margin-account minimum** survived the amendment. Below it entries are limited
+  to cash — which the paper book does anyway — so it is noted in the journal, not enforced
+  twice.
+- On a cash-only paper book (buying power = cash, no leverage) this policy is met by
+  construction and never binds. It is implemented in full so that a book that *is*
+  overdrawn — a negative cash line, a fill the mark did not anticipate — is handled the way
+  the broker would handle it rather than silently.
+
+### `legacy_pdt` — the guard the manager ran under until 2026-09-10
+
+Selecting it reproduces the old behaviour byte-for-byte, with the old numbers (they still
+sit in `PM_RULES` under their `pdt_*` keys, so a desk's `pm_rules` override reaches them as
+before). Keep it for a broker that has not adopted the amendment, and for reading any
+journal written before June.
+
+- Under $25,000 equity, **three day trades per five rolling business days**; a fourth
+  restricts the account for ninety days.
 - Every sale that closes shares bought the same day is counted as a day trade.
 - **New entries stop at 2 of 3 used.** One day trade is always held back as an exit hatch,
   because being unable to honour a stop is worse than missing an entry.
 - A same-day exit is allowed only for a **stop**. A target or a trim on a position opened
-  today waits for tomorrow, when the shares have settled — which is what a PDT-constrained
-  trader actually does.
-- Where only part of a position is intraday, the settled part is sold and the rest held.
+  today waits for tomorrow, when the shares have settled.
+- Where only part of a position is intraday, the settled part is sold if it clears the
+  broker minimum and the rest held.
+- **The state to fear.** If the budget is exhausted and a position opened today breaks its
+  stop, the manager will not sell it. It emits `UNPROTECTED: <SYM> broke its stop and the
+  legacy_pdt policy refused the sale` as a banner on the board and a warning in the journal.
+  That is a deliberate trade — a ninety-day restriction is worse than one bad hold — and it
+  is the loudest thing the system can say. If you see it, decide by hand. **Every PM task
+  prompt pushes a phone notification on it** (section 12).
+- Above $25,000 equity the guard disables itself.
 
-**The state to fear.** If the budget is exhausted and a position opened today breaks its
-stop, the manager will not sell it. It emits `UNPROTECTED: <SYM> broke its stop and the PDT
-budget is exhausted` as a banner on the board and a warning in the journal. That is a
-deliberate trade — a ninety-day restriction is worse than one bad hold — and it is the
-loudest thing the system can say. If you see it, decide by hand. **Every PM task prompt now
-pushes a phone notification on it** (section 12).
+### `cash_settled` — a cash account, T+1
 
-Above $25,000 equity the guard disables itself. It is written against the threshold, not
-against the current balance.
+- Sale proceeds settle the **next business day** and cannot fund an entry until they have.
+  The book carries an `unsettled` list of `{date, settles, amount}`; settled cash is derived
+  as cash minus the unsettled total, never stored, so a deposit or a hand edit to the cash
+  line cannot leave the two out of step. Entries are sized against settled cash only.
+- Buying with unsettled proceeds is allowed. **Selling that position before the proceeds
+  that paid for it settle is a good-faith violation**, counted in `book["gfv"]` with the
+  date. Three GFVs in a rolling twelve months set `book["restricted_until"]` to today + 90
+  days; the restriction limits entries to settled cash — which this policy does on every
+  day anyway — so it is flagged in the state and the journal rather than changing what the
+  book may do.
+
+The board's *Day trades* tile shows the count with the budget pips under `legacy_pdt`, and
+the count with the policy's name and no pips under the other two: a budget that does not
+exist is not drawn.
 
 ---
 
@@ -401,6 +564,82 @@ halt that blocked stop-losses would be the opposite of a safety feature.
 
 The reference is the session's opening equity, set at the first run of each trading day.
 The halt clears at the next session roll.
+
+### Drawdown ladder — graded de-risking under the kill switch (K-02, 2026-09-10)
+
+The kill switch is a cliff, and it was the only control against losing money. A desk could
+bleed 7% over two weeks without any rule noticing, then lose 3% on the eighth day and halt
+for one afternoon. Practitioners run a ladder instead — halve size at −5%, shut at −7.5% —
+so the book de-risks *as* it loses rather than after. This is that pattern at the book's
+own numbers, and it sits **under** the kill switch: it refuses earlier and never allows
+more. The 3% daily kill above is untouched.
+
+The yardstick is the **high-water mark** — the highest marked equity the book has ever
+reached, kept on the book as `hwm` and only ever raised. Drawdown is
+`(hwm − equity) / hwm`. The equity curve is capped at 400 points, so the HWM is stored
+rather than re-derived from the curve; on a book that has never carried one it is seeded
+from the highest equity on the curve, else from the seed capital.
+
+| Level | Trigger | What changes | What does not |
+|---|---|---|---|
+| soft daily | session P&L at or below **−2%** (same day-P&L definition as the kill switch) | no **new** entries for the rest of the session — sticky until the roll | exits, trims, rebalancing; the 3% kill still trips on its own |
+| rung 1 | **−4%** from the HWM | every new entry sized **× 0.5** | nothing else |
+| rung 2 | **−6%** from the HWM | **no new entries**, reason journaled in `skipped` | exits, trims, rebalancing all still run |
+| rung 3 | **−8%** from the HWM | **halt** through the kill switch's own path (`day.halted`, working buys cancelled) — then **flatten**: every position with a fresh price is sold at the slot price less exit slippage, through the broker policy; `cool_until` is set **5 business days** out | a position with no fresh price is reported `UNPROTECTED`, never sold on a stale mark |
+| cool-off | any session on or before `cool_until` | no new entries | exits still run; the day halt itself clears at the roll as always |
+| re-entry | after `cool_until`, equity still under the HWM | entries allowed again at **× 0.5** (`reentry_size_mult`) | the rungs re-arm from the post-halt equity: another 8% down from there halts again — the old HWM is not the yardstick for a cliff the book could never reach |
+| regained | equity back at or above the HWM | full size, `cool_until` and the halt record cleared | — |
+
+The multiplier is applied at exactly one place — where the entry pass fixes an order's
+share count, after `build_proposals` has sized it — so `portfolio.py` stays byte-identical.
+An order carries `meta.ladder_mult` and `meta.unscaled_shares` for the audit; a halved
+order that falls under the broker minimum is skipped with the reason. The constants live in
+`PM_RULES["ladder"]` (so the board and the alerts page read what the engine gates on):
+
+```
+"ladder": {"soft_daily_pct": 2.0,
+           "rungs": [{"dd_pct": 4.0, "entry_size_mult": 0.5},
+                     {"dd_pct": 6.0, "entry_size_mult": 0.0},
+                     {"dd_pct": 8.0, "flatten": true, "cool_sessions": 5}],
+           "reentry_size_mult": 0.5}
+```
+
+**Fields.** On the book: `hwm`, `cool_until` (ISO date or null), `ladder_halt`
+(`{date, hwm, dd_pct, equity_after, cool_until}` — the re-entry base — or null),
+`day.ladder_soft_hit`. On every journal entry and in `pm_state.json` under
+`book.ladder` (plus `book.hwm`, `book.cool_until`): `dd_pct`, `hwm`, `rung` (0–3),
+`entry_size_mult`, `entries_blocked`, `reason`, `soft_daily_hit`, `cool_until`,
+`cool_active`, `reentry_active`, `reentry_base`, `base_dd_pct`, `halt`/`flatten` (true only
+on the run that tripped rung 3), `regained`, and the `rules` it was judged under. The
+console prints a `LADDER` line whenever the rung is above zero, entries are blocked or the
+book is in re-entry. The ladder is judged once per run, on the same mark the kill switch
+saw, on decision slots and sentinels alike — a rung-3 flatten is an exit, and the sentinel
+exists to honour exits within the hour. The pure evaluation is `engine/ladder.py`;
+`tests/test_ladder.py` walks one book down every rung and back.
+
+Known limit: a withdrawal lowers equity without lowering the HWM and reads as drawdown.
+Record it as a negative deposit and, if the ladder trips on it, reset `hwm` by hand.
+
+### Dead-man's switch — when the manager itself goes silent (K-05, 2026-09-10)
+
+The kill switch and the ladder only work while the engine runs. Section 5 is the reason
+that matters: there is no resting stop in the market, so a box that stops running the
+sentinel is a book with no stops at all. The dead-man's switch is the control for that case.
+Every runner invocation writes `health/heartbeat.json`; an **independent** checker
+(`runner/deadman.py`, its own scheduled task on a different runtime —
+`docs/runner/deadman-task.md`) counts the expected sentinel and PM runs that have gone by
+during market hours without one. At **two missed** it trips: every working paper buy is
+cancelled, every open position is stamped `protective_stop: {level, placed_at, reason:
+"deadman"}` at its own stop (or entry − 2.5 × ATR when it has none), a `deadman` journal
+entry and an `aborted: true` coverage row are written, `health/deadman.json` records the
+trip and the state repo commits. It is idempotent while tripped and clears itself
+(`cleared_at`) on the first heartbeat after. In paper mode that stamp is a record — the
+same stop `pm.py` would fire on at its next run — and nothing is sent anywhere.
+**Live behaviour, specified and not implemented:** behind the two-key live mode of
+section 1, a trip would place one broker-resident stop-limit order per position at the
+stamped level (limit = level − 0.5 × ATR), so the book is protected by the exchange while
+nobody is watching; a heartbeat would *not* cancel them — a human does, after reading
+`docs/runbooks/deadman-tripped.md`. Until live mode exists no code path places that order.
 
 ---
 
@@ -597,6 +836,10 @@ For the manager this matters in three places:
    the 3R target the stop moves to average cost and the basis becomes `breakeven` — that is
    deliberate and outranks whatever the volatility says.
 
+Everything above is the `fixed_atr` policy, which every live desk runs. Since K-07 it is one
+of three — section 16 — and `stop_basis_kind` can also read `chandelier`, `trail` or
+`catastrophe` on a desk that has opted into another policy.
+
 ## 11. Known gaps
 
 - **Four price observations a day.** Everything in section 3 follows from this.
@@ -612,17 +855,27 @@ For the manager this matters in three places:
   **Closed by HOUSE-01 on 2026-09-02** — section 14. The manager now measures combined
   exposure per symbol and per sector across every desk book and refuses an entry that would
   breach either house cap. Preventive, not corrective: it does not unwind an existing breach.
-- **Live mode is not implemented.** Section 1. Do not flip the flag.
-- **Stops are ATR-based, and the basis must always be reported.** See section 10.
+- **Live mode is not implemented.** Section 1. Do not flip the flag. Since K-07 (section 17)
+  the controls that would have to exist first are written as tested validators, and every
+  paper run journals what they would have refused (`live_would_refuse`).
+- **Stops are ATR-based, and the basis must always be reported.** See section 10 — and since
+  K-07 (section 16) the stop is a per-desk POLICY: every live desk is still on `fixed_atr`,
+  and a position carries the policy it was opened under.
 - **The correlation multiplier is a sector-overlap proxy**, not computed from returns.
-  Never present it as a correlation.
+  Never present it as a correlation. (Since K-03, section 14b, the HOUSE-level N_eff *is*
+  computed from returns when `bars.json` is staged, and is labelled `proxy` when it is not.
+  The per-desk sizing multiplier in `portfolio.py` is unchanged.)
 - **No options, no crypto, no shorts.** Long equity only.
-- **Slippage is a flat 0.25%** on exits. It is a placeholder, not a measurement.
+- **Slippage is a flat 0.25%** on exits. It is a placeholder, not a measurement — but since
+  K-06 (section 3b) every fill also carries a shadow price against the real quote and the
+  book accumulates the gap, so the size of the placeholder's error is now measured rather
+  than guessed. The booked number is unchanged until that measurement says how to change it.
 - **Targets fill at market, not at the target** — see section 3. The behaviour is unchanged
   and deliberate; what changed on 2026-09-02 is that the doctrine and the code now say so in
   the same words.
 - **Quotes are single-venue last prints.** Fine for a $50 book; on a thin name the bid/ask
-  spread is a bigger cost than anything the model reasons about, and nothing here measures it.
+  spread is a bigger cost than anything the model reasons about. The spread gate refuses
+  entries over 1% and the shadow ledger (section 3b) now prices every fill against it.
 - **The manager cannot act between slots.** Everything it knows is up to four hours old
   by the time the next run corrects it.
 - ~~**Scan Desk's portfolio panel does not know about the paper book** (audit STATE-01).~~
@@ -666,6 +919,17 @@ artefact section that answers the question section 3 says is not rhetorical, sys
 is accumulating evidence for or against the model. It never touches the book, never
 recommends going live, and appends one line per week to `claude/reviews/index.md`. This is
 the evidence the go-live checklist's second item requires.
+
+The numbers in that review come from `engine/report.py --md` (S-07, `docs/BACKTEST.md`
+§6c): stage the three `claude/pm-journal*.json` docs into a directory, the three
+`claude/paper-book*.json` into another, add a bars file with SPY, and run
+`python3 engine/report.py --journals journals/ --books books/ --bars bars.json
+--counterfactual --md review.md`. It gives the week's refusals by rule, week and desk, the
+E5 counterfactual per gate (did the names it refused underperform the names it admitted,
+with a bootstrap interval and n), closed-trade P&L by exit reason, desk, entry-score decile
+and setup, and each desk's return against exposure-adjusted SPY. It is read-only over the
+journals and books; every number carries its n, anything under 30 says *not a sample*, and
+it prints no win rate and no Sharpe. The review quotes it; it does not recompute it.
 
 **The 2026-09-01 one-off** (`trig_018y5gXv3gNafba2GULRoDaU`, 11:00 ET) verifies that the
 first morning under the rewritten prompts and engine actually completed: no `import archive`
@@ -837,11 +1101,15 @@ class rather than to the blend. `claude/engine/desks.json` defines them:
 | `swing` | unfiltered — every candidate that clears the gates | `claude/paper-book.json`, `claude/pm-journal.json` (the Trade Desk board) |
 | `pullback` | setups *Pullback in Uptrend* / *Early Recovery*, RSI 25–55 — buy the dip inside an uptrend | `claude/paper-book-pullback.json`, `claude/pm-journal-pullback.json` |
 | `momentum` | setup *Momentum*, RSI 50–72 — trend continuation, not exhaustion | `claude/paper-book-momentum.json`, `claude/pm-journal-momentum.json` |
+| `rotation` | **inactive template** (E26) — sector-ETF momentum, monthly, `time_catastrophe` | none — section 16 |
+| `orb` | **inactive template** (E24) — opening-range breakout, intraday, `chandelier` k_init 0.1, flatten at close | none — section 16 |
 
 Every desk starts from the same $5,000 of paper capital, runs under the same paper lock,
 account lock, risk rules (`portfolio.RULES`, overridable per desk in `desks.json` but not
-overridden today), spread gate, macro gate and PDT guard, and is written back under the
-same revision / `--check` protocol. `pm.py --desk <name>` loads the desk, filters the scan
+overridden today), spread gate, macro gate and broker policy (section 4; overridable per
+desk through `rules.broker_policy`), and is written back under the
+same revision / `--check` protocol, and names its stop policy as `rules.stop_policy`
+(section 16; every live desk is on `fixed_atr`). `pm.py --desk <name>` loads the desk, filters the scan
 rows to its mandate (the number declined is journaled once, not listed — a pullback desk is
 not "skipping" momentum names), and suffixes every output file and run id with the desk
 name so three desks can run in one directory. Desks publish no boards; the weekly review
@@ -918,3 +1186,256 @@ per-desk caps. It prints a NOTE to stderr, raises a warning on any decision slot
 journal's `house` block is `null`. The three books must all be staged before the engine runs
 — the skill's step 1 already stages them, and this is now load-bearing rather than
 convenient.
+
+## 14b. House exposure — how many bets is the house really making (K-03, added 2026-09-10)
+
+Section 14's two caps answer one question each: is any single name over 15%, is any single
+sector over 40%. They cannot tell a combined book of eight names that all move together from
+eight independent bets, they cannot see that every desk is long the same factor, and they
+cannot say how much of the house is one position dressed as seven. `engine/house.py`
+measures those things, once per run, on the same combined book (positions **and** working
+buy orders across every desk) that HOUSE-01 tallies. It is pure: holdings and equity in, a
+dict out; nothing in it reads a file, mutates a book or touches an order.
+
+### The metrics
+
+All weights are fractions of **combined** equity, summed per symbol across desks.
+
+| Field | Definition | Without `bars.json` |
+|---|---|---|
+| `n_eff` | effective number of independent bets, **1 / (w̃ᵀ ρ w̃)**, with w̃ the invested weights renormalised to sum to 1 (cash is not a bet: a single 10% position is one bet, not a hundred). With ρ = I this is exactly the Herfindahl count **1 / Σ w̃²**, reported alongside as `n_eff_weights`. Eight equal names → 8; eight equal names at ρ̄ = 0.6 → ≈ 1.5: eight tickers, one and a half bets. | **sector proxy** — ρ = 1 inside a GICS sector, `rho_default` (0.3) across sectors. Harsher than a measured ρ by construction (six semiconductor names count as one bet) and labelled `proxy` everywhere it is shown; `measured` when bars are staged. A name with no bars keeps the proxy value pair by pair. |
+| `beta_w` | **Σ wᵢ βᵢ** — beta-weighted exposure as a fraction of combined equity (cash carries β 0). β from 252 daily returns against the benchmark in the bars file (`SPY`, which must be in the same `get_equity_historicals` call). Names without a β are left out of the sum and `beta_coverage_pct` says how much of the book was measured — they are **not** counted as β 0. | `null`, never 0. An unmeasured beta is not a low one. |
+| `momentum_crowd_pct` | share of combined equity in names whose 12-1 month return (close 21 bars ago over close 252 bars ago, minus one) is over **+50%** — the momentum-crowding measure. | `null`. |
+| `largest_sector`, `largest_sector_pct` | the biggest GICS sector as a share of combined equity — HOUSE-01's own number, restated so one block carries the whole picture. | measured. |
+| `top_symbol`, `top_symbol_pct` | the biggest single name as a share of combined equity. | measured. |
+| `overlap_pct`, `overlap_equity_pct` | share of **distinct** names held by two or more desks, and the share of combined equity sitting in those names. A desk holding a name and a working buy on it counts once for that desk. **The desk-overlap meter on the mirror reads these two fields.** | measured. |
+
+`bars.json` is the same file `technicals.py` reads — the raw `get_equity_historicals`
+payload, or its `results` array — staged in `$SCAN_DIR` by the caller when a slot fetched
+bars (`--bars` names it; default `bars.json`). It is optional and usually absent: the
+sentinel and most slots stage none, and the block says `"bars": "absent"` and which names
+had none. If a future `technicals.features()` exposes `beta_252` / `ret_12_1` it is used
+(imported lazily, any failure ignored); otherwise `house.py` derives both from the closes.
+
+### Thresholds, and what they do
+
+| `PM_RULES["house_exposure"]` | Default | Flag when |
+|---|---|---|
+| `min_n_eff` | **3.0** | `n_eff` below it |
+| `max_beta_w` | **0.8** | `beta_w` above it |
+| `max_momentum_crowd_pct` | **60** | `momentum_crowd_pct` above it |
+| `rho_default` | **0.3** | the cross-sector ρ the proxy assumes |
+| `enforce` | **`false`** | — |
+
+A metric that is `null` never flags. **With `enforce` off — the default — the block is
+reported and gates nothing**: it is written to `state["house"]["exposure"]`, to the
+journal's `house.exposure` (the compact summary), to every desk's heartbeat and from there
+onto the coverage row (`exposure`, additive — a reader that ignores it loses nothing), and
+to the console as one line:
+
+```
+house: n_eff 1.3 (proxy) · β·w n/a · sector 34% IT · overlap 57%   FLAGS n_eff  [reported]
+```
+
+A reported-only flag raises **no** journal warning, on purpose: `archive.should_publish`
+treats any warning as a reason to publish a board, and a standing N_eff flag would publish
+one every slot.
+
+**With `enforce` on, a flagged breach refuses NEW ENTRIES house-wide** — every desk, since
+the house is one book — and journals a `skipped` reason starting `house exposure
+(enforced):` plus a `HOUSE EXPOSURE` warning. The gate sits in `entry_pass` after the
+ladder check and **after** the exit pass has already run. Exits are never touched by
+anything in `house.py` or by this gate, in either mode: a crowded house is a reason not to
+add, never a reason not to sell. The sentinel reports the block and takes no entry decision
+either way, so a quiet sentinel stays quiet.
+
+### What the books score today
+
+The three fixture books (the 2026-09-02 house, 7 names, $14,927, 42% invested), with no
+bars: `n_eff_weights` 5.72, `n_eff` **1.27 (proxy)** — six of the seven names are
+Information Technology and the proxy treats them as one bet — β·w n/a, momentum crowd n/a,
+IT 34.0%, NVDA 10.2%, overlap 57% of names (HOOD, MU, NVDA, SNDK) holding 33% of equity.
+That flags `n_eff` against the 3.0 floor and, with `enforce` off, refuses nothing. The floor
+is a risk-policy choice and it is Vishal's to change; the proxy is a lower bound on the real
+N_eff, and staging bars turns it into a measurement.
+
+---
+
+## 15. The chain snapshot — the option chain as priced (S-01, added 2026-09-10)
+
+When an option chain payload is staged in the run directory (`option_chains.json`,
+`option_chain.json`, `options_chain.json`, `option_quotes.json`, or per-symbol
+`option_chain-<SYM>.json`), `pm.py` writes, after pricing and the decision run:
+
+    $SCAN_DIR/archive/chain_snapshot/<date>-<slot>.jsonl.gz
+
+Line 1 is `{"_meta": {run_id, slot, date, as_of, engine_sha, kind, n_rows, n_symbols,
+source_files, schema}}`. Then one line per contract — `symbol, expiry, dte, strike, type,
+bid, ask, mid, last, volume, open_interest, iv, delta, gamma, theta, vega, spot` — for the four
+nearest expiries and the ten strikes either side of spot per expiry and type; and one
+`{"_derived": true}` line per symbol: `spot, expiries, nearest_expiry, nearest_dte,
+expiry_30_45, atm_iv_nearest, atm_iv_30d, atm_iv_60d, skew25, cpiv, os_ratio, share_volume,
+em_1sd, em_1sd_pct, straddle_price, straddle_pct`. The derived row is computed from the
+whole chain the payload carried, before the trim. Definitions: 30/60-day ATM IV are linear in
+DTE between the bracketing expiries (null when not bracketed — no extrapolation); `skew25` is
+(IV at put Δ −0.25 − IV at call Δ +0.25) / ATM IV at the first expiry with 30–45 DTE; `cpiv` is
+the open-interest-weighted mean of (IV_call − IV_put) over strikes carrying both legs at that
+expiry; `os_ratio` is Σ contract volume × 100 / share volume; `em_1sd` is spot × ATM IV ×
+√(DTE/365) at the nearest expiry with at least one session to run, and `straddle_price` is ATM
+call mid + ATM put mid there. Anything not computable is null, never 0. Spot falls back to the
+staged quote, then the scan price; share volume comes from the scan_data candidate.
+
+With no chain file staged the manager writes nothing. `get_option_quotes` still returns 403
+(SCAN.md §9.1), so today this is the reader waiting for a route; the CLI
+`python3 snapshots.py --run-dir . --out archive --chain --slot <slot> --as-of <iso>` writes the
+header-only file (n_rows 0) so an absence is on the record. Non-fatal by rule: a failure is
+recorded on `pm_state.json` as `chain_snapshot.error`, **never** on the journal or the book —
+the book the runner writes stays byte-identical to a direct run. Each desk of a slot writes the
+same file; the content is the same and the last writer wins.
+
+Why: IV rank needs a history of ATM IV — after ~60 sessions of `atm_iv_30d` it becomes
+computable per name, and nothing else in the system records it. E10/E17 read `skew25`, `cpiv`
+and `os_ratio` at the slot; the slot-event simulator needs the straddle and `em_1sd` the
+market was pricing at the moment the manager decided.
+
+## 16. Stops by desk type (K-07, added 2026-09-10)
+
+Until K-07 one stop rule served every desk: `portfolio.derive_levels()` — 1.5× ATR below
+entry, clamped into the 3–12% band, a 3R target, half off at the target and the stop to
+breakeven (section 10). That is a swing stop, and it is the right one for the swing book.
+It is the wrong instrument for the other mandates, and the literature is specific about why:
+
+- **Kaminski & Lo (2014), "When do stop-loss rules stop losses?"** — a stop-loss adds value
+  when returns carry momentum or switch regimes, because the loss it realises is the start of
+  a run rather than noise; on a random walk it subtracts value (it sells at a price with no
+  information in it and pays the round trip), and on a **mean-reverting** series it is
+  actively harmful, because it sells precisely into the reversal the strategy was built to
+  hold through.
+- **Han, Zhou & Zhu (2016), "A trend factor / Taming momentum crashes"** — on the momentum
+  portfolio a 10% stop-loss cut the worst monthly loss from ≈ −50% to ≈ −11% and roughly
+  doubled the Sharpe ratio, mostly by stepping out of the crashes. And across their tests a
+  **wide stop with a smaller position dominates a tight stop with a larger one**: the
+  tight stop gets hit by noise and pays the whipsaw; the wide one only fires on the real
+  move, and the smaller size holds the dollar risk equal.
+
+So there are now three policies in `engine/stops.py`, selected per desk by `rules.stop_policy`
+in `desks.json` with parameters in `rules.stop_params`:
+
+| Policy | Initial stop | Ongoing | Target | Time stop | For |
+|---|---|---|---|---|---|
+| `fixed_atr` (default) | 1.5× ATR, clamped 3–12% (`derive_levels`) | breakeven after the scale-out | 3R, half off | none | swing — **unchanged**, byte-for-byte |
+| `chandelier` | entry − `k_init`×ATR14 (2.5) | trail = highest close since entry − `k_trail`×ATR14 (3.0), **ratchets up, never down** | none by default (`target_r` optional) — rank and trend exits do that job | `max_sessions` (40): closed if it has not made 1R by then | momentum, trend swing |
+| `time_catastrophe` | entry − `k_cat`×ATR14 (3.5) — a catastrophe stop, nothing tighter | never moves | `target_pct` (4.0%) optional, whole position | `max_sessions` (6 for mean reversion, ~25 for rotation), unconditional | mean reversion, sector rotation |
+
+**What every desk trades today is unchanged.** `swing`, `pullback` and `momentum` are all on
+`fixed_atr`, and `tests/test_stops.py` proves it the same way K-06 did: a three-run sequence
+(entry placed and filled, a stop, a 3R scale-out with the breakeven move, a session roll) was
+frozen from the untouched engine (`tests/fixtures/pm_golden_prechange_stops.json`, written
+from commit 3a72721 by `tests/stops_sequence.py` *before* pm.py was touched), and the engine
+must still write those bytes plus only the new bookkeeping keys. The `momentum` desk's
+`_note` records that E-K07 proposes `chandelier` there once the harness shows it on that
+book's own trades; `pullback` is being retired — a mean-reversion mandate under a 1.5× ATR
+stop is exactly the Kaminski–Lo failure — and stays on `fixed_atr` until it is closed out.
+
+### How the engine applies a policy
+
+- **At entry** (`entry_pass`), the desk's policy sets the initial stop and target. Under
+  `fixed_atr` the proposal's own levels are the policy — `build_proposals` already called
+  `derive_levels` — and nothing moves. Under any other policy the stop is re-derived and the
+  position is **re-sized to the same dollar risk on the new distance**: a wider stop means
+  fewer shares, never more risk, capped at the position cap and the cash left this run. The
+  unscaled figure stays on the order (`meta.unscaled_shares`) with `meta.stop_policy`,
+  `meta.initial_risk` and `meta.stop_params`.
+- **Every run** (`exit_pass`), before the thesis checks, the position's policy `update()` is
+  called with the slot price and the sessions held. A stop it raises is applied and journaled
+  as a `raise-stop` decision ("stop raised from X to Y"); a stop is **never lowered** —
+  `stops.apply_update` enforces that for every policy, so no policy can lower one by
+  accident. An exit it calls is taken ahead of the thesis checks, exactly where the stop test
+  sits today, and mapped onto the journal's words: `stop` and `trail` both book as a `stop`
+  (the detail says "trailing stop" for a ratcheted one), `target` books as a `target` that
+  closes the **whole** position, `time` is its own word. The scale-out and the breakeven move
+  run under `fixed_atr` only.
+- **Every position records** `stop_policy`, `initial_risk` (entry − initial stop, per
+  share) and `initial_risk_usd`, `sessions_held` (weekday sessions since `opened`; the entry
+  day is 0), `highest_close` and `trail_level`. A position opened before K-07 is recorded as
+  `fixed_atr` — the rule it was sized under — on its next visit. `highest_close` is the
+  highest price the book has *seen* since entry; the book observes four prices a day, not
+  closes, and the field does not pretend otherwise.
+- A position keeps the policy it was **opened** under. Changing a desk's `stop_policy` applies
+  to new entries; the open book is not re-stopped underneath itself.
+
+### Inactive desk templates
+
+`desks.json` now also carries two desks with a top-level `"inactive": true`: `rotation`
+(E26 — sector-ETF momentum, monthly, `time_catastrophe` with `max_sessions` 25 and `k_cat`
+3.5, a `universe: sector-etfs` filter the scan does not carry yet) and `orb` (E24 — opening-
+range breakout, `chandelier` with `k_init` 0.1 for the paper's 10%-of-ATR stop,
+`flatten_at_close` so nothing is held overnight, `intraday_margin` because every trade is a
+day trade). They are mandates written down with their exits so they can be wired later, not
+desks that trade: `pm.py --desk rotation` exits 2 with the reason unless `--allow-inactive`
+is passed, **no book is created** for them, and the peer loader, the paper mirror and the
+runner's peer staging all skip them. Activating one is: remove `inactive`, create the two
+project docs, add the desk to `runner/slots.json`.
+
+## 17. Live guardrails — doctrine, validators, and the paper-mode audit (K-07)
+
+Section 1 still governs: **live mode is not implemented** and this section does not change
+that. What it adds is the set of controls that would have to stand between the manager and a
+real order before anyone flips the flag, written as pure validators in `engine/guardrails.py`
+with tests, so the go-live conversation is a review of a tested module rather than a design
+session.
+
+The reference frame is **Knight Capital, 1 August 2012**: a deployment left a retired test
+routine live on one server, it sent roughly four million orders in forty-five minutes, the
+firm lost $460m and was gone within the week. The regulatory response every broker-dealer
+already operates under is **SEC Rule 15c3-5** (the Market Access Rule: pre-trade credit and
+capital thresholds, erroneous-order and duplicate-order checks, and risk controls the firm
+itself must own and cannot outsource) and **FINRA Regulatory Notice 15-09** (algorithmic
+trading: kill switches, pre-deployment testing, change management, and the point that the
+controls belong to the firm, not the vendor). The Agentic account is a retail account and
+none of this binds it — but the reasoning is exactly right for a book an LLM session drives,
+and the numbers are set to *this* book's size.
+
+`PM_RULES["live_guardrails"]` (a desk's `pm_rules` may override the block):
+
+| Block | Control | Value | Validator |
+|---|---|---|---|
+| `two_key` | environment flag | `AI_TRADING_LIVE` | `live_mode_allowed(env, path, now)` |
+| | signed config | `live.signed.json` — `{body, sig}`, HMAC-SHA256 over the canonical body under `AI_TRADING_LIVE_KEY`, `expires_at` in the future, `issued_at` no older than `max_age_hours` 24 | |
+| `per_order` | max notional | $750 | `check_order(order, ctx)` |
+| | max distance from last print | 1.0% | |
+| | max quote age | 60 s | |
+| | max spread | 1.0% of price | |
+| `per_day` | max orders per desk | 12 | `check_day(book, ctx)` |
+| | max orders per symbol | 2 | |
+| | max notional sent | 2.0× equity | |
+| `deny` | min price | $5.00 | `check_symbol(row, ctx)` |
+| | min dollar ADV | $10m | |
+| | leveraged ETFs | refused | |
+| | IPO seasoning | 90 days | |
+| | volume spike | > 10× 20-day ADV | |
+| | unexplained move | > 30% with no earnings event | |
+| `circuit` | VIX | ≥ 35 | `check_circuit(ctx)` |
+| | SPY intraday | ≤ −3.0% | |
+
+Every validator returns `(ok, reasons)`. **Both keys must turn**: the flag alone does
+nothing, the signed config alone does nothing, and an expired, tampered, mis-keyed or stale
+config is refused with a reason naming the first thing that failed. A check whose input is
+missing does not pass silently: under `strict` (the live default) it refuses — a circuit
+breaker that cannot read the tape is open, not closed — and under non-strict it is skipped
+and reported.
+
+### The paper-mode audit
+
+The one thing the paper path does with this module: on every run, every sized proposal is put
+through `check_order` (notional, distance from last, quote age, spread) and `check_symbol`
+(the deny list), non-strict, and what they **would have refused live** is journaled as
+`jrn["live_would_refuse"]` — `[{symbol, notional, reasons}]`, an empty list when nothing would
+have been refused. It changes no decision. Its purpose is to put on the paper record, before
+the guardrails ever bite, how often they would — a desk whose proposals are refused on the
+$750 ceiling every day is telling you the live sizing has to differ from the paper sizing,
+and that is better learned from a journal column than from a rejected ticket. On the test
+fixture the one proposal (SCHW, $557.94) clears every default ceiling and the audit is empty;
+`tests/test_stops.py` proves the same run journals the refusal when the ceiling is lowered
+under it. `pm.py` never calls `live_mode_allowed`, `check_day` or `check_circuit` — a static
+test pins that.

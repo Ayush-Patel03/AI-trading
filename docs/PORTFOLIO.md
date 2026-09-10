@@ -147,6 +147,55 @@ Targets remain 3R. With no ATR available the old structural logic runs and the b
 An 11% ATR stop on a name like Ciena and a 4% stop on a calmer one are not interchangeable, and
 the difference is the whole point of sizing against volatility.
 
+## Vol-targeted sizing — built 2026-09-10 (S-05 / E13), shipped OFF
+
+`RULES["vol_target"] = {"enabled": False, "target_vol_pct": 12.0, "lo": 0.5, "hi": 1.5}`.
+
+**With `enabled` False — the default — `build_proposals` is byte-identical to the engine
+before this section existed**, whether the rule is present, absent, or handed a SPY vol
+(`test_the_off_path_is_byte_identical_to_an_engine_without_the_rule`). Nothing about live
+sizing has changed. Flip the flag only after E13 has a ledger row with a hold-out result.
+
+**Why it exists.** Barroso & Santa-Clara (2015, *Momentum has its moments*, JFE) show that
+momentum's risk is highly predictable from its own recent realised variance, and that scaling
+exposure by the inverse of that variance roughly doubles the strategy's Sharpe ratio and
+removes the crashes — the 2009 one included — without changing what is bought. Moreira & Muir
+(2017, *Volatility-managed portfolios*, JF) show the same for the market and most priced
+factors: weight ∝ target / recent realised variance earns a higher Sharpe because expected
+return does not fall as much as volatility rises, so return per unit of risk is worst exactly
+when vol is highest. Of everything in the 2026-09-10 research synthesis this is the strongest
+and least-decayed result, and it changes *how much*, not *what* — which is why it can be tested
+on the existing replay before touching a score.
+
+**What it does when on.** Two functions, both pure:
+
+- `size_by_vol(equity, price, rv_20d, target_vol_pct, cap_notional=None)` — shares such that
+  the position contributes `target_vol_pct` of equity in annualised vol:
+  `notional = equity × target_vol / rv_20d`, capped at `cap_notional` (available cash in
+  `build_proposals`). `rv_20d` is the annualised 20-day realised vol of log returns that
+  `technicals.features()` writes into the row's `features` block, as a fraction (0.25 = 25%).
+  A 40%-vol name gets a third of a 13%-vol name's notional at the same target. Missing or
+  zero vol sizes to zero — a vol of zero is a data gap, not a licence for an infinite position.
+- `desk_vol_scalar(spy_rv_20d, target_vol_pct, lo=0.5, hi=1.5)` — the desk-level multiplier
+  `clamp(target_vol / SPY rv_20d, lo, hi)`. The clamp is Barroso & Santa-Clara's leverage cap
+  in both directions: no more than 1.5× in a dead-calm tape, no less than 0.5× in a panic —
+  the book still trades, smaller. Unknown SPY vol → 1.0, because a missing number must never
+  scale the book.
+
+In `build_proposals`, a new entry is then the **smaller** of the current ATR-risk size and the
+vol size, multiplied by the desk scalar, and every other gate (correlation proxy, 15% position
+cap, 85% deployed cap, cash, sector, cumulative risk) runs on the result exactly as before. The
+proposal carries a `vol_target` block (`rv_20d`, `atr_shares`, `vol_shares`, `desk_scalar`) and a
+warning line saying which size bound, so the ticket reads the same way the ATR stop does: with
+its basis. A row with no `rv_20d` keeps its ATR size and says so. `pm.py` does not yet pass
+`spy_rv_20d` — wiring SPY's realised vol from the scan's regime block into the sentinel is K-03.
+
+**Why the smaller of the two and not a replacement.** The ATR stop still defines the loss on a
+stop-out, and `risk_pct × equity` is still the budget for that loss. Vol targeting adds a second
+constraint — the position's contribution to portfolio variance — and a position must satisfy
+both. Replacing the ATR size would let a low-vol name with a wide structural stop breach the
+2% risk rule.
+
 ## Holding review
 
 Each scan re-judges every holding against the current scan: `exit` if the setup broke below the

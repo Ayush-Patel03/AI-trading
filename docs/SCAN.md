@@ -126,7 +126,7 @@ first, or while the deep-dive subagents are collecting — never serially after 
 
 | File | Purpose |
 |---|---|
-| `claude/engine/technicals.py` | OHLCV bars → MA50/MA200, RSI, ATR, rel volume, gap, 52w range |
+| `claude/engine/technicals.py` | OHLCV bars → MA50/MA200, RSI, ATR, rel volume, gap, 52w range, and the logged-not-scored `features` dict (section 3a) |
 | `claude/engine/scanner.py` | scoring engine → `scan_results.json` (imports `archive`) |
 | `claude/engine/archive.py` | run ids, per-run file names, compact records, the scan index (imported by `scanner.py`, `render.py` and `pm.py`) |
 | `claude/engine/render.py` | dashboard → `scan-desk.html` (imports `archive`) |
@@ -195,6 +195,35 @@ python3 archive.py --index --current index_current.json --out index_merged.json
 return minus the benchmark's. It is *reported* in the momentum reasons and archived, and
 deliberately **not scored** until the Saturday validation (section 11) shows it ranks forward
 returns on this universe. That is the rule for every new data point from now on.
+
+### 3a. The research features — logged on every row, scored by nothing (S-04, 2026-09-10)
+
+`technicals.py` also writes a `features` dict per symbol into `technicals.json`; the merge
+step carries it into each candidate, `scanner.py` copies it onto the scored row untouched,
+and `archive.py --record` (`ROW_KEEP`) and the scan snapshot (section 13) keep it. **No pillar
+reads it.** `ic.py --by-feature` on the archive is the only consumer, and the E10 / E2 recipes
+in `docs/BACKTEST.md` §6b are the only reason it exists. The keys, all fractions:
+
+`ret_12_7`, `ret_6_2`, `ret_12_1`, `ret_1m`, `ret_5d` (window returns; Novy-Marx 2012,
+Jegadeesh 1990), `close_to_52wk_high` (George & Hwang 2004), `max_1m` (Bali, Cakici &
+Whitelaw 2011), `rv_20d` (annualised 20-day realised vol — the input to E13 sizing),
+`atr_pct` (ATR14/close as a fraction; the row-level `atr_pct` stays in percent),
+`turnover_20d` (needs `shares_outstanding` from `--fundamentals`), `rs_20d_vs_spy`,
+`industry_rs_20d`, `stock_vs_industry_rs_20d`, `resid_mom_12_1`, `beta_252`, `ivol_20d`
+(Blitz, Huij & Martens 2011 — a no-intercept 252-day regression on SPY and the sector ETF),
+`overnight_share_20d` (Lou, Polk & Skouras 2019). Every one is `null` when the year of bars
+does not cover its window — never a zero standing in for "unknown".
+
+The industry features need the name's **sector ETF in the same bars file** and a
+`--sector-map sector_map.json` of `{TICKER: ETF}` (the eleven SPDRs: XLK XLF XLV XLY XLP XLE
+XLI XLB XLU XLRE XLC). Without the map they are `null`, and the scan is otherwise unchanged;
+adding the eleven ETFs is two more symbols per `get_equity_historicals` call across the run,
+so it is optional at scan time and required for the backtest.
+
+```bash
+python3 technicals.py --bars <bars file path> --fundamentals fundamentals.json \
+                      --quotes quotes.json --sector-map sector_map.json --out technicals.json
+```
 
 **Macro events.** The pre-market scan writes the day's scheduled releases into
 `scan_data.json` as `meta.macro_events = [{date, name, time_et}]`; later slots carry them
@@ -583,3 +612,33 @@ any older instruction in a task prompt.** Read it with this file. The short vers
 - **Corroboration is the headline finding.** ApeWisdom and StockTwits agreed on 4 of 15 top
   names on 2026-09-01, and StockTwits' own two trending endpoints shared one ticker with each
   other. Single-source attention is now labelled as such on the board.
+
+---
+
+## 13. The scan snapshot — every input, as scored (S-01, added 2026-09-10)
+
+`scanner.py` writes, right after `scan_results.json`, one gzip'd JSON Lines file per slot:
+
+    $SCAN_DIR/archive/scan_snapshot/<date>-<slot>.jsonl.gz
+
+The runner copies `archive/` back into the state repo unchanged, so the same path exists
+there. Line 1 is `{"_meta": {run_id, slot, date, as_of, engine_sha, kind, n_rows, n_quoted,
+source_files, schema}}`; every following line is one candidate — **every** candidate the
+scanner was given, including the ones it dropped for having no usable price (`dropped: true`,
+`score: null`). Each row is the whole candidate dict from `scan_data.json` (fundamentals, the
+technicals.py fields, the sentiment blocks) with the scored row laid over it — `score`,
+`raw_score`, `normalized_score`, `coverage_pct`, `missing_pillars`, the five `pillars`,
+`verdict`, `setup`, `confidence`, `score_trail`, `rank` — plus `regime`,
+`regime_multiplier`, and `bid`, `ask`, `last`, `quote_ts` read from the staged
+`quotes.json` / `pm_quotes.json` (null, never 0, when no quote covers the name). The prose
+(`reasons`, `*_note`) is left to the board; it is an output, not an input.
+
+Why: the compact record keeps what the model *said*, this keeps what it *saw*. The slot-event
+simulator replays a slot from it; E10 and E17 need the bid/ask and the unscored fields at the
+moment of scoring, not a re-fetch; E27 needs the dropped names. It is written by rule
+non-fatally — a failure lands as `scan snapshot NOT written: …` in `meta.data_warnings` and
+the board still publishes — and the results meta carries `scan_snapshot` (the relative path)
+on success. `python3 snapshots.py --run-dir . --out archive --scan` re-creates it from a
+staged directory; `snapshots.read_snapshot(path)` returns `(meta, rows)`.
+
+Every symbol in a snapshot is also folded into `archive/followed.json` (BACKTEST.md §2a).
