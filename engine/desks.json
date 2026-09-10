@@ -38,20 +38,27 @@
     },
     "rotation": {
       "inactive": true,
-      "label": "Rotation — sector ETF momentum, monthly (E26) — INACTIVE TEMPLATE",
+      "label": "Rotation — sector ETF momentum, monthly (E26) — INACTIVE until the harness is read",
       "doc_book": "claude/paper-book-rotation.json",
       "doc_journal": "claude/pm-journal-rotation.json",
       "book": "paper_book_rotation.json",
       "journal": "pm_journal_current_rotation.json",
       "rules": {
         "stop_policy": "time_catastrophe",
-        "stop_params": {"k_cat": 3.5, "max_sessions": 25, "target_pct": null}
+        "stop_params": {"k_cat": 3.5, "max_sessions": 25, "target_pct": null},
+        "max_positions": 3,
+        "max_risk_per_trade_pct": 0.5,
+        "min_risk_per_trade_pct": 0.5,
+        "max_position_pct": 100.0,
+        "max_deployed_pct": 100.0,
+        "min_cash_reserve_pct": 0.0,
+        "rotation": {"top_n": 3, "sleeves": 3, "bond_sleeves": 3, "drop_below_rank": 6, "bond": "TLT"}
       },
       "filter": {"universe": "sector-etfs"},
       "publishes_board": false,
-      "_cadence": "Monthly: rank the sector ETF universe on 12-1 month momentum at the first slot of the month, hold the top ranks for ~25 sessions, rotate. The four daily slots only manage holdings between rebalances.",
-      "_thesis": "Cross-sectional sector momentum in liquid ETFs (E26). No tight stop — a 3.5x ATR catastrophe stop and the 25-session time stop are the only exits; the rank IS the exit. The `universe: sector-etfs` filter is a placeholder: the scan does not carry that universe yet, so this desk has no candidates and no book until it does.",
-      "_note": "Template only (E26). No book exists; pm.py refuses --desk rotation without --allow-inactive. Activate by removing `inactive`, creating the two project docs and adding the desk to runner/slots.json."
+      "_cadence": "Monthly: at the LAST power-hour slot of each calendar month (engine/rotation.py is_rebalance_slot — weekday calendar plus the NYSE holidays) rank XLK XLF XLV XLY XLP XLE XLI XLB XLU XLRE XLC and VEU on 12-1 month return; hold the top 3 in equal sleeves when SPY's 12-month return beats the 3-month bill (macro.json tbill_3m_pct, 0 when absent), else TLT alone. The weekly check (last power-hour of the week) acts only if a held ETF fell below rank 6 or the filter flipped. Every other slot manages holdings by their stops. `--force-rebalance` applies the rule at any slot.",
+      "_thesis": "Cross-sectional sector momentum in liquid ETFs (E26; Faber 2010, Antonacci 2014). No tight stop — a 3.5x ATR catastrophe stop and the 25-session time stop are the only exits; the rank IS the exit (rotation-exit). Candidates come from a staged bars_etf.json (14 symbols, >= 13 months of daily bars), never from scan_results.json; entries are sized by SLEEVE (equity / 3, the bond leg takes all 3 sleeves), scaled by the desk vol scalar when vol_target is on, and placed as marketable next-session orders. The position and deployment caps above are set so a sleeve fits, and the risk-per-trade floor is the pipeline's pre-size only (the sleeve replaces it, never the other way); the ETFs are exempt from the HOUSE-01 per-name / per-sector caps and counted in the K-03 exposure metrics.",
+      "_note": "INACTIVE (E26). pm.py refuses --desk rotation without --allow-inactive and no book exists. Read the harness first: `python3 engine/backtest.py --desk rotation --bars bars_etf.json --start ... --end ... --ledger --corr-with <swing book>` (docs/BACKTEST.md § E26). Activate by setting `inactive` to false, seeding books/rotation.json and the two project docs, adding \"rotation\" to runner/slots.json (power-hour and sentinel desks) and staging bars_etf.json (+ macro.json) with the power-hour inputs — docs/PM.md § 'The rotation desk'."
     },
     "orb": {
       "inactive": true,

@@ -133,6 +133,21 @@ ADDED 2026-09-10
     thing the paper path does with it is journal, on every proposal, what the per-order and
     deny-list checks WOULD have refused live (jrn["live_would_refuse"]). PM.md § "Stops by
     desk type" and § "Live guardrails".
+  * D-01 — THE SECTOR-ROTATION DESK (rotation.py, E26). A desk whose filter says
+    {"universe": "sector-etfs"} takes its candidates from rotation.proposals() over a staged
+    bars_etf.json (14 ETFs, >= 13 months of daily bars) and macro.json (tbill_3m_pct) instead
+    of scan_results.json: the 12-1 month momentum rank, Antonacci's absolute filter against
+    the bill, the top three equal sleeves or TLT, decided ONLY at the last power-hour slot
+    of the month (plus a weekly check and --force-rebalance). Its entries are placed as
+    MARKETABLE next-session orders (expires "next-session", fill_rule "marketable"): the
+    FILL-01 rule that a day-limit placed at power-hour is dead on arrival is exactly right
+    for a limit, and exactly wrong for a monthly rotation that decides at the close and
+    fills at the next slot's quote plus slippage. Held ETFs that leave the target set are
+    sold as `rotation-exit`; a re-affirmed holding gets `hold_from` reset so the 25-session
+    time stop counts from the last decision. The ETFs are exempt from HOUSE-01's per-name
+    and per-sector caps (sector-level by construction) and INCLUDED in K-03's exposure
+    metrics. Every one of these branches is gated on the desk config: the three live desks
+    write the same bytes as before (tests/test_stops.py pins that). Ships INACTIVE.
 
 Paths resolve from SCAN_DIR, else from this file's own directory.
 """
@@ -148,6 +163,7 @@ import guardrails as guardrails_mod
 import house as house_mod
 import ladder as ladder_mod
 import portfolio as pf_mod
+import rotation as rotation_mod
 import stops as stops_mod
 from portfolio import RULES, build_proposals
 
@@ -310,6 +326,12 @@ def _stop_policy(name=None):
     return stops_mod.get_policy(desk_name, params)
 
 
+def rotation_desk():
+    """D-01 — is the active desk the sector-rotation desk? Decided by its filter, so the
+    wiring is a desks.json fact and not a name the engine hard-codes."""
+    return (DESK.get("filter") or {}).get("universe") == "sector-etfs"
+
+
 def desk_filter(rows, jrn):
     """Apply the active desk's candidate filter to the scan rows. Every row the desk
     declines is counted once in the journal, not listed — the scan already carries the
@@ -320,9 +342,14 @@ def desk_filter(rows, jrn):
     setups = set(f.get("setups") or [])
     lo, hi = (f.get("rsi_range") or [None, None])[:2]
     floor = f.get("min_score")
+    universe = f.get("universe")
     kept, dropped = [], 0
     for r in rows:
         ok = True
+        # D-01: a universe filter admits only rows the rotation module produced — a
+        # scan_results.json row can never reach this desk's sizing by accident.
+        if universe and r.get("_source") != rotation_mod.SOURCE:
+            ok = False
         if setups and r.get("setup") not in setups:
             ok = False
         rsi = r.get("rsi_14")
@@ -507,9 +534,14 @@ def build_price_book(scan, prices_override, book, scan_stale):
     pb = {}
     for r in (scan or {}).get("results", []):
         if isinstance(r.get("price"), (int, float)) and r["price"] > 0:
-            pb[r["ticker"]] = {"price": float(r["price"]), "source": "scan",
+            # D-01: a rotation row's price is the last BAR CLOSE — get_equity_historicals
+            # reaches only the last completed session — so it values, never trades. The
+            # broker quote below outranks it, and the entry pass refuses an ETF without one.
+            bar_close = r.get("_source") == rotation_mod.SOURCE
+            pb[r["ticker"]] = {"price": float(r["price"]),
+                               "source": "bars-close" if bar_close else "scan",
                                "as_of": (scan.get("meta") or {}).get("time"),
-                               "fresh": not scan_stale,
+                               "fresh": (not scan_stale) and not bar_close,
                                "gics": r.get("gics"), "industry": r.get("industry")}
     for tk, v in (prices_override or {}).items():
         px = v.get("price") if isinstance(v, dict) else v
@@ -582,6 +614,11 @@ def house_exposure(this_book, pb, peers=None):
 
     Returns a dict, or None when no peer book was found — the caller journals that
     rather than treating an unmeasured house as a safe one.
+
+    D-01: the rotation desk's ETFs (rotation.UNIVERSE) are sector-level by construction —
+    XLK IS the Information Technology sector — so they are left OUT of the per-name and
+    per-sector cap tallies (by_symbol / by_sector) and kept IN `holdings`, where K-03
+    measures their beta and their share of the house's independent bets.
     """
     peers = PEERS if peers is None else peers
     books = [("__this__", this_book)] + list((peers.get("books") or {}).items())
@@ -606,9 +643,10 @@ def house_exposure(this_book, pb, peers=None):
             px = _px(p["symbol"], p.get("last_price") or p.get("avg_cost") or 0.0)
             mv = px * p.get("shares", 0.0)
             inv += mv
-            by_symbol[p["symbol"]] = round(by_symbol.get(p["symbol"], 0.0) + mv, 2)
             g = p.get("gics") or "Unclassified"
-            by_sector[g] = round(by_sector.get(g, 0.0) + mv, 2)
+            if not rotation_mod.is_etf(p["symbol"]):
+                by_symbol[p["symbol"]] = round(by_symbol.get(p["symbol"], 0.0) + mv, 2)
+                by_sector[g] = round(by_sector.get(g, 0.0) + mv, 2)
             holdings.append({"desk": desk_label, "symbol": p["symbol"], "sector": g,
                              "notional": round(mv, 2), "kind": "position"})
         committed = 0.0
@@ -617,9 +655,10 @@ def house_exposure(this_book, pb, peers=None):
                 continue
             mv = o.get("limit_price", 0.0) * o.get("shares", 0.0)
             committed += mv
-            by_symbol[o["symbol"]] = round(by_symbol.get(o["symbol"], 0.0) + mv, 2)
             g = (o.get("meta") or {}).get("gics") or "Unclassified"
-            by_sector[g] = round(by_sector.get(g, 0.0) + mv, 2)
+            if not rotation_mod.is_etf(o["symbol"]):
+                by_symbol[o["symbol"]] = round(by_symbol.get(o["symbol"], 0.0) + mv, 2)
+                by_sector[g] = round(by_sector.get(g, 0.0) + mv, 2)
             holdings.append({"desk": desk_label, "symbol": o["symbol"], "sector": g,
                              "notional": round(mv, 2), "kind": "order"})
         eq = float(bk.get("cash", 0.0)) + inv
@@ -737,6 +776,11 @@ def roll_day(book, today, jrn):
     # a new session: every day order dies, intraday share tags reset
     for o in book.get("working_orders", []):
         if o.get("status") == "working":
+            # D-01: a rotation order decided at power-hour is meant to fill at the NEXT
+            # session's first slot. It survives exactly one roll; a second roll expires it.
+            if o.get("expires") == "next-session" and not o.get("rolled"):
+                o["rolled"] = today.isoformat()
+                continue
             o["status"] = "expired"
             o["closed"] = today.isoformat()
             jrn["decisions"].append({"action": "expire", "symbol": o["symbol"],
@@ -806,7 +850,7 @@ def _shadow_record(book, pb, sym, side, shares, booked, today, jrn, mid=None, ca
     return fills_mod.record_shadow(book, side, shares, booked, shadow, mid, today)
 
 
-def _apply_buy(book, sym, shares, price, meta, today, jrn, reason, shadow=None):
+def _apply_buy(book, sym, shares, price, meta, today, jrn, reason, shadow=None, detail=None):
     cost = shares * price
     book["cash"] = round(book["cash"] - cost, 6)
     pos = next((p for p in book["positions"] if p["symbol"] == sym), None)
@@ -850,10 +894,16 @@ def _apply_buy(book, sym, shares, price, meta, today, jrn, reason, shadow=None):
             "highest_close": round(price, 6),
             "trail_level": None,
         })
+        # D-01: the rotation record rides only on a rotation entry — no other desk's
+        # position grows a key. `hold_from` is the date the rank last affirmed the name;
+        # exit_pass counts the time stop from it.
+        if meta.get("rotation"):
+            pos["rotation"] = dict(meta["rotation"])
+            pos["hold_from"] = today.isoformat()
     _policy().record_buy(book, pos, shares, today, price)
     rec = {"action": "fill-buy", "symbol": sym, "shares": round(shares, 6),
            "price": round(price, 4), "reason": reason,
-           "detail": f"${cost:,.2f} filled at the resting limit"}
+           "detail": detail or f"${cost:,.2f} filled at the resting limit"}
     if shadow:
         rec.update(shadow)
     jrn["decisions"].append(rec)
@@ -928,6 +978,36 @@ def simulate_fills(book, pb, today, run_key, jrn, scan_by_tk):
                                          "detail": f"score {r.get('score')} / {r.get('setup')} "
                                                    "no longer clears the entry floor"})
                 continue   # cash was never debited for a working order, only reserved
+            if o.get("fill_rule") == "marketable":
+                # D-01: a rotation order fills at THIS slot's price plus the exit-slippage
+                # assumption, whatever the limit — the limit is the decision price, kept
+                # on the order for the audit. Pessimistic in the same direction as every
+                # other fill here. Shares are clamped to the cash actually on hand.
+                fill_px = round(px * (1 + PM_RULES["exit_slippage_pct"] / 100), 4)
+                shares = _round_shares(min(o["shares"], max(0.0, book["cash"]) / fill_px))
+                if shares <= 0 or shares * fill_px < RULES["min_notional"]:
+                    o["status"] = "cancelled"
+                    o["closed"] = jrn["ts"]
+                    jrn["decisions"].append({"action": "cancel", "symbol": o["symbol"],
+                                             "shares": o["shares"], "price": o["limit_price"],
+                                             "reason": "rotation entry unaffordable",
+                                             "detail": f"cash ${book['cash']:,.2f} cannot cover "
+                                                       "the sleeve at the fill price"})
+                    continue
+                o["status"] = "filled"
+                o["fill_price"] = fill_px
+                o["filled_shares"] = shares
+                o["closed"] = jrn["ts"]
+                _apply_buy(book, o["symbol"], shares, fill_px, o.get("meta", {}),
+                           today, jrn, o.get("reason", "entry"),
+                           shadow=_shadow_record(book, pb, o["symbol"], "buy", shares,
+                                                 fill_px, today, jrn,
+                                                 mid=o.get("decision_mid"),
+                                                 adv=(o.get("meta") or {}).get("adv_usd")),
+                           detail=(f"${shares * fill_px:,.2f} filled marketable at "
+                                   f"{px:,.2f} + {PM_RULES['exit_slippage_pct']:.2f}% "
+                                   f"slippage (decided at {o['limit_price']:,.2f})"))
+                continue
             if px <= o["limit_price"]:
                 o["status"] = "filled"
                 o["fill_price"] = o["limit_price"]
@@ -1097,7 +1177,12 @@ def exit_pass(book, pb, scan_by_tk, today, equity, jrn):
         # taken ahead of the thesis checks, exactly where the stop test sits today.
         pol_name = pos.get("stop_policy") or stops_mod.DEFAULT_POLICY
         pos["stop_policy"] = pol_name
-        pos["sessions_held"] = stops_mod.sessions_between(pos.get("opened"), today)
+        # D-01: a rotation holding counts from the date the rank last affirmed it
+        # (`hold_from`), so a name re-selected at month-end is not closed by the 25-session
+        # time stop four days into a month that just re-affirmed it. Only rotation entries
+        # carry the key; every other position counts from `opened` as before.
+        pos["sessions_held"] = stops_mod.sessions_between(pos.get("hold_from") or pos.get("opened"),
+                                                          today)
         pos["highest_close"] = max(pos.get("highest_close") or px, px)
         pos.setdefault("trail_level", None)
         if "initial_risk" not in pos:
@@ -1200,9 +1285,10 @@ def exit_pass(book, pb, scan_by_tk, today, equity, jrn):
                     detail += f"{PM_RULES['max_trims_before_exit']} before a full exit)"
 
         if not action or want <= 0:
-            if r is None and not jrn.get("sentinel"):
+            if r is None and not jrn.get("sentinel") and not jrn.get("rotation"):
                 # A sentinel carries no scan by design; only a decision slot should note
-                # that a holding fell out of the universe.
+                # that a holding fell out of the universe. The rotation desk judges its
+                # holdings by rank at its own slot (rotation_pass), not by scan row.
                 jrn["warnings"].append(f"{sym}: not in this scan's universe — priced but unjudged")
             continue
 
@@ -1249,6 +1335,57 @@ def exit_pass(book, pb, scan_by_tk, today, equity, jrn):
                 live["stop_basis"] = "breakeven — half the position was taken at the 3R target"
                 live["stop_basis_kind"] = "breakeven"
                 live["stop_basis_short"] = "breakeven"
+
+
+# ------------------------------------------------------------------ 3b. rotation (D-01)
+def rotation_pass(book, pb, rot, today, equity, jrn):
+    """The rotation desk's own exit: a held ETF that has left the target set is sold whole,
+    marketable at the slot price less exit slippage, journaled as `rotation-exit`. A held
+    ETF the rank re-affirmed gets `hold_from` reset to today so the time stop counts from
+    this decision. Runs only when the desk's decision block says it acts; the ordinary exit
+    pass (catastrophe stop, time stop) has already run and is untouched."""
+    if not rot or not rot.get("acts"):
+        return
+    slip = 1 - PM_RULES["exit_slippage_pct"] / 100
+    target = set(rot.get("target") or [])
+    for pos in list(book.get("positions", [])):
+        sym = pos["symbol"]
+        if sym in target:
+            if pos.get("hold_from") != today.isoformat():
+                pos["hold_from"] = today.isoformat()
+                jrn["skipped"].append({"symbol": sym, "reason":
+                                       f"rotation: re-affirmed in the target set "
+                                       f"({rot['mode']}) — held, time stop restarts today"})
+            continue
+        px = tradeable(pb, sym)
+        if px is None:
+            src = (pb.get(sym) or {}).get("source")
+            jrn["warnings"].append(
+                f"UNPROTECTED: {sym} left the rotation target set and has no fresh price "
+                f"({src or 'none'}) — it cannot be sold on a stale mark and is carried as-is.")
+            jrn["skipped"].append({"symbol": sym, "reason":
+                                   "rotation-exit wanted to fire — no fresh price"})
+            continue
+        sellable, note = _sellable(pos, pos["shares"], "rotation-exit", book, today, equity, jrn)
+        if note:
+            jrn["warnings"].append(f"{sym}: {note}")
+        if sellable <= 0:
+            jrn["skipped"].append({"symbol": sym, "reason":
+                                   "rotation-exit wanted to fire — " + (note or "blocked")})
+            continue
+        booked = round(px * slip, 4)
+        rk = next((r for r in rot.get("ranks") or [] if r["symbol"] == sym), {})
+        why = (f"rank {rk['rank']} of {len(rot.get('ranks') or [])}"
+               if rk.get("rank") else "not in the ranking")
+        if not rot.get("filter_on") and sym != rot.get("bond"):
+            why = "absolute-momentum filter is OFF — the book moves to the bond leg"
+        elif rot.get("filter_on") and sym == rot.get("bond"):
+            why = "absolute-momentum filter is ON — the bond leg is replaced by sectors"
+        _apply_sell(book, sym, sellable, booked, today, jrn, "rotation-exit",
+                    f"Left the rotation target set ({rot['mode']}): {why}; "
+                    f"target is {', '.join(rot.get('target') or [])}",
+                    shadow=lambda n, _s=sym, _b=booked:
+                    _shadow_record(book, pb, _s, "sell", n, _b, today, jrn))
 
 
 # ------------------------------------------------------------------ 4. rebalance
@@ -1449,7 +1586,14 @@ def entry_pass(book, scan, pb, today, marked, jrn, scan_stale, house=None, ladde
     # every day order before the next session's fill pass runs. Placing entries here
     # manufactured orders that were structurally dead on arrival, so the slot runs
     # exits, trims and rebalancing only.
-    if jrn["slot"] == "power-hour":
+    # D-01: the rotation desk is the one exception, and only on a run its decision block
+    # says acts — its orders are marketable next-session orders, which survive the roll.
+    rot = ((scan or {}).get("rotation") or {}) if rotation_desk() else {}
+    if rotation_desk() and not rot.get("acts"):
+        jrn["skipped"].append({"symbol": "*", "reason":
+                               f"rotation: {rot.get('why') or 'no decision block this run'}"})
+        return []
+    if jrn["slot"] == "power-hour" and not rot.get("acts"):
         jrn["skipped"].append({"symbol": "*", "reason":
                                "power-hour places no new entries — a day-limit entry placed at "
                                "the last slot expires unfilled at the session roll before it can "
@@ -1577,6 +1721,12 @@ def entry_pass(book, scan, pb, today, marked, jrn, scan_stale, house=None, ladde
         # the time the manager runs; sizing and placing a limit off that price while holding
         # a live one from the broker is simply wrong.
         live = tradeable(pb, r["ticker"])
+        if r.get("_source") == rotation_mod.SOURCE and live is None:
+            # D-01: the row's price is a bar close. No broker quote, no entry.
+            jrn["skipped"].append({"symbol": r["ticker"], "reason":
+                                   "rotation: no fresh broker quote — not entered on a bar "
+                                   "close; stage the 14 ETFs in pm_quotes.json"})
+            continue
         if live and abs(live - r["price"]) / r["price"] > 1e-9:
             move = (live / r["price"] - 1) * 100
             if abs(move) > PM_RULES["max_price_drift_pct"]:
@@ -1685,12 +1835,38 @@ def entry_pass(book, scan, pb, today, marked, jrn, scan_stale, house=None, ladde
                      stop_pct=round(new_risk / limit * 100, 2),
                      risk_pct_of_equity=round(shares * new_risk / equity * 100, 2) if equity else 0.0)
             initial_risk = new_risk
+        # D-01: the rotation desk sizes by SLEEVE, not by risk — an equal share of desk
+        # equity per target name (the bond leg takes bond_sleeves), times the desk vol
+        # scalar when vol_target is on, capped at the cash left this run. The risk-based
+        # figure the pipeline just produced stays on the order as `unscaled_shares`; the
+        # catastrophe stop and initial_risk are the policy's and are not touched.
+        rot_sleeve = None
+        if rot.get("acts") and rows_by_tk.get(p["ticker"], {}).get("_source") == rotation_mod.SOURCE:
+            n_sl = (rot.get("sleeves_by_symbol") or {}).get(p["ticker"], 1)
+            sleeves = max(1, int(rot.get("sleeves") or 1))
+            target_notional = equity * (n_sl / sleeves) * float(rot.get("vol_scalar") or 1.0)
+            room = max(0.0, avail - spent)
+            shares = _round_shares(min(target_notional, room) / limit)
+            if shares <= 0 or shares * limit < RULES["min_notional"]:
+                jrn["skipped"].append({"symbol": p["ticker"], "reason":
+                                       f"rotation: sleeve ${min(target_notional, room):,.2f} "
+                                       f"is under the ${RULES['min_notional']:.2f} broker minimum"})
+                continue
+            rot_sleeve = {"sleeves": n_sl, "of": sleeves, "vol_scalar": rot.get("vol_scalar"),
+                          "rank": rows_by_tk[p["ticker"]].get("rotation_rank"),
+                          "ret_12_1": rows_by_tk[p["ticker"]].get("rotation_ret_12_1"),
+                          "mode": rot.get("mode"), "decided": jrn["date"]}
+            p = dict(p, shares=shares, dollar_risk=round(shares * initial_risk, 2),
+                     risk_pct_of_equity=round(shares * initial_risk / equity * 100, 2)
+                     if equity else 0.0)
         notional = round(p["shares"] * limit, 2)
         # HOUSE-01. This is the LAST gate, after portfolio.py has approved the trade for
         # this desk in isolation: it can only ever refuse, never resize or allow. Applied
         # here rather than inside build_proposals because portfolio.py mirrors the repo's
         # per-book rules and must stay byte-identical — the house is a PM concept.
-        hb = house_block(house, p["ticker"], p["gics"], notional)
+        # D-01: the sector ETFs are exempt (sector-level by construction, see house_exposure).
+        hb = None if rotation_mod.is_etf(p["ticker"]) else house_block(house, p["ticker"],
+                                                                        p["gics"], notional)
         if hb:
             jrn["skipped"].append({"symbol": p["ticker"], "reason": hb})
             continue
@@ -1716,6 +1892,14 @@ def entry_pass(book, scan, pb, today, marked, jrn, scan_stale, house=None, ladde
                      **({"stop_params": dict(stop_policy.params)} if stop_policy.params else {})},
             "warnings": p["warnings"],
         }
+        if rot_sleeve is not None:
+            # D-01: decided at the close, filled at the next slot's quote plus slippage.
+            order.update({"expires": "next-session", "fill_rule": "marketable",
+                          "rotation": True})
+            order["meta"]["rotation"] = rot_sleeve
+            order["reason"] = (f"rotation ({rot.get('mode')}): Sector Rotation — rank "
+                               f"{rot_sleeve['rank'] or '—'}, sleeve {rot_sleeve['sleeves']}/"
+                               f"{rot_sleeve['of']}")
         spent += notional
         # K-06: THE DECISION-TIME MID. An entry is decided here and filled on a later slot,
         # so the mid of the quote this decision was taken on is captured now, carried on
@@ -1729,7 +1913,8 @@ def entry_pass(book, scan, pb, today, marked, jrn, scan_stale, house=None, ladde
                 (row for row in clean if row.get("ticker") == p["ticker"]), None))
         book["working_orders"].append(order)
         placed.append(order)
-        house_apply(house, p["ticker"], p["gics"], notional)
+        if not rotation_mod.is_etf(p["ticker"]):
+            house_apply(house, p["ticker"], p["gics"], notional)
         jrn["decisions"].append({"action": "place-buy", "symbol": p["ticker"],
                                  "shares": p["shares"], "price": limit,
                                  **({"decision_mid": order["decision_mid"]}
@@ -1743,6 +1928,48 @@ def entry_pass(book, scan, pb, today, marked, jrn, scan_stale, house=None, ladde
                                            + (f" (ladder ×{ladder_mult:.2f}: {full_shares:g} "
                                               f"shares unscaled)" if ladder_mult < 1.0 else "")})
     return placed
+
+
+def rotation_compact(rot):
+    """D-01 — the rotation decision block without its candidate rows, for the journal and
+    the state. None when no bars were staged (the journal says so through `error`)."""
+    if not isinstance(rot, dict):
+        return None
+    keep = ("acts", "mode", "why", "as_of", "filter_on", "filter", "tbill_3m_pct",
+            "tbill_default_used", "target", "held", "exits", "affirmed", "entries", "sleeves",
+            "sleeves_by_symbol", "vol_scalar", "spy_rv_20d", "next_rebalance", "top_n",
+            "drop_below_rank", "bond", "notes", "error")
+    out = {k: rot.get(k) for k in keep if k in rot}
+    out["ranks"] = [{"symbol": r["symbol"], "rank": r.get("rank"),
+                     "ret_12_1": (round(r["ret_12_1"], 6)
+                                  if isinstance(r.get("ret_12_1"), (int, float)) else None)}
+                    for r in rot.get("ranks") or []]
+    return out
+
+
+def rotation_scan(bars_raw, macro, book, slot, now, force=False, calendar=None):
+    """D-01 — the rotation desk's stand-in for scan_results.json: a scan-shaped dict whose
+    `results` are rotation.proposals() rows and whose `rotation` block is the decision.
+    Dated and timed NOW so the freshness gates read it as this run's own work. With no
+    bars staged it still returns a scan (empty, acts False) that says why."""
+    from zoneinfo import ZoneInfo
+    now_et = now.astimezone(ZoneInfo("America/New_York"))
+    meta = {"scan_date": now.date().isoformat(), "time": now_et.strftime("%H:%M"),
+            "slot": slot, "source": rotation_mod.SOURCE, "macro_events": [],
+            "sources": ["rotation: bars_etf.json"]}
+    held = [p["symbol"] for p in (book or {}).get("positions", [])]
+    if not bars_raw:
+        return {"meta": meta, "results": [],
+                "rotation": {"acts": False, "mode": None, "as_of": meta["scan_date"],
+                             "why": "bars_etf.json is not staged — the desk cannot rank, "
+                                    "enter or exit; holdings are still managed by their stops",
+                             "error": "bars_etf.json not staged", "held": held, "target": [],
+                             "ranks": [], "notes": []}}
+    bars = rotation_mod.load_bars(bars_raw)
+    rot = rotation_mod.proposals(bars, now.date(), held, slot, macro=macro, force=force,
+                                 cfg=rotation_mod.config(DESK.get("rules")),
+                                 calendar=calendar, vol_rules=RULES)
+    return {"meta": meta, "results": list(rot.pop("rows") or []), "rotation": rot}
 
 
 # ------------------------------------------------------------------ orchestration
@@ -1764,6 +1991,10 @@ def run(book, scan, prices_override, slot, now_iso, mode, policy_name=None):
            # K-07: the desk's stop policy, and the live-guardrail audit (filled by the
            # entry pass; an empty list on a run that sized no proposal).
            "stop_policy": _stop_policy().name, "live_would_refuse": []}
+    # D-01: the rotation desk's decision block, compacted, on its journal entry only.
+    rot = ((scan or {}).get("rotation") or None) if rotation_desk() else None
+    if rotation_desk():
+        jrn["rotation"] = rotation_compact(rot)
 
     book.setdefault("positions", [])
     book.setdefault("working_orders", [])
@@ -1807,6 +2038,18 @@ def run(book, scan, prices_override, slot, now_iso, mode, policy_name=None):
     if ladder["halt"]:
         marked = mark_book(book, pb)
     exit_pass(book, pb, scan_by_tk, today, marked["equity"], jrn)
+    # D-01: the rank is the exit. After the policy stops, before the house tally, and only
+    # on a decision slot: holdings that left the target set are sold as `rotation-exit`.
+    if rot is not None and not sentinel:
+        # The notes (the bill-rate default, a short history) are a WARNING on the run that
+        # acts on them and a journal line otherwise — a standing warning every slot would
+        # publish a board four times a day for a desk that decides once a month.
+        for note in rot.get("notes") or []:
+            if rot.get("acts"):
+                jrn["warnings"].append(f"rotation: {note}")
+            else:
+                jrn["skipped"].append({"symbol": "*", "reason": f"rotation: {note}"})
+        rotation_pass(book, pb, rot, today, marked["equity"], jrn)
 
     # HOUSE-01. Computed AFTER the exit pass so a stop that just fired is already out of
     # the tally, and before rebalancing and entries, which are the two passes that use it.
@@ -1985,6 +2228,8 @@ def run(book, scan, prices_override, slot, now_iso, mode, policy_name=None):
         "scan_as_of": jrn["scan_as_of"], "scan_stale": scan_stale,
         "orders_to_place": placed if mode == "live" else [],
     }
+    if rotation_desk():
+        state["rotation"] = jrn.get("rotation")
     return book, jrn, state
 
 
@@ -2123,6 +2368,16 @@ def main():
     ap.add_argument("--allow-inactive", action="store_true",
                     help="K-07: run a desk that desks.json marks `inactive` (a template with "
                          "no book of its own). Refused otherwise. Its book must be staged.")
+    ap.add_argument("--bars-etf", dest="bars_etf", default="bars_etf.json",
+                    help="D-01: the rotation desk's input — get_equity_historicals for the 14 "
+                         "ETFs in rotation.UNIVERSE, >= 13 months of daily bars. Replaces "
+                         "--scan for a desk whose filter is {universe: sector-etfs}.")
+    ap.add_argument("--macro", default="macro.json",
+                    help="D-01: optional {tbill_3m_pct: x} for the absolute-momentum filter; "
+                         "absent, the bill rate is 0 and the journal says so")
+    ap.add_argument("--force-rebalance", dest="force_rebalance", action="store_true",
+                    help="D-01: apply the rotation rule at this slot instead of waiting for "
+                         "the last power-hour of the month")
     args = ap.parse_args()
 
     # ---- strategy desk: which book, which journal, which rules, which candidates
@@ -2181,6 +2436,21 @@ def main():
               "Nothing to protect; nothing written.")
         return
     scan = _load(args.scan) if args.slot != SENTINEL else None
+    if rotation_desk() and args.slot != SENTINEL:
+        # D-01: this desk's candidates come from the ETF bars, never from the scan. The
+        # ETF bars are also folded into the K-03 bars so the house can measure their beta.
+        bars_etf = _load(args.bars_etf)
+        if not bars_etf:
+            print(f"NOTE: {args.bars_etf} not staged — the rotation desk takes no decision "
+                  "this run; holdings are managed by their stops only.", file=sys.stderr)
+        scan = rotation_scan(bars_etf, _load(args.macro), book, args.slot, _now(args.now),
+                             force=args.force_rebalance)
+        if bars_etf:
+            etf_rows = house_mod.bars_rows(bars_etf)
+            have = house_mod.bars_rows(BARS["rows"]) if BARS["rows"] else []
+            known = {str(r.get("symbol") or "").upper() for r in have if isinstance(r, dict)}
+            BARS["rows"] = list(have) + [r for r in etf_rows if isinstance(r, dict)
+                                         and str(r.get("symbol") or "").upper() not in known]
     prices = dict(_load(args.prices, {}) or {})
     quote_rejects = []
     raw_quotes = _load(args.quotes)
