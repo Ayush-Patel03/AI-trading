@@ -730,7 +730,9 @@ For the manager this matters in three places:
 - **Live mode is not implemented.** Section 1. Do not flip the flag.
 - **Stops are ATR-based, and the basis must always be reported.** See section 10.
 - **The correlation multiplier is a sector-overlap proxy**, not computed from returns.
-  Never present it as a correlation.
+  Never present it as a correlation. (Since K-03, section 14b, the HOUSE-level N_eff *is*
+  computed from returns when `bars.json` is staged, and is labelled `proxy` when it is not.
+  The per-desk sizing multiplier in `portfolio.py` is unchanged.)
 - **No options, no crypto, no shorts.** Long equity only.
 - **Slippage is a flat 0.25%** on exits. It is a placeholder, not a measurement.
 - **Targets fill at market, not at the target** — see section 3. The behaviour is unchanged
@@ -1034,6 +1036,78 @@ per-desk caps. It prints a NOTE to stderr, raises a warning on any decision slot
 journal's `house` block is `null`. The three books must all be staged before the engine runs
 — the skill's step 1 already stages them, and this is now load-bearing rather than
 convenient.
+
+## 14b. House exposure — how many bets is the house really making (K-03, added 2026-09-10)
+
+Section 14's two caps answer one question each: is any single name over 15%, is any single
+sector over 40%. They cannot tell a combined book of eight names that all move together from
+eight independent bets, they cannot see that every desk is long the same factor, and they
+cannot say how much of the house is one position dressed as seven. `engine/house.py`
+measures those things, once per run, on the same combined book (positions **and** working
+buy orders across every desk) that HOUSE-01 tallies. It is pure: holdings and equity in, a
+dict out; nothing in it reads a file, mutates a book or touches an order.
+
+### The metrics
+
+All weights are fractions of **combined** equity, summed per symbol across desks.
+
+| Field | Definition | Without `bars.json` |
+|---|---|---|
+| `n_eff` | effective number of independent bets, **1 / (w̃ᵀ ρ w̃)**, with w̃ the invested weights renormalised to sum to 1 (cash is not a bet: a single 10% position is one bet, not a hundred). With ρ = I this is exactly the Herfindahl count **1 / Σ w̃²**, reported alongside as `n_eff_weights`. Eight equal names → 8; eight equal names at ρ̄ = 0.6 → ≈ 1.5: eight tickers, one and a half bets. | **sector proxy** — ρ = 1 inside a GICS sector, `rho_default` (0.3) across sectors. Harsher than a measured ρ by construction (six semiconductor names count as one bet) and labelled `proxy` everywhere it is shown; `measured` when bars are staged. A name with no bars keeps the proxy value pair by pair. |
+| `beta_w` | **Σ wᵢ βᵢ** — beta-weighted exposure as a fraction of combined equity (cash carries β 0). β from 252 daily returns against the benchmark in the bars file (`SPY`, which must be in the same `get_equity_historicals` call). Names without a β are left out of the sum and `beta_coverage_pct` says how much of the book was measured — they are **not** counted as β 0. | `null`, never 0. An unmeasured beta is not a low one. |
+| `momentum_crowd_pct` | share of combined equity in names whose 12-1 month return (close 21 bars ago over close 252 bars ago, minus one) is over **+50%** — the momentum-crowding measure. | `null`. |
+| `largest_sector`, `largest_sector_pct` | the biggest GICS sector as a share of combined equity — HOUSE-01's own number, restated so one block carries the whole picture. | measured. |
+| `top_symbol`, `top_symbol_pct` | the biggest single name as a share of combined equity. | measured. |
+| `overlap_pct`, `overlap_equity_pct` | share of **distinct** names held by two or more desks, and the share of combined equity sitting in those names. A desk holding a name and a working buy on it counts once for that desk. **The desk-overlap meter on the mirror reads these two fields.** | measured. |
+
+`bars.json` is the same file `technicals.py` reads — the raw `get_equity_historicals`
+payload, or its `results` array — staged in `$SCAN_DIR` by the caller when a slot fetched
+bars (`--bars` names it; default `bars.json`). It is optional and usually absent: the
+sentinel and most slots stage none, and the block says `"bars": "absent"` and which names
+had none. If a future `technicals.features()` exposes `beta_252` / `ret_12_1` it is used
+(imported lazily, any failure ignored); otherwise `house.py` derives both from the closes.
+
+### Thresholds, and what they do
+
+| `PM_RULES["house_exposure"]` | Default | Flag when |
+|---|---|---|
+| `min_n_eff` | **3.0** | `n_eff` below it |
+| `max_beta_w` | **0.8** | `beta_w` above it |
+| `max_momentum_crowd_pct` | **60** | `momentum_crowd_pct` above it |
+| `rho_default` | **0.3** | the cross-sector ρ the proxy assumes |
+| `enforce` | **`false`** | — |
+
+A metric that is `null` never flags. **With `enforce` off — the default — the block is
+reported and gates nothing**: it is written to `state["house"]["exposure"]`, to the
+journal's `house.exposure` (the compact summary), to every desk's heartbeat and from there
+onto the coverage row (`exposure`, additive — a reader that ignores it loses nothing), and
+to the console as one line:
+
+```
+house: n_eff 1.3 (proxy) · β·w n/a · sector 34% IT · overlap 57%   FLAGS n_eff  [reported]
+```
+
+A reported-only flag raises **no** journal warning, on purpose: `archive.should_publish`
+treats any warning as a reason to publish a board, and a standing N_eff flag would publish
+one every slot.
+
+**With `enforce` on, a flagged breach refuses NEW ENTRIES house-wide** — every desk, since
+the house is one book — and journals a `skipped` reason starting `house exposure
+(enforced):` plus a `HOUSE EXPOSURE` warning. The gate sits in `entry_pass` after the
+ladder check and **after** the exit pass has already run. Exits are never touched by
+anything in `house.py` or by this gate, in either mode: a crowded house is a reason not to
+add, never a reason not to sell. The sentinel reports the block and takes no entry decision
+either way, so a quiet sentinel stays quiet.
+
+### What the books score today
+
+The three fixture books (the 2026-09-02 house, 7 names, $14,927, 42% invested), with no
+bars: `n_eff_weights` 5.72, `n_eff` **1.27 (proxy)** — six of the seven names are
+Information Technology and the proxy treats them as one bet — β·w n/a, momentum crowd n/a,
+IT 34.0%, NVDA 10.2%, overlap 57% of names (HOOD, MU, NVDA, SNDK) holding 33% of equity.
+That flags `n_eff` against the 3.0 floor and, with `enforce` off, refuses nothing. The floor
+is a risk-policy choice and it is Vishal's to change; the proxy is a lower bound on the real
+N_eff, and staging bars turns it into a measurement.
 
 ---
 

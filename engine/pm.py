@@ -98,6 +98,16 @@ ADDED 2026-09-10
     working buys — and cools off for five sessions, after which entries come back at half
     size until the HWM is regained. A −2% session is a soft daily level: no new entries for
     the rest of the day. Exits stay live at every rung. The 3% kill is untouched.
+  * K-03 — HOUSE EXPOSURE METRICS (house.py). HOUSE-01's two caps see one name and one
+    sector at a time. house.py measures the combined book as a whole: the effective number
+    of independent bets (N_eff, Herfindahl and correlation-aware — a sector proxy when no
+    bars.json is staged, measured from daily returns when one is), beta-weighted exposure,
+    momentum crowding, the largest sector and name, and how much of the book the desks hold
+    in common. Computed once per run on the same combined book HOUSE-01 tallies, written
+    to state["house"]["exposure"], the journal, the heartbeat and the coverage row.
+    PM_RULES["house_exposure"] carries the thresholds; `enforce` is False by default, so
+    the block is REPORTED and gates nothing. With enforce on a breach refuses NEW ENTRIES
+    house-wide; exits are never touched in either mode.
 
 Paths resolve from SCAN_DIR, else from this file's own directory.
 """
@@ -108,6 +118,7 @@ sys.path.insert(0, BASE)
 
 import archive
 import broker_policy
+import house as house_mod
 import ladder as ladder_mod
 import portfolio as pf_mod
 from portfolio import RULES, build_proposals
@@ -144,6 +155,17 @@ PM_RULES = {
     "house_max_symbol_pct": 15.0,   # one ticker across every book
     "house_max_sector_pct": 40.0,   # one GICS sector across every book
     "house_caps_enabled": True,
+    # K-03 — house exposure metrics (house.py). REPORTED by default: `enforce: False` means
+    # the numbers and flags go to the state, journal and coverage row and gate nothing. Set
+    # enforce True and a flagged breach refuses NEW entries house-wide; exits stay live.
+    # Semantics and formulas in house.py and PM.md § "House exposure".
+    "house_exposure": {
+        "min_n_eff": 3.0,                # effective number of independent bets (Herfindahl / ρ)
+        "max_beta_w": 0.8,               # Σ w·β as a fraction of combined equity, needs bars
+        "max_momentum_crowd_pct": 60.0,  # equity share in names up >50% over 12-1m, needs bars
+        "rho_default": 0.3,              # cross-sector ρ for the no-bars sector proxy
+        "enforce": False,
+    },
     # K-02 — the drawdown ladder, measured from the book's high-water mark. Lives here
     # (not in portfolio.RULES) so the board and the alerts page read the same constants
     # the engine gates on. Semantics in ladder.py and PM.md § "Drawdown ladder".
@@ -169,6 +191,11 @@ DESK = {"name": "swing", "filter": {}, "suffix": ""}
 # HOUSE-01 — the other desks' books, loaded by main() from desks.json. Empty means the
 # house caps were not evaluated this run, and that is journaled rather than assumed safe.
 PEERS = {"books": {}, "loaded": [], "missing": []}
+
+# K-03 — the optional bars file ($SCAN_DIR/bars.json, the get_equity_historicals payload
+# technicals.py reads), loaded by main() through load_bars(). None means no bars were
+# staged: N_eff falls back to the sector proxy and beta / momentum crowding report null.
+BARS = {"rows": None, "path": None}
 
 # K-01 — the broker policy for this run, built once by run() from the resolution order in
 # broker_policy.get_policy(). None until then; _policy() resolves a default for any helper
@@ -459,9 +486,11 @@ def house_exposure(this_book, pb, peers=None):
 
     equity = 0.0
     by_symbol, by_sector, desks = {}, {}, {}
+    holdings = []       # K-03: one line per (desk, symbol, kind) for house.metrics()
     for name, bk in books:
         if not isinstance(bk, dict):
             continue
+        desk_label = DESK["name"] if name == "__this__" else name
         inv = 0.0
         for p in bk.get("positions", []):
             px = _px(p["symbol"], p.get("last_price") or p.get("avg_cost") or 0.0)
@@ -470,6 +499,8 @@ def house_exposure(this_book, pb, peers=None):
             by_symbol[p["symbol"]] = round(by_symbol.get(p["symbol"], 0.0) + mv, 2)
             g = p.get("gics") or "Unclassified"
             by_sector[g] = round(by_sector.get(g, 0.0) + mv, 2)
+            holdings.append({"desk": desk_label, "symbol": p["symbol"], "sector": g,
+                             "notional": round(mv, 2), "kind": "position"})
         committed = 0.0
         for o in bk.get("working_orders", []):
             if o.get("side") != "buy" or o.get("status") != "working":
@@ -479,6 +510,8 @@ def house_exposure(this_book, pb, peers=None):
             by_symbol[o["symbol"]] = round(by_symbol.get(o["symbol"], 0.0) + mv, 2)
             g = (o.get("meta") or {}).get("gics") or "Unclassified"
             by_sector[g] = round(by_sector.get(g, 0.0) + mv, 2)
+            holdings.append({"desk": desk_label, "symbol": o["symbol"], "sector": g,
+                             "notional": round(mv, 2), "kind": "order"})
         eq = float(bk.get("cash", 0.0)) + inv
         equity += eq
         desks[name] = {"equity": round(eq, 2), "invested": round(inv, 2),
@@ -489,6 +522,7 @@ def house_exposure(this_book, pb, peers=None):
         "desks": desks,
         "desk_count": len(desks),
         "equity": round(equity, 2),
+        "holdings": holdings,
         "by_symbol": dict(sorted(by_symbol.items(), key=lambda kv: -kv[1])),
         "by_sector": dict(sorted(by_sector.items(), key=lambda kv: -kv[1])),
         "symbol_pct": {k: round(v / equity * 100, 2) for k, v in by_symbol.items()},
@@ -498,6 +532,41 @@ def house_exposure(this_book, pb, peers=None):
         "peers_loaded": list((peers.get("loaded") or [])),
         "peers_missing": list((peers.get("missing") or [])),
     }
+
+
+def house_metrics(house, bars=None):
+    """K-03 — the exposure block for the combined book HOUSE-01 just tallied.
+
+    Runs ONCE per run on house["holdings"] (positions and working buys across every desk)
+    and is attached as house["exposure"], so the state, the journal, the heartbeat and the
+    coverage row all read one computation. `bars` is the staged bars.json content when
+    the caller has one (BARS["rows"] by default); without it N_eff is the sector proxy and
+    beta / momentum crowding are null, and the block says so.
+
+    None when the house itself is unmeasured (no peer book) — the same rule HOUSE-01 keeps:
+    an unmeasured house is not reported as a diversified one.
+    """
+    if not house:
+        return None
+    if bars is None:
+        bars = BARS.get("rows")
+    rules = PM_RULES.get("house_exposure") or {}
+    try:
+        return house_mod.metrics(house.get("holdings") or [], house.get("equity"),
+                                 bars=bars, rules=rules)
+    except Exception as exc:                      # noqa: BLE001 — never fail the manager
+        return {"error": f"{type(exc).__name__}: {exc}", "flags": [], "reasons": [],
+                "enforce": bool(rules.get("enforce")), "block_new_entries": False}
+
+
+def load_bars(path="bars.json"):
+    """K-03 — the optional bars file, resolved inside the run directory like every other
+    input. Absent is normal: the sentinel and most slots stage no bars, and the metrics
+    degrade to the proxy rather than to nothing."""
+    rows = _load(path)
+    BARS["rows"] = rows if rows else None
+    BARS["path"] = path if rows else None
+    return BARS
 
 
 def house_block(house, symbol, gics, notional):
@@ -1092,6 +1161,17 @@ def entry_pass(book, scan, pb, today, marked, jrn, scan_stale, house=None, ladde
     ladder_mult = float((ladder or {}).get("entry_size_mult", 1.0))
     if ladder and ladder.get("reason") and ladder_mult < 1.0:
         jrn["warnings"].append("LADDER: " + ladder["reason"] + ".")
+    # K-03: the house exposure gate. Only ever refuses NEW entries, only when
+    # PM_RULES["house_exposure"]["enforce"] is on, and only after the exit pass has
+    # already run — a crowded house is a reason not to add, never a reason not to sell.
+    exposure = (house or {}).get("exposure") or {}
+    if exposure.get("block_new_entries"):
+        why = "; ".join(exposure.get("reasons") or exposure.get("flags") or ["house exposure"])
+        jrn["skipped"].append({"symbol": "*", "reason":
+                               f"house exposure (enforced): {why} — no new entries house-wide "
+                               "until the combined book is less crowded; exits unaffected"})
+        jrn["warnings"].append("HOUSE EXPOSURE: " + why + ". New entries blocked; exits live.")
+        return []
     if not scan or not scan.get("results"):
         jrn["skipped"].append({"symbol": "*", "reason": "no scan results available this run"})
         return []
@@ -1366,6 +1446,15 @@ def run(book, scan, prices_override, slot, now_iso, mode, policy_name=None):
             "directory, so cross-desk exposure is unmeasured. Stage every desk's book "
             "(paper_book.json, paper_book_pullback.json, paper_book_momentum.json) before "
             "the engine runs. An unmeasured house is not a safe one.")
+    # K-03. Once per run, on the post-exit combined book, for every slot including the
+    # sentinel (which reports it and takes no entry). Reported unless enforce is on; the
+    # entry pass reads house["exposure"]["block_new_entries"] and nothing else does.
+    # A reported-only flag raises NO journal warning on purpose: archive.should_publish
+    # treats any warning as a reason to publish a board, and a standing N_eff flag would
+    # publish one every slot. The flag lives in the state, the journal's house block, the
+    # heartbeat and the console line instead.
+    if house is not None:
+        house["exposure"] = house_metrics(house)
 
     if sentinel:
         # Exits only. Rebalancing and entries are slot decisions; the sentinel exists so
@@ -1425,7 +1514,9 @@ def run(book, scan, prices_override, slot, now_iso, mode, policy_name=None):
     jrn["house"] = ({"equity": house["equity"], "desks": house["desk_count"],
                      "top_symbol_pct": house["symbol_pct"],
                      "sector_pct": house["sector_pct"],
-                     "caps": house["caps"], "peers": house["peers_loaded"]}
+                     "caps": house["caps"], "peers": house["peers_loaded"],
+                     # K-03 — the compact exposure summary, same fields as the coverage row.
+                     "exposure": house_mod.compact(house.get("exposure"))}
                     if house else None)
 
     if marked["unpriced"]:
@@ -1552,7 +1643,7 @@ def load_peers(desks_path, this_desk, this_book_file):
 
 
 def write_heartbeat(base, sfx, desk, slot, ts, book, quiet, decisions=0, warnings=0,
-                    reason=None):
+                    reason=None, exposure=None):
     """COVER-01 — proof that this desk was looked at.
 
     A QUIET sentinel writes no book revision and no journal entry, by design (PM.md §12):
@@ -1578,6 +1669,10 @@ def write_heartbeat(base, sfx, desk, slot, ts, book, quiet, decisions=0, warning
         # so reporting book["revision"] here would claim a revision that does not exist.
         "book_revision": ((book or {}).get("based_on_revision") if quiet
                           else (book or {}).get("revision")),
+        # K-03 — the compact house exposure summary (house.compact). Additive: the runner
+        # copies it onto the coverage row; a consumer that ignores it loses nothing. None
+        # when the house was not measured this run (flat book short-circuit, no peers).
+        "exposure": exposure,
     }
     path = os.path.join(base, f"pm_heartbeat{sfx}.json")
     with open(path, "w", encoding="utf-8") as f:
@@ -1610,6 +1705,11 @@ def main():
                     help="raw get_equity_positions response for the live agentic account; "
                          "any live holding raises a divergence warning (STATE-02). Optional.")
     ap.add_argument("--quote-max-age-min", type=float, default=30.0)
+    ap.add_argument("--bars", default="bars.json",
+                    help="optional get_equity_historicals payload (the file technicals.py "
+                         "reads). When staged, K-03 measures N_eff from daily-return "
+                         "correlations and reports beta and momentum crowding; absent, the "
+                         "sector proxy is used and those two are n/a.")
     ap.add_argument("--broker-policy", default=None, choices=list(broker_policy.VALID),
                     help="day-trade / margin regime (K-01). Overrides the book, desks.json and "
                          "engine-config.json; default intraday_margin (FINRA Reg. Notice 26-10)")
@@ -1670,6 +1770,9 @@ def main():
     if PEERS["missing"]:
         print(f"NOTE: peer desk book(s) not staged: {', '.join(PEERS['missing'])} — "
               "house caps will be measured against what IS here.", file=sys.stderr)
+    # K-03 — optional. Present: N_eff is measured from returns and beta / momentum crowding
+    # exist. Absent: the sector proxy, and those two report n/a.
+    load_bars(args.bars)
 
     mode = args.mode or book.get("mode", "paper")
     ts_now = _now(args.now).isoformat().replace("+00:00", "Z")
@@ -1725,18 +1828,23 @@ def main():
         print(f"WARNING: chain snapshot NOT written: {state['chain_snapshot']['error']}",
               file=sys.stderr)
 
+    # K-03 — the compact exposure summary rides on every heartbeat, quiet or not, so the
+    # coverage row carries it even on a run that wrote nothing else.
+    exposure = house_mod.compact((state.get("house") or {}).get("exposure"))
     if args.slot == SENTINEL and not jrn["decisions"] and not jrn["warnings"]:
         b = state["book"]
         write_heartbeat(BASE, sfx, DESK["name"], args.slot, jrn["ts"], book, quiet=True,
-                        reason="every stop checked, nothing fired")
+                        reason="every stop checked, nothing fired", exposure=exposure)
         print(f"SENTINEL QUIET — {jrn['date']} {jrn['ts'][11:16]}Z  equity ${b['equity']:,.2f}  "
               f"{len(book['positions'])} position(s), {len(book['working_orders'])} working "
               "order(s), every stop checked, nothing fired. Nothing written — do not "
               "project_write the book or the journal, do not publish.")
+        print(house_mod.console_line((state.get("house") or {}).get("exposure")))
         return
 
     write_heartbeat(BASE, sfx, DESK["name"], args.slot, jrn["ts"], book, quiet=False,
-                    decisions=len(jrn["decisions"]), warnings=len(jrn["warnings"]))
+                    decisions=len(jrn["decisions"]), warnings=len(jrn["warnings"]),
+                    exposure=exposure)
 
     # The journal is loaded BEFORE the writes now, because the archive decision needs the
     # previous run's fingerprint and render_pm.py reads that decision out of pm_state.json.
@@ -1839,6 +1947,7 @@ def main():
               + f"   caps {h['caps']['symbol_pct']:.0f}%/name, "
                 f"{h['caps']['sector_pct']:.0f}%/sector"
               + ("" if PM_RULES.get("house_caps_enabled", True) else "  [ADVISORY ONLY]"))
+        print(house_mod.console_line(h.get("exposure")))
     if not jrn["decisions"]:
         print("\nNo action this slot.")
     else:

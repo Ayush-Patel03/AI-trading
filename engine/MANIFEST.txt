@@ -6,6 +6,7 @@ config.py
 desks.json
 fills.py
 history.py
+house.py
 ic.py
 ladder.py
 ledger.py
