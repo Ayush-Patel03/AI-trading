@@ -243,6 +243,39 @@ So two conditions must both hold:
 Exits, trims and rebalancing always stay live through a gate. Tomorrow's releases are noted
 as overnight risk and never gate.
 
+### The veto — short reports, negative news, halts (P-03, 2026-09-10)
+
+The score cannot read. The catalyst pillar counts news items and rewards a crowded tape, so
+a name can score 80 on the morning an activist short publishes on it or its auditor resigns.
+`engine/veto.py` is the override that says no, and it is deliberately not a scoring input:
+`scanner.py` scores every row exactly as before and then, in a separate pass that runs only
+when `$SCAN_DIR/veto.json` was staged, writes `veto: true` on the row, overrides its verdict
+to **Avoid** (the scored verdict is kept as `pre_veto_verdict`, the score itself untouched)
+and says why in NOTABLE. The manager reads the same file again at decision time — a report
+that lands between the scan and the slot still counts — and refuses the entry with a
+journaled `veto: …` reason (`report.py` rule `veto`, so the counterfactual can one day say
+whether the refusals were right).
+
+Three rules (`veto.RULES`), from Appendix G of the research synthesis — an activist short
+report costs the target about 7% over ±20 sessions and about 10% by day 100, and does not
+reverse:
+
+1. a short report from a publisher in `docs/veto-publishers.md` dated inside the last **20
+   weekdays** → entry veto;
+2. **high**-severity negative news inside the last **5 weekdays** → entry veto (medium
+   severity is noted, never a veto);
+3. a trading halt dated **today** → entry veto.
+
+**A held name is never sold on this.** Rule 1 on a position sets `review: "short-report"`
+(with `review_since` and the reasons) on the position and warns in the journal — once, when
+the flag is first set; the sentinel stays quiet about it afterwards, and the flag clears when
+the report leaves the window. The report is an argument, and arguments get read by hand; the
+stop is what sells. Rules 2 and 3 do nothing to a holding at all.
+
+Absent file = no override anywhere, and the journal carries no `review_flags` key; the
+no-feed path is byte-identical to the engine before this existed. A stale file is a live
+file: stage it every slot. `--veto <file>` points the manager elsewhere.
+
 ### Trim discipline
 
 A name that keeps weakening gets **trimmed at most once per session, at most twice

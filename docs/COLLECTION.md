@@ -254,3 +254,70 @@ insiderscreener, and every keyed news-sentiment API — AlphaVantage's free tier
 **Cboe option chains** (`cdn.cboe.com/api/global/delayed_quotes/options/<T>.json`) are
 reachable and fresh but **unusable on this fetch path** — section 0. They become
 viable only with a raw-bytes fetch route.
+
+---
+
+## 7. Staged files the engine reads on its own — veto.json, earnings_history.json (P-03 / P-06, 2026-09-10)
+
+Two more inputs, both optional, both picked up from `$SCAN_DIR` without a flag. **Absent means
+"not collected", never "checked and clean"** — the engine says so on the console and writes
+no field it did not measure.
+
+### `veto.json` — the deny list
+
+Assembled once per scan day before the 08:00 slot, from the sources in `docs/DATA.md` §1a
+(the publishers in `docs/veto-publishers.md`, `get_equity_news` for held names and
+candidates, the exchange halt pages). Every list optional; every row needs a `symbol` and a
+`date` (YYYY-MM-DD, the report's or headline's own date) or it is dropped and counted:
+
+```json
+{
+  "as_of": "2026-09-10",
+  "short_reports": [{"symbol": "XYZ", "publisher": "Muddy Waters Research",
+                     "date": "2026-09-08", "url": "https://…", "title": "…"}],
+  "negative_news": [{"symbol": "XYZ", "date": "2026-09-09", "headline": "Auditor resigns",
+                     "source": "get_equity_news", "severity": "high"}],
+  "halts": [{"symbol": "XYZ", "date": "2026-09-10", "reason": "news pending"}]
+}
+```
+
+`severity` is `"high"` (fraud / accounting allegation, restatement, auditor resignation,
+regulatory or DOJ action, guidance withdrawal, going-concern, delisting notice, failed trial,
+recall) or `"medium"` (downgrade, lawsuit, executive departure, missed print). Only high
+vetoes; medium is journaled. Stage the file for **every slot** — `scanner.py` reads it at
+scan time and `pm.py` reads it again at decision time, so a report that lands between the
+two still refuses the entry. Then, as usual:
+
+```bash
+python3 scanner.py            # prints "VETO FEED: {…} — overrode N row(s): …" or "not staged"
+python3 pm.py --slot midday   # reads veto.json by default; --veto <file> to point elsewhere
+```
+
+### `earnings_history.json` → `earnings_quality.json` — the E22/E23 features
+
+One `get_earnings_results` call per symbol (held names plus the candidates the scan will
+score; the connector serves the trailing eight quarters). Write the rows into
+`earnings_history.json` as `{SYMBOL: [quarters]}` in either the connector's own shape or the
+file shape — `earnings_quality.from_connector()` accepts both and the mapping is in that
+module's docstring:
+
+```json
+{"NVDA": [{"fiscal_quarter": "2026Q2", "report_date": "2026-08-26", "timing": "pm",
+           "eps_actual": 1.05, "eps_estimate": 1.01, "surprise_pct": 3.96,
+           "revenue_actual": 46700000000, "revenue_estimate": 46000000000}]}
+```
+
+Then, after `technicals.py` and before `scanner.py` (the bars file is the same one, and it
+must include SPY):
+
+```bash
+python3 earnings_quality.py --history earnings_history.json --bars bars.json \
+                            --as-of $(date +%F) --out earnings_quality.json
+python3 scanner.py            # merges the five keys into each row's `features`
+```
+
+`earnings_quality.json` is `{SYMBOL: {sue, ear_3d, reg_residual, earnings_agreement,
+days_since_earnings}}`, nulls where an input was missing. `reg_residual` needs at least five
+names with both `sue` and `ear_3d` in the file — collect the history for the whole candidate
+list, not one name, or the cross-section does not exist. Nothing scores these; they are for
+`ic.py --by-feature` and the recipes in `docs/BACKTEST.md` §6d.

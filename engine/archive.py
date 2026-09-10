@@ -163,6 +163,8 @@ ROW_KEEP = (
     # Optional per-row feature dict (e.g. ret_12_7, rs_20d_vs_spy) for ic.py --by-feature.
     # Nothing emits it yet; when something does, it rides through unchanged.
     "features",
+    # P-03: the veto override, present only on a run that staged veto.json.
+    "veto", "veto_reasons", "pre_veto_verdict",
 )
 REGIME_KEEP = ("label", "multiplier", "vix", "notes", "spy", "qqq", "iwm", "breadth")
 

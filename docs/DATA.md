@@ -34,7 +34,8 @@ absent from every replay (see `docs/BACKTEST.md` §1).
 | Quarterly / annual financials | `get_financials` | scan (margins, growth) | per slot | 20 symbols/call | Fiscal-period dated, **not filing-dated**. Usable in a backtest only through a table with `available_from` = filing date (`backtest.py --financials`); the SEC `companyfacts` `filed` field is the way to build one |
 | Technical indicators | `get_equity_technical_indicators` | cross-check only | rarely | 1 symbol/call | Computed from bars; `technicals.py` reproduces them from one bars call instead |
 | Earnings calendar (am/pm, estimate, actual) | `get_earnings_calendar` | earnings gate, catalyst pillar | daily | 31-day window | Forward calendar; consensus is as-of-announcement only, no revision history |
-| News with full bodies | `get_equity_news` | catalyst, analyst targets | per slot | 1 symbol/call | Minute-stamped articles. Analyst targets appear only in article text, so they are not a series |
+| **Earnings history — trailing 8 quarters (EPS estimate/actual, report date, am/pm)** | `get_earnings_results` | `earnings_quality.py` → `earnings_history.json` (P-06, §1b) | daily, held + top candidates | **1 symbol/call** | Report-dated; the estimate is the consensus as the connector holds it today, not as it stood before the print — a mild look-ahead in SUE the write-up must state |
+| News with full bodies | `get_equity_news` | catalyst, analyst targets; **negative-headline source for `veto.json` (§1a)** | per slot | 1 symbol/call | Minute-stamped articles. Analyst targets appear only in article text, so they are not a series |
 | VIX / SPX / NDX | `get_indexes` → `get_index_quotes` | regime | per slot | many | Live to the second. **Not scraped.** No history through the connector; the backtest leaves `vix` absent rather than proxied |
 | Level 2 depth | `get_equity_price_book` | PM fills sanity | on demand | 4 symbols | Live only |
 | Options: chains, IV, volume, OI, put/call | Options-activity saved scan `cc3b6743-…` (`get_option_quotes` is 403) | intelligence pillar | per slot | market-wide | Live only; `sentiment.py` gates thin chains. `implied_move_pct` stays null without a straddle |
@@ -61,6 +62,51 @@ absent from every replay (see `docs/BACKTEST.md` §1).
 
 Dead and never-retry sources are listed in `docs/scan-sources.md`; do not re-probe them from a
 scheduled task.
+
+### 1a. Veto sources — short reports, negative news, halts (P-03, 2026-09-10)
+
+`engine/veto.py` reads one staged file, `$SCAN_DIR/veto.json`, and nothing else. The
+scheduled task assembles it from three sources; none is a feed the engine calls itself.
+
+| List | Source | How it is collected | Window the engine applies |
+|---|---|---|---|
+| `short_reports` | the publishers in **`docs/veto-publishers.md`** — their own sites and X accounts (Hindenburg, Muddy Waters, Citron, Culper, Fuzzy Panda, Grizzly, Spruce Point, Viceroy, Blue Orca, Iceberg, Wolfpack, Kerrisdale, Bonitas, J Capital, Hunterbrook, Scorpion, Gotham City, Bleecker Street) | WebSearch → WebFetch on each publisher's index page or X feed, once per scan day before the 08:00 slot; one row per report `{symbol, publisher, date, url, title}` with the report's own date | **20 weekdays** → entry veto; a held name is flagged `review: "short-report"` |
+| `negative_news` | `get_equity_news` for every held name and every candidate the scan will score | the headline and body are read by the task; `severity` is **"high"** for fraud or accounting allegations, a restatement, an auditor resignation, a regulatory or DOJ action, a guidance withdrawal, a going-concern note, a delisting notice, a failed trial or a recall; **"medium"** for a downgrade, a lawsuit, an executive departure, a missed print. Until the LLM extractor (a later task) classifies these, the task classifies by hand and stages only what it read | **5 weekdays**, high severity only → entry veto; medium is journaled as a note |
+| `halts` | the exchange's halt list (`nasdaqtrader.com/trader.aspx?id=tradehalts`, `nyse.com/trade-halt-current`) and the broker's `get_equity_tradability` for held names | one row per symbol halted today `{symbol, date, reason}` | **today only** → entry veto |
+
+What the engine does with the file is in `docs/PM.md` ("The veto") and `docs/SCAN.md` §3c.
+The rules are in `veto.RULES`. Absent file = no override anywhere, never "checked and
+clean": `scanner.py` prints `VETO FEED: not staged` and the board carries no `veto` field.
+The publisher list is maintained by hand; the file says so at the top.
+
+**PIT handling.** Every row carries the report's or headline's own date and the engine
+ignores rows dated after the run — so a replay with a historical `veto.json` is honest to
+the day, and the archive record keeps `veto`, `veto_reasons` and `pre_veto_verdict` per row
+for the counterfactual (`report.py` rule `veto`).
+
+### 1b. Earnings history — the E22/E23 inputs (P-06, 2026-09-10)
+
+`get_earnings_results` returns the trailing up to eight quarters for one symbol — EPS
+estimate and actual, report date, am/pm timing. The scheduled task writes them, mapped as
+`earnings_quality.py`'s docstring specifies (year+quarter → `fiscal_quarter`, `report.date` →
+`report_date`, `eps.actual` / `eps.estimate` → `eps_actual` / `eps_estimate`, `surprise_pct`
+recomputed), into `$SCAN_DIR/earnings_history.json` as `{SYMBOL: [quarters]}`, then runs
+
+```bash
+python3 earnings_quality.py --history earnings_history.json --bars bars.json \
+                            --as-of $(date +%F) --out earnings_quality.json
+```
+
+`bars.json` is the same `get_equity_historicals` payload `technicals.py` reads and **must
+include SPY**, or every announcement-window return is null. `scanner.py` merges the five
+keys (`sue`, `ear_3d`, `reg_residual`, `earnings_agreement`, `days_since_earnings`) into each
+row's `features` dict. Scored by nothing; `docs/BACKTEST.md` §6d has the recipes.
+
+**PIT handling.** The report date is the announcement date and rows after the run's date
+are excluded. The estimate is the consensus the connector serves *today* for that quarter,
+which for an old quarter is the final pre-print consensus — fine — but for the latest quarter
+may already have been revised; SUE therefore carries a small look-ahead on the newest
+surprise that a backtest cannot remove with this source. State it in the write-up.
 
 ---
 

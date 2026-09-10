@@ -29,3 +29,5 @@ universe.py
 universe_history.py
 validate.py
 watch.py
+veto.py
+earnings_quality.py
