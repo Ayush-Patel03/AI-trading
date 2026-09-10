@@ -420,7 +420,7 @@ def stage_run(engine_dir, state, inputs_dir, run_dir, desks, engine_sha, config_
             staged["journals"].append(desk)
     # Peer books for the house caps and the paper mirror: every desk that exists.
     for desk, d in cfg.items():
-        if desk in desks:
+        if desk in desks or d.get("inactive"):
             continue
         src = state / "books" / f"{desk}.json"
         if src.exists():

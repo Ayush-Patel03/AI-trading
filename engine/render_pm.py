@@ -460,6 +460,7 @@ ACTION_STYLE = {
     "fill-sell": ("mute", "Sold"),
     "cancel": ("mute", "Cancelled"),
     "expire": ("mute", "Expired"),
+    "raise-stop": ("good", "Stop raised"),
 }
 REASON_STYLE = {
     "stop": ("critical", "Stop"),
@@ -467,6 +468,8 @@ REASON_STYLE = {
     "target": ("good", "Target"),
     "trim": ("warning", "Trim"),
     "rebalance": ("warning", "Rebalance"),
+    "time": ("warning", "Time stop"),
+    "flatten": ("critical", "Flattened"),
 }
 
 

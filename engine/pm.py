@@ -119,6 +119,20 @@ ADDED 2026-09-10
     PM_RULES["house_exposure"] carries the thresholds; `enforce` is False by default, so
     the block is REPORTED and gates nothing. With enforce on a breach refuses NEW ENTRIES
     house-wide; exits are never touched in either mode.
+  * K-07 — STOPS BY DESK TYPE (stops.py) and the LIVE GUARDRAILS (guardrails.py). One stop
+    rule served three desks that are not the same trade. desks.json `rules.stop_policy` now
+    selects fixed_atr (today's rule, the default — every existing desk is unchanged),
+    chandelier (a ratcheting ATR trail, a time stop) or time_catastrophe (a wide catastrophe
+    stop, a time stop, an optional target — for mean reversion and rotation). The entry
+    pass sets the initial levels from the desk's policy; the exit pass calls its update()
+    every run, journals a raised stop as a "raise-stop" decision (never a lowered one) and
+    maps its exit reasons onto the journal's words. The scale-out / breakeven logic runs
+    only under fixed_atr. Two desks are shipped INACTIVE as templates (rotation, orb):
+    --desk refuses them without --allow-inactive, and no book is created for them.
+    guardrails.py is doctrine plus validators — there is still no live path — and the one
+    thing the paper path does with it is journal, on every proposal, what the per-order and
+    deny-list checks WOULD have refused live (jrn["live_would_refuse"]). PM.md § "Stops by
+    desk type" and § "Live guardrails".
 
 Paths resolve from SCAN_DIR, else from this file's own directory.
 """
@@ -130,9 +144,11 @@ sys.path.insert(0, BASE)
 import archive
 import broker_policy
 import fills as fills_mod
+import guardrails as guardrails_mod
 import house as house_mod
 import ladder as ladder_mod
 import portfolio as pf_mod
+import stops as stops_mod
 from portfolio import RULES, build_proposals
 
 # ---- execution policy. Risk limits live in portfolio.RULES; these are order mechanics ----
@@ -205,9 +221,15 @@ PM_RULES = {
     # K-06 — execution-cost budget per desk: implementation shortfall × notional, summed over
     # the year and divided by average equity, may use this many bps. Over 100% is a warning.
     "cost_budget_bps_per_year": 200,
+    # K-07 — the live guardrails. DOCTRINE: nothing on the paper path gates on them, and
+    # there is no live path for them to gate. They live here so the board, the docs and
+    # the validators in guardrails.py read one set of numbers, and so a desk's pm_rules can
+    # override the block. The paper path evaluates the per-order and deny-list checks on
+    # every proposal and journals what WOULD have been refused (jrn["live_would_refuse"]).
+    "live_guardrails": json.loads(json.dumps(guardrails_mod.LIVE_GUARDRAILS)),
 }
 
-SLOT_ORDER = {"pre-market": 0, "opening-range": 1, "midday": 2, "power-hour": 3, "ad-hoc": 4,
+SLOT_ORDER ={"pre-market": 0, "opening-range": 1, "midday": 2, "power-hour": 3, "ad-hoc": 4,
               "sentinel": 5}
 SENTINEL = "sentinel"
 
@@ -235,6 +257,57 @@ def _policy():
     if POLICY is None:
         POLICY = broker_policy.get_policy(None, {}, DESK, pm_rules=PM_RULES, risk_rules=RULES)
     return POLICY
+
+
+class InactiveDesk(ValueError):
+    """K-07 — the desk is defined in desks.json as an inactive template."""
+
+
+def use_desk(name, desks_path="desks.json", allow_inactive=False):
+    """Select a strategy desk: DESK, the RULES / PM_RULES overrides, the book and journal
+    names. Returns the desk's config dict (empty for the default swing desk).
+
+    A desk carrying a top-level `"inactive": true` is a TEMPLATE — a mandate written down
+    with its stop policy and filter so it can be wired later, not a desk that trades. It
+    is refused here unless `allow_inactive` is set, its book is never created, and the peer
+    loader and the paper mirror skip it. Raises InactiveDesk / KeyError; main() turns both
+    into a FATAL exit.
+    """
+    if not name or name == "swing":
+        desks = (_load(desks_path) or {}).get("desks") or {}
+        cfg = desks.get("swing") or {}
+        if cfg.get("inactive") and not allow_inactive:
+            raise InactiveDesk("desk 'swing' is marked inactive in desks.json")
+        DESK.update({"name": "swing", "filter": {}, "suffix": "", "rules": cfg.get("rules") or {}})
+        return cfg
+    desks = (_load(desks_path) or {}).get("desks") or {}
+    cfg = desks.get(name)
+    if cfg is None:
+        raise KeyError(f"desk {name!r} is not defined in {desks_path}")
+    if cfg.get("inactive") and not allow_inactive:
+        raise InactiveDesk(
+            f"desk {name!r} is an INACTIVE template in {desks_path} — "
+            f"{cfg.get('_note') or 'it has no book and is not scheduled'}. "
+            "Pass --allow-inactive to run it deliberately against a staged book.")
+    DESK.update({"name": name, "filter": cfg.get("filter") or {},
+                 "suffix": f"-{name}", "rules": cfg.get("rules") or {}})
+    for k, v in (cfg.get("rules") or {}).items():
+        if k in RULES:
+            RULES[k] = v          # portfolio.RULES is the dict build_proposals defaults to
+    for k, v in (cfg.get("pm_rules") or {}).items():
+        if k in PM_RULES:
+            PM_RULES[k] = v
+    return cfg
+
+
+def _stop_policy(name=None):
+    """K-07 — the stop policy object. The desk's own policy by default; `name` selects the
+    policy a POSITION was opened under (it may pre-date a desk config change), with the
+    desk's parameters when the names agree and the policy's defaults when they do not."""
+    desk_name, params = stops_mod.resolve(DESK.get("rules") or {})
+    if name and name != desk_name:
+        return stops_mod.get_policy(name, {})
+    return stops_mod.get_policy(desk_name, params)
 
 
 def desk_filter(rows, jrn):
@@ -447,6 +520,8 @@ def build_price_book(scan, prices_override, book, scan_stale):
                       "spread_pct": (v.get("spread_pct") if isinstance(v, dict) else None),
                       "bid": (v.get("bid") if isinstance(v, dict) else None),
                       "ask": (v.get("ask") if isinstance(v, dict) else None),
+                      # K-07: the quote's age rides along for the live-guardrail audit.
+                      "age_min": (v.get("age_min") if isinstance(v, dict) else None),
                       "gics": (pb.get(tk) or {}).get("gics"),
                       "industry": (pb.get(tk) or {}).get("industry")}
     for p in book.get("positions", []):
@@ -685,6 +760,13 @@ def short_basis(basis, kind=None):
     b = (basis or "").lower()
     if "breakeven" in b:
         return "breakeven"
+    # K-07 — the policy stops name themselves before the generic ATR test sees "ATR".
+    if "chandelier trail" in b:
+        return "trail"
+    if "chandelier" in b:
+        return "chandelier"
+    if "catastrophe" in b:
+        return "catastrophe"
     if "atr" in b and "no atr available" not in b:
         return "1.5x ATR"
     if "200-day" in b:
@@ -753,6 +835,21 @@ def _apply_buy(book, sym, shares, price, meta, today, jrn, reason, shadow=None):
             "last_priced": jrn["ts"],
         })
         pos = book["positions"][-1]
+        # K-07 — the stop-policy record. An order placed before K-07 carries no policy and
+        # was sized under the fixed_atr rule, so that is what it is recorded as.
+        stop = meta.get("stop")
+        risk = meta.get("initial_risk")
+        if not isinstance(risk, (int, float)) and isinstance(stop, (int, float)):
+            risk = round(price - stop, 6)
+        pos.update({
+            "stop_policy": meta.get("stop_policy") or stops_mod.DEFAULT_POLICY,
+            "initial_risk": risk,
+            "initial_risk_usd": (round(risk * pos["shares"], 2)
+                                 if isinstance(risk, (int, float)) else None),
+            "sessions_held": 0,
+            "highest_close": round(price, 6),
+            "trail_level": None,
+        })
     _policy().record_buy(book, pos, shares, today, price)
     rec = {"action": "fill-buy", "symbol": sym, "shares": round(shares, 6),
            "price": round(price, 4), "reason": reason,
@@ -992,9 +1089,76 @@ def exit_pass(book, pb, scan_by_tk, today, equity, jrn):
         pos["high_water"] = max(pos.get("high_water") or px, px)
         r = scan_by_tk.get(sym)
 
+        # K-07 — the position's stop policy. Bookkeeping first, for EVERY position: a
+        # position opened before K-07 is recorded as fixed_atr (the rule it was sized under)
+        # and picks up the tracking fields on its next visit. Then, for a policy other than
+        # fixed_atr, the policy's update(): a stop it raises is applied and journaled — it
+        # can never lower one, stops.apply_update enforces that — and an exit it calls is
+        # taken ahead of the thesis checks, exactly where the stop test sits today.
+        pol_name = pos.get("stop_policy") or stops_mod.DEFAULT_POLICY
+        pos["stop_policy"] = pol_name
+        pos["sessions_held"] = stops_mod.sessions_between(pos.get("opened"), today)
+        pos["highest_close"] = max(pos.get("highest_close") or px, px)
+        pos.setdefault("trail_level", None)
+        if "initial_risk" not in pos:
+            st = pos.get("stop")
+            pos["initial_risk"] = (round(pos["avg_cost"] - st, 6)
+                                   if isinstance(st, (int, float))
+                                   and pos.get("stop_basis_kind") != "breakeven" else None)
+            pos["initial_risk_usd"] = (round(pos["initial_risk"] * pos["shares"], 2)
+                                       if isinstance(pos["initial_risk"], (int, float)) else None)
+        policy_exit = None
+        if pol_name != stops_mod.DEFAULT_POLICY:
+            res = stops_mod.apply_update(_stop_policy(pol_name), pos, px, pos["sessions_held"],
+                                         {"atr": (r or {}).get("atr_14")})
+            meta = res.get("meta") or {}
+            pos["trail_level"] = meta.get("trail_level")
+            if meta.get("raised") and isinstance(res.get("stop"), (int, float)):
+                old = pos.get("stop")
+                pos["stop"] = res["stop"]
+                pos["stop_basis"] = meta.get("stop_basis") or pos.get("stop_basis")
+                pos["stop_basis_kind"] = meta.get("stop_basis_kind") or pos.get("stop_basis_kind")
+                pos["stop_basis_short"] = short_basis(pos["stop_basis"], pos["stop_basis_kind"])
+            if meta.get("journal_raise"):
+                jrn["decisions"].append({
+                    "action": "raise-stop", "symbol": sym, "shares": pos["shares"],
+                    "price": pos["stop"], "reason": "stop raised",
+                    "detail": (f"{pol_name}: stop raised from "
+                               f"{old:,.2f} to {pos['stop']:,.2f} — {pos['stop_basis']}"
+                               if isinstance(old, (int, float)) else
+                               f"{pol_name}: stop set at {pos['stop']:,.2f} — {pos['stop_basis']}")})
+            policy_exit = res.get("exit_reason")
+        # K-07 — an intraday desk (the orb template) never holds overnight: at the
+        # power-hour slot every position is closed, whatever the policy says.
+        flatten_close = (bool((DESK.get("rules") or {}).get("flatten_at_close"))
+                         and jrn["slot"] == "power-hour" and not policy_exit)
+        if flatten_close:
+            policy_exit = "time"
+
         action = detail = None
         want = 0.0
-        if pos.get("stop") and px <= pos["stop"]:
+        if flatten_close:
+            action, want = "time", pos["shares"]
+            detail = "Flatten at close: this desk holds nothing overnight (flatten_at_close)"
+        elif policy_exit:
+            # K-07 — the policy's exit, mapped onto the journal's words. "trail" is a stop
+            # (a ratcheted one, and the detail says so); "time" is its own word.
+            want = pos["shares"]
+            if policy_exit in ("stop", "trail"):
+                action = "stop"
+                detail = (f"Price {px:,.2f} broke the {pos['stop']:,.2f} "
+                          f"{'trailing ' if policy_exit == 'trail' else ''}stop "
+                          f"({pos.get('stop_basis')})")
+            elif policy_exit == "target":
+                action = "target"
+                detail = (f"Target {pos['target']:,.2f} hit — closing whole "
+                          f"({pol_name}: no scale-out under this policy)")
+            else:
+                action = "time"
+                detail = (f"Time stop: {pos['sessions_held']} sessions held under {pol_name} "
+                          f"— {'below 1R, ' if pol_name == 'chandelier' else ''}the holding "
+                          "period is the exit")
+        elif pos.get("stop") and px <= pos["stop"]:
             action, want = "stop", pos["shares"]
             detail = f"Price {px:,.2f} broke the {pos['stop']:,.2f} stop ({pos.get('stop_basis')})"
         elif r and r.get("setup") == "Broken Trend":
@@ -1003,7 +1167,8 @@ def exit_pass(book, pb, scan_by_tk, today, equity, jrn):
         elif r and r.get("score") is not None and r["score"] < RULES["exit_score_below"]:
             action, want = "thesis", pos["shares"]
             detail = f"Score fell to {r['score']:.0f} — the thesis that bought it is gone"
-        elif pos.get("target") and px >= pos["target"] and not pos.get("scaled_out"):
+        elif (pol_name == stops_mod.DEFAULT_POLICY and pos.get("target") and px >= pos["target"]
+              and not pos.get("scaled_out")):
             want = _round_shares(pos["shares"] * PM_RULES["scale_out_pct"] / 100)
             rest = pos["shares"] - want
             if rest * px < RULES["min_notional"]:
@@ -1074,7 +1239,9 @@ def exit_pass(book, pb, scan_by_tk, today, equity, jrn):
             if live:
                 live["trim_count"] = live.get("trim_count", 0) + 1
                 live["last_trim_date"] = today.isoformat()
-        if action == "target":
+        if action == "target" and pol_name == stops_mod.DEFAULT_POLICY:
+            # K-07: the scale-out and the breakeven move belong to fixed_atr only. A
+            # policy target closes the whole position and never leaves a runner.
             live = next((p for p in book["positions"] if p["symbol"] == sym), None)
             if live:                      # a runner survived, so this was a scale-out
                 live["scaled_out"] = True
@@ -1238,6 +1405,41 @@ def macro_events_pending(scan, today, jrn):
         jrn["warnings"].append("MACRO TOMORROW: " + ", ".join(tomorrow) +
                                " — overnight holds carry tape-wide event risk.")
     return pending
+
+
+# ------------------------------------------------------------------ K-07 live audit
+def live_guardrail_audit(props, rows_by_tk, pb, jrn):
+    """What the live guardrails WOULD have refused, per proposal, on the paper path.
+
+    Runs guardrails.check_order (notional, distance from the last print, quote age, spread)
+    and guardrails.check_symbol (the deny list) on every sized proposal — blocked or not —
+    and returns [{symbol, notional, reasons}] for those that failed. Non-strict: a check
+    whose input is not on the row is skipped rather than counted. Never raises and never
+    changes a decision; this is the audit trail, not a gate.
+    """
+    rules = PM_RULES.get("live_guardrails") or guardrails_mod.LIVE_GUARDRAILS
+    out = []
+    for p in props or []:
+        try:
+            sym = p["ticker"]
+            limit = round(p["entry"], 2)
+            q = pb.get(sym) or {}
+            age = q.get("age_min")
+            ctx = {"rules": rules, "strict": False, "last": q.get("price"),
+                   "quote_age_s": (age * 60.0 if isinstance(age, (int, float)) else None),
+                   "spread_pct": q.get("spread_pct")}
+            ok_o, r_o = guardrails_mod.check_order(
+                {"symbol": sym, "shares": p["shares"], "limit_price": limit}, ctx)
+            ok_s, r_s = guardrails_mod.check_symbol(
+                rows_by_tk.get(sym) or {"ticker": sym, "price": p["entry"]},
+                {"rules": rules, "strict": False, "now": jrn["ts"]})
+            if not (ok_o and ok_s):
+                out.append({"symbol": sym, "notional": round(p["shares"] * limit, 2),
+                            "reasons": r_o + r_s})
+        except Exception as exc:                  # noqa: BLE001 — never fail the manager
+            out.append({"symbol": p.get("ticker"), "notional": None,
+                        "reasons": [f"audit error: {type(exc).__name__}: {exc}"]})
+    return out
 
 
 # ------------------------------------------------------------------ 5. entries
@@ -1411,8 +1613,18 @@ def entry_pass(book, scan, pb, today, marked, jrn, scan_stale, house=None, ladde
                                     daily_pnl_pct=jrn.get("daily_pnl_pct", 0.0))
     for b in blocks:
         jrn["skipped"].append({"symbol": "*", "reason": b})
+    rows_by_tk = {row.get("ticker"): row for row in clean}
+
+    # K-07 — the live-guardrail audit. Paper mode changes NOTHING here: every proposal is
+    # run through the per-order and deny-list validators and what they WOULD have refused
+    # live goes to the journal, so the paper record shows how often the guardrails would
+    # bite. Non-strict — a check whose input the scan does not carry is skipped, not
+    # counted as a refusal, because the point is to count the bites, not the blind spots.
+    jrn["live_would_refuse"] = live_guardrail_audit(props, rows_by_tk, pb, jrn)
 
     placed = []
+    spent = 0.0
+    stop_policy = _stop_policy()
     for p in props:
         if len(placed) >= PM_RULES["max_new_entries_per_run"]:
             jrn["skipped"].append({"symbol": p["ticker"], "reason":
@@ -1440,6 +1652,39 @@ def entry_pass(book, scan, pb, today, marked, jrn, scan_stale, house=None, ladde
                                        f"${p['shares'] * limit:.2f}, under the "
                                        f"${RULES['min_notional']:.2f} broker minimum"})
                 continue
+        # K-07 — the desk's stop policy sets the initial levels. Under fixed_atr the
+        # proposal's own stop and target ARE the policy (build_proposals called
+        # portfolio.derive_levels) and nothing here moves. Under any other policy the
+        # stop is re-derived and the position is RE-SIZED to the same dollar risk on the
+        # new distance — a wider stop means fewer shares, never more risk — and capped at
+        # the position cap and the cash left this run. The unscaled figure stays on the
+        # order for the audit.
+        initial_risk = round(limit - p["stop"], 6)
+        if stop_policy.name != stops_mod.DEFAULT_POLICY:
+            lv = stop_policy.initial(limit, p.get("atr_14"),
+                                     {"row": rows_by_tk.get(p["ticker"]), "rules": RULES})
+            new_stop, new_target = lv["stop"], lv["target"]
+            new_risk = round(limit - new_stop, 6) if isinstance(new_stop, (int, float)) else 0.0
+            if new_risk <= 0:
+                jrn["skipped"].append({"symbol": p["ticker"], "reason":
+                                       f"{stop_policy.name}: stop {new_stop} is not below the "
+                                       f"{limit:,.2f} entry — cannot size a position"})
+                continue
+            cap_shares = (equity * RULES["max_position_pct"] / 100.0) / limit
+            room_shares = max(0.0, avail - spent) / limit
+            shares = _round_shares(min(p["dollar_risk"] / new_risk, cap_shares, room_shares))
+            if shares <= 0 or shares * limit < RULES["min_notional"]:
+                jrn["skipped"].append({"symbol": p["ticker"], "reason":
+                                       f"{stop_policy.name}: ${shares * limit:.2f} at a "
+                                       f"{new_risk / limit * 100:.1f}% stop distance is under "
+                                       f"the ${RULES['min_notional']:.2f} broker minimum"})
+                continue
+            p = dict(p, stop=new_stop, target=new_target, stop_basis=lv["meta"]["stop_basis"],
+                     stop_basis_kind=lv["meta"]["stop_basis_kind"], shares=shares,
+                     dollar_risk=round(shares * new_risk, 2),
+                     stop_pct=round(new_risk / limit * 100, 2),
+                     risk_pct_of_equity=round(shares * new_risk / equity * 100, 2) if equity else 0.0)
+            initial_risk = new_risk
         notional = round(p["shares"] * limit, 2)
         # HOUSE-01. This is the LAST gate, after portfolio.py has approved the trade for
         # this desk in isolation: it can only ever refuse, never resize or allow. Applied
@@ -1463,9 +1708,15 @@ def entry_pass(book, scan, pb, today, marked, jrn, scan_stale, house=None, ladde
                      "score": p["score"], "gics": p["gics"], "industry": p["industry"],
                      "thesis": p.get("thesis"), "risk_pct": p["risk_pct_of_equity"],
                      "dollar_risk": p["dollar_risk"],
-                     "ladder_mult": ladder_mult, "unscaled_shares": full_shares},
+                     "ladder_mult": ladder_mult, "unscaled_shares": full_shares,
+                     # K-07: the policy the levels came from and the risk per share at
+                     # placement — the position records both when the order fills.
+                     "stop_policy": stop_policy.name,
+                     "initial_risk": initial_risk,
+                     **({"stop_params": dict(stop_policy.params)} if stop_policy.params else {})},
             "warnings": p["warnings"],
         }
+        spent += notional
         # K-06: THE DECISION-TIME MID. An entry is decided here and filled on a later slot,
         # so the mid of the quote this decision was taken on is captured now, carried on
         # the order, and read back by simulate_fills() when the resting limit fills. None
@@ -1485,8 +1736,10 @@ def entry_pass(book, scan, pb, today, marked, jrn, scan_stale, house=None, ladde
                                     if "decision_mid" in order else {}),
                                  "reason": order["reason"],
                                  "detail": f"${order['notional']:,.2f}, stop {p['stop']:,.2f}, "
-                                           f"target {p['target']:,.2f}, risking "
-                                           f"${p['dollar_risk']:,.2f}"
+                                           + (f"target {p['target']:,.2f}, "
+                                              if isinstance(p["target"], (int, float))
+                                              else f"no fixed target ({stop_policy.name}), ")
+                                           + f"risking ${p['dollar_risk']:,.2f}"
                                            + (f" (ladder ×{ladder_mult:.2f}: {full_shares:g} "
                                               f"shares unscaled)" if ladder_mult < 1.0 else "")})
     return placed
@@ -1507,7 +1760,10 @@ def run(book, scan, prices_override, slot, now_iso, mode, policy_name=None):
            "slot": slot, "run_key": run_key, "mode": mode, "desk": DESK["name"],
            "broker_policy": POLICY.name,
            "sentinel": sentinel, "decisions": [], "skipped": [], "warnings": [],
-           "daily_pnl_pct": 0.0}
+           "daily_pnl_pct": 0.0,
+           # K-07: the desk's stop policy, and the live-guardrail audit (filled by the
+           # entry pass; an empty list on a run that sized no proposal).
+           "stop_policy": _stop_policy().name, "live_would_refuse": []}
 
     book.setdefault("positions", [])
     book.setdefault("working_orders", [])
@@ -1772,6 +2028,8 @@ def load_peers(desks_path, this_desk, this_book_file):
     for name, cfg in desks.items():
         if name == this_desk:
             continue
+        if cfg.get("inactive"):
+            continue              # K-07: a template has no book and is not a peer
         fn = cfg.get("book") or f"paper_book-{name}.json"
         if os.path.basename(fn) == os.path.basename(this_book_file or ""):
             continue
@@ -1862,23 +2120,21 @@ def main():
     ap.add_argument("--check", default=None,
                     help="compare a freshly-read book against the one this run was based on; "
                          "exit 2 on a concurrent write")
+    ap.add_argument("--allow-inactive", action="store_true",
+                    help="K-07: run a desk that desks.json marks `inactive` (a template with "
+                         "no book of its own). Refused otherwise. Its book must be staged.")
     args = ap.parse_args()
 
     # ---- strategy desk: which book, which journal, which rules, which candidates
     if args.desk and args.desk != "swing":
-        desks = (_load(args.desks) or {}).get("desks") or {}
-        cfg = desks.get(args.desk)
-        if cfg is None:
+        try:
+            cfg = use_desk(args.desk, args.desks, allow_inactive=args.allow_inactive)
+        except KeyError:
             print(f"FATAL: desk {args.desk!r} is not defined in {args.desks}", file=sys.stderr)
             sys.exit(2)
-        DESK.update({"name": args.desk, "filter": cfg.get("filter") or {},
-                     "suffix": f"-{args.desk}", "rules": cfg.get("rules") or {}})
-        for k, v in (cfg.get("rules") or {}).items():
-            if k in RULES:
-                RULES[k] = v          # portfolio.RULES is the dict build_proposals defaults to
-        for k, v in (cfg.get("pm_rules") or {}).items():
-            if k in PM_RULES:
-                PM_RULES[k] = v
+        except InactiveDesk as e:
+            print(f"FATAL: {e}", file=sys.stderr)
+            sys.exit(2)
         args.book = args.book or cfg.get("book") or f"paper_book{DESK['suffix']}.json"
         args.journal = args.journal or cfg.get("journal") or f"pm_journal_current{DESK['suffix']}.json"
     else:

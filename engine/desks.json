@@ -1,6 +1,6 @@
 {
   "_what": "Strategy desks for the Portfolio Manager. Same engine, same risk rules unless overridden, different candidate mandate, SEPARATE paper book and journal per desk — so the weekly review can attribute results to a setup class instead of to the blend. pm.py --desk <name> loads this file from $SCAN_DIR. The default desk 'swing' is the unfiltered book on the unsuffixed files and is what the Trade Desk board shows.",
-  "_rules": "Every desk starts from the same $5,000 of paper capital, runs under the same account lock and paper lock, and is written back under the same revision/--check protocol. Desk books live at claude/paper-book-<desk>.json and journals at claude/pm-journal-<desk>.json. A desk with no candidates in its mandate simply reports that and manages its own holdings. A desk may name its day-trade / margin regime as rules.broker_policy (legacy_pdt | intraday_margin | cash_settled, see docs/PM.md section 4); unset, the book, engine-config.json and finally the default intraday_margin decide.",
+  "_rules": "Every desk starts from the same $5,000 of paper capital, runs under the same account lock and paper lock, and is written back under the same revision/--check protocol. Desk books live at claude/paper-book-<desk>.json and journals at claude/pm-journal-<desk>.json. A desk with no candidates in its mandate simply reports that and manages its own holdings. A desk may name its day-trade / margin regime as rules.broker_policy (legacy_pdt | intraday_margin | cash_settled, see docs/PM.md section 4); unset, the book, engine-config.json and finally the default intraday_margin decide. A desk names its stop policy as rules.stop_policy (fixed_atr | chandelier | time_catastrophe, parameters in rules.stop_params — docs/PM.md 'Stops by desk type'); unset, fixed_atr. A desk with top-level \"inactive\": true is a TEMPLATE: pm.py --desk refuses it without --allow-inactive, no book is created for it, and the peer loader and paper mirror skip it.",
   "desks": {
     "swing": {
       "label": "Swing — the unfiltered book",
@@ -8,7 +8,7 @@
       "doc_journal": "claude/pm-journal.json",
       "book": "paper_book.json",
       "journal": "pm_journal_current.json",
-      "rules": {},
+      "rules": {"stop_policy": "fixed_atr"},
       "filter": {},
       "publishes_board": true
     },
@@ -18,10 +18,11 @@
       "doc_journal": "claude/pm-journal-pullback.json",
       "book": "paper_book_pullback.json",
       "journal": "pm_journal_current_pullback.json",
-      "rules": {},
+      "rules": {"stop_policy": "fixed_atr"},
       "filter": {"setups": ["Pullback in Uptrend", "Early Recovery"], "rsi_range": [25, 55]},
       "publishes_board": false,
-      "_thesis": "Buy the dip in a name whose 200-day still defines an uptrend, RSI in the mean-reversion zone. Same ATR stop, same 3R target; the test is whether pullback entries outperform momentum entries on this scoring model."
+      "_thesis": "Buy the dip in a name whose 200-day still defines an uptrend, RSI in the mean-reversion zone. Same ATR stop, same 3R target; the test is whether pullback entries outperform momentum entries on this scoring model.",
+      "_note": "Desk being retired (E-K07): a mean-reversion mandate under a 1.5x ATR stop sells into the drawdown it was built to hold through. Left on fixed_atr, unchanged, until the book is closed out."
     },
     "momentum": {
       "label": "Momentum — trend continuation only",
@@ -29,10 +30,46 @@
       "doc_journal": "claude/pm-journal-momentum.json",
       "book": "paper_book_momentum.json",
       "journal": "pm_journal_current_momentum.json",
-      "rules": {},
+      "rules": {"stop_policy": "fixed_atr"},
       "filter": {"setups": ["Momentum"], "rsi_range": [50, 72]},
       "publishes_board": false,
-      "_thesis": "Only names above both moving averages with the 50 over the 200 and RSI showing healthy strength, not exhaustion. Same risk rules; the test is whether trend continuation beats mean reversion."
+      "_thesis": "Only names above both moving averages with the 50 over the 200 and RSI showing healthy strength, not exhaustion. Same risk rules; the test is whether trend continuation beats mean reversion.",
+      "_note": "Unchanged today. E-K07 proposes chandelier here — initial 2.5x ATR, 3x ATR trail under the highest close, 40-session time stop below 1R (Han, Zhou & Zhu 2016; Kaminski & Lo 2014) — once the harness shows it on this book's own trades. Switch by setting rules.stop_policy to \"chandelier\"; open positions keep the policy they were opened under."
+    },
+    "rotation": {
+      "inactive": true,
+      "label": "Rotation — sector ETF momentum, monthly (E26) — INACTIVE TEMPLATE",
+      "doc_book": "claude/paper-book-rotation.json",
+      "doc_journal": "claude/pm-journal-rotation.json",
+      "book": "paper_book_rotation.json",
+      "journal": "pm_journal_current_rotation.json",
+      "rules": {
+        "stop_policy": "time_catastrophe",
+        "stop_params": {"k_cat": 3.5, "max_sessions": 25, "target_pct": null}
+      },
+      "filter": {"universe": "sector-etfs"},
+      "publishes_board": false,
+      "_cadence": "Monthly: rank the sector ETF universe on 12-1 month momentum at the first slot of the month, hold the top ranks for ~25 sessions, rotate. The four daily slots only manage holdings between rebalances.",
+      "_thesis": "Cross-sectional sector momentum in liquid ETFs (E26). No tight stop — a 3.5x ATR catastrophe stop and the 25-session time stop are the only exits; the rank IS the exit. The `universe: sector-etfs` filter is a placeholder: the scan does not carry that universe yet, so this desk has no candidates and no book until it does.",
+      "_note": "Template only (E26). No book exists; pm.py refuses --desk rotation without --allow-inactive. Activate by removing `inactive`, creating the two project docs and adding the desk to runner/slots.json."
+    },
+    "orb": {
+      "inactive": true,
+      "label": "ORB — opening-range breakout, intraday (E24) — INACTIVE TEMPLATE",
+      "doc_book": "claude/paper-book-orb.json",
+      "doc_journal": "claude/pm-journal-orb.json",
+      "book": "paper_book_orb.json",
+      "journal": "pm_journal_current_orb.json",
+      "rules": {
+        "stop_policy": "chandelier",
+        "stop_params": {"k_init": 0.1, "k_trail": 3.0, "max_sessions": 1, "target_r": null},
+        "flatten_at_close": true,
+        "broker_policy": "intraday_margin"
+      },
+      "filter": {"setups": ["Momentum"]},
+      "publishes_board": false,
+      "_thesis": "Opening-range breakout (E24): enter on a break of the first bar's range in the direction of the gap, stop at 10% of ATR (the paper's stop, implemented as chandelier k_init 0.1), flatten at the close — never held overnight. Needs intraday bars and an entry slot the engine does not have yet.",
+      "_note": "Template only (E24). No book exists; pm.py refuses --desk orb without --allow-inactive. `flatten_at_close` closes every position at the power-hour slot; intraday_margin is required because every trade is a day trade."
     }
   }
 }

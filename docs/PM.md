@@ -815,6 +815,10 @@ For the manager this matters in three places:
    the 3R target the stop moves to average cost and the basis becomes `breakeven` — that is
    deliberate and outranks whatever the volatility says.
 
+Everything above is the `fixed_atr` policy, which every live desk runs. Since K-07 it is one
+of three — section 16 — and `stop_basis_kind` can also read `chandelier`, `trail` or
+`catastrophe` on a desk that has opted into another policy.
+
 ## 11. Known gaps
 
 - **Four price observations a day.** Everything in section 3 follows from this.
@@ -830,8 +834,12 @@ For the manager this matters in three places:
   **Closed by HOUSE-01 on 2026-09-02** — section 14. The manager now measures combined
   exposure per symbol and per sector across every desk book and refuses an entry that would
   breach either house cap. Preventive, not corrective: it does not unwind an existing breach.
-- **Live mode is not implemented.** Section 1. Do not flip the flag.
-- **Stops are ATR-based, and the basis must always be reported.** See section 10.
+- **Live mode is not implemented.** Section 1. Do not flip the flag. Since K-07 (section 17)
+  the controls that would have to exist first are written as tested validators, and every
+  paper run journals what they would have refused (`live_would_refuse`).
+- **Stops are ATR-based, and the basis must always be reported.** See section 10 — and since
+  K-07 (section 16) the stop is a per-desk POLICY: every live desk is still on `fixed_atr`,
+  and a position carries the policy it was opened under.
 - **The correlation multiplier is a sector-overlap proxy**, not computed from returns.
   Never present it as a correlation. (Since K-03, section 14b, the HOUSE-level N_eff *is*
   computed from returns when `bars.json` is staged, and is labelled `proxy` when it is not.
@@ -1061,12 +1069,15 @@ class rather than to the blend. `claude/engine/desks.json` defines them:
 | `swing` | unfiltered — every candidate that clears the gates | `claude/paper-book.json`, `claude/pm-journal.json` (the Trade Desk board) |
 | `pullback` | setups *Pullback in Uptrend* / *Early Recovery*, RSI 25–55 — buy the dip inside an uptrend | `claude/paper-book-pullback.json`, `claude/pm-journal-pullback.json` |
 | `momentum` | setup *Momentum*, RSI 50–72 — trend continuation, not exhaustion | `claude/paper-book-momentum.json`, `claude/pm-journal-momentum.json` |
+| `rotation` | **inactive template** (E26) — sector-ETF momentum, monthly, `time_catastrophe` | none — section 16 |
+| `orb` | **inactive template** (E24) — opening-range breakout, intraday, `chandelier` k_init 0.1, flatten at close | none — section 16 |
 
 Every desk starts from the same $5,000 of paper capital, runs under the same paper lock,
 account lock, risk rules (`portfolio.RULES`, overridable per desk in `desks.json` but not
 overridden today), spread gate, macro gate and broker policy (section 4; overridable per
 desk through `rules.broker_policy`), and is written back under the
-same revision / `--check` protocol. `pm.py --desk <name>` loads the desk, filters the scan
+same revision / `--check` protocol, and names its stop policy as `rules.stop_policy`
+(section 16; every live desk is on `fixed_atr`). `pm.py --desk <name>` loads the desk, filters the scan
 rows to its mandate (the number declined is journaled once, not listed — a pullback desk is
 not "skipping" momentum names), and suffixes every output file and run id with the desk
 name so three desks can run in one directory. Desks publish no boards; the weekly review
@@ -1254,3 +1265,145 @@ Why: IV rank needs a history of ATM IV — after ~60 sessions of `atm_iv_30d` it
 computable per name, and nothing else in the system records it. E10/E17 read `skew25`, `cpiv`
 and `os_ratio` at the slot; the slot-event simulator needs the straddle and `em_1sd` the
 market was pricing at the moment the manager decided.
+
+## 16. Stops by desk type (K-07, added 2026-09-10)
+
+Until K-07 one stop rule served every desk: `portfolio.derive_levels()` — 1.5× ATR below
+entry, clamped into the 3–12% band, a 3R target, half off at the target and the stop to
+breakeven (section 10). That is a swing stop, and it is the right one for the swing book.
+It is the wrong instrument for the other mandates, and the literature is specific about why:
+
+- **Kaminski & Lo (2014), "When do stop-loss rules stop losses?"** — a stop-loss adds value
+  when returns carry momentum or switch regimes, because the loss it realises is the start of
+  a run rather than noise; on a random walk it subtracts value (it sells at a price with no
+  information in it and pays the round trip), and on a **mean-reverting** series it is
+  actively harmful, because it sells precisely into the reversal the strategy was built to
+  hold through.
+- **Han, Zhou & Zhu (2016), "A trend factor / Taming momentum crashes"** — on the momentum
+  portfolio a 10% stop-loss cut the worst monthly loss from ≈ −50% to ≈ −11% and roughly
+  doubled the Sharpe ratio, mostly by stepping out of the crashes. And across their tests a
+  **wide stop with a smaller position dominates a tight stop with a larger one**: the
+  tight stop gets hit by noise and pays the whipsaw; the wide one only fires on the real
+  move, and the smaller size holds the dollar risk equal.
+
+So there are now three policies in `engine/stops.py`, selected per desk by `rules.stop_policy`
+in `desks.json` with parameters in `rules.stop_params`:
+
+| Policy | Initial stop | Ongoing | Target | Time stop | For |
+|---|---|---|---|---|---|
+| `fixed_atr` (default) | 1.5× ATR, clamped 3–12% (`derive_levels`) | breakeven after the scale-out | 3R, half off | none | swing — **unchanged**, byte-for-byte |
+| `chandelier` | entry − `k_init`×ATR14 (2.5) | trail = highest close since entry − `k_trail`×ATR14 (3.0), **ratchets up, never down** | none by default (`target_r` optional) — rank and trend exits do that job | `max_sessions` (40): closed if it has not made 1R by then | momentum, trend swing |
+| `time_catastrophe` | entry − `k_cat`×ATR14 (3.5) — a catastrophe stop, nothing tighter | never moves | `target_pct` (4.0%) optional, whole position | `max_sessions` (6 for mean reversion, ~25 for rotation), unconditional | mean reversion, sector rotation |
+
+**What every desk trades today is unchanged.** `swing`, `pullback` and `momentum` are all on
+`fixed_atr`, and `tests/test_stops.py` proves it the same way K-06 did: a three-run sequence
+(entry placed and filled, a stop, a 3R scale-out with the breakeven move, a session roll) was
+frozen from the untouched engine (`tests/fixtures/pm_golden_prechange_stops.json`, written
+from commit 3a72721 by `tests/stops_sequence.py` *before* pm.py was touched), and the engine
+must still write those bytes plus only the new bookkeeping keys. The `momentum` desk's
+`_note` records that E-K07 proposes `chandelier` there once the harness shows it on that
+book's own trades; `pullback` is being retired — a mean-reversion mandate under a 1.5× ATR
+stop is exactly the Kaminski–Lo failure — and stays on `fixed_atr` until it is closed out.
+
+### How the engine applies a policy
+
+- **At entry** (`entry_pass`), the desk's policy sets the initial stop and target. Under
+  `fixed_atr` the proposal's own levels are the policy — `build_proposals` already called
+  `derive_levels` — and nothing moves. Under any other policy the stop is re-derived and the
+  position is **re-sized to the same dollar risk on the new distance**: a wider stop means
+  fewer shares, never more risk, capped at the position cap and the cash left this run. The
+  unscaled figure stays on the order (`meta.unscaled_shares`) with `meta.stop_policy`,
+  `meta.initial_risk` and `meta.stop_params`.
+- **Every run** (`exit_pass`), before the thesis checks, the position's policy `update()` is
+  called with the slot price and the sessions held. A stop it raises is applied and journaled
+  as a `raise-stop` decision ("stop raised from X to Y"); a stop is **never lowered** —
+  `stops.apply_update` enforces that for every policy, so no policy can lower one by
+  accident. An exit it calls is taken ahead of the thesis checks, exactly where the stop test
+  sits today, and mapped onto the journal's words: `stop` and `trail` both book as a `stop`
+  (the detail says "trailing stop" for a ratcheted one), `target` books as a `target` that
+  closes the **whole** position, `time` is its own word. The scale-out and the breakeven move
+  run under `fixed_atr` only.
+- **Every position records** `stop_policy`, `initial_risk` (entry − initial stop, per
+  share) and `initial_risk_usd`, `sessions_held` (weekday sessions since `opened`; the entry
+  day is 0), `highest_close` and `trail_level`. A position opened before K-07 is recorded as
+  `fixed_atr` — the rule it was sized under — on its next visit. `highest_close` is the
+  highest price the book has *seen* since entry; the book observes four prices a day, not
+  closes, and the field does not pretend otherwise.
+- A position keeps the policy it was **opened** under. Changing a desk's `stop_policy` applies
+  to new entries; the open book is not re-stopped underneath itself.
+
+### Inactive desk templates
+
+`desks.json` now also carries two desks with a top-level `"inactive": true`: `rotation`
+(E26 — sector-ETF momentum, monthly, `time_catastrophe` with `max_sessions` 25 and `k_cat`
+3.5, a `universe: sector-etfs` filter the scan does not carry yet) and `orb` (E24 — opening-
+range breakout, `chandelier` with `k_init` 0.1 for the paper's 10%-of-ATR stop,
+`flatten_at_close` so nothing is held overnight, `intraday_margin` because every trade is a
+day trade). They are mandates written down with their exits so they can be wired later, not
+desks that trade: `pm.py --desk rotation` exits 2 with the reason unless `--allow-inactive`
+is passed, **no book is created** for them, and the peer loader, the paper mirror and the
+runner's peer staging all skip them. Activating one is: remove `inactive`, create the two
+project docs, add the desk to `runner/slots.json`.
+
+## 17. Live guardrails — doctrine, validators, and the paper-mode audit (K-07)
+
+Section 1 still governs: **live mode is not implemented** and this section does not change
+that. What it adds is the set of controls that would have to stand between the manager and a
+real order before anyone flips the flag, written as pure validators in `engine/guardrails.py`
+with tests, so the go-live conversation is a review of a tested module rather than a design
+session.
+
+The reference frame is **Knight Capital, 1 August 2012**: a deployment left a retired test
+routine live on one server, it sent roughly four million orders in forty-five minutes, the
+firm lost $460m and was gone within the week. The regulatory response every broker-dealer
+already operates under is **SEC Rule 15c3-5** (the Market Access Rule: pre-trade credit and
+capital thresholds, erroneous-order and duplicate-order checks, and risk controls the firm
+itself must own and cannot outsource) and **FINRA Regulatory Notice 15-09** (algorithmic
+trading: kill switches, pre-deployment testing, change management, and the point that the
+controls belong to the firm, not the vendor). The Agentic account is a retail account and
+none of this binds it — but the reasoning is exactly right for a book an LLM session drives,
+and the numbers are set to *this* book's size.
+
+`PM_RULES["live_guardrails"]` (a desk's `pm_rules` may override the block):
+
+| Block | Control | Value | Validator |
+|---|---|---|---|
+| `two_key` | environment flag | `AI_TRADING_LIVE` | `live_mode_allowed(env, path, now)` |
+| | signed config | `live.signed.json` — `{body, sig}`, HMAC-SHA256 over the canonical body under `AI_TRADING_LIVE_KEY`, `expires_at` in the future, `issued_at` no older than `max_age_hours` 24 | |
+| `per_order` | max notional | $750 | `check_order(order, ctx)` |
+| | max distance from last print | 1.0% | |
+| | max quote age | 60 s | |
+| | max spread | 1.0% of price | |
+| `per_day` | max orders per desk | 12 | `check_day(book, ctx)` |
+| | max orders per symbol | 2 | |
+| | max notional sent | 2.0× equity | |
+| `deny` | min price | $5.00 | `check_symbol(row, ctx)` |
+| | min dollar ADV | $10m | |
+| | leveraged ETFs | refused | |
+| | IPO seasoning | 90 days | |
+| | volume spike | > 10× 20-day ADV | |
+| | unexplained move | > 30% with no earnings event | |
+| `circuit` | VIX | ≥ 35 | `check_circuit(ctx)` |
+| | SPY intraday | ≤ −3.0% | |
+
+Every validator returns `(ok, reasons)`. **Both keys must turn**: the flag alone does
+nothing, the signed config alone does nothing, and an expired, tampered, mis-keyed or stale
+config is refused with a reason naming the first thing that failed. A check whose input is
+missing does not pass silently: under `strict` (the live default) it refuses — a circuit
+breaker that cannot read the tape is open, not closed — and under non-strict it is skipped
+and reported.
+
+### The paper-mode audit
+
+The one thing the paper path does with this module: on every run, every sized proposal is put
+through `check_order` (notional, distance from last, quote age, spread) and `check_symbol`
+(the deny list), non-strict, and what they **would have refused live** is journaled as
+`jrn["live_would_refuse"]` — `[{symbol, notional, reasons}]`, an empty list when nothing would
+have been refused. It changes no decision. Its purpose is to put on the paper record, before
+the guardrails ever bite, how often they would — a desk whose proposals are refused on the
+$750 ceiling every day is telling you the live sizing has to differ from the paper sizing,
+and that is better learned from a journal column than from a rejected ticket. On the test
+fixture the one proposal (SCHW, $557.94) clears every default ceiling and the audit is empty;
+`tests/test_stops.py` proves the same run journals the refusal when the ceiling is lowered
+under it. `pm.py` never calls `live_mode_allowed`, `check_day` or `check_circuit` — a static
+test pins that.

@@ -5,6 +5,7 @@ broker_policy.py
 config.py
 desks.json
 fills.py
+guardrails.py
 history.py
 house.py
 ic.py
@@ -20,6 +21,7 @@ render_portfolio.py
 scanner.py
 sentiment.py
 snapshots.py
+stops.py
 technicals.py
 universe.py
 universe_history.py
