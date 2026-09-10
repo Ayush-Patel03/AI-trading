@@ -40,6 +40,9 @@ import config
 # (six). Importing pm is safe: it has no import-time side effects and does not import
 # this module.
 from pm import _is_high_impact as is_high_impact
+# P-02 / E16: the 10-K/10-Q text-change signal ("Lazy Prices"). Pure functions over a staged
+# file; no import-time side effects and it imports nothing from the engine.
+import filings
 
 BASE = os.environ.get("SCAN_DIR") or os.path.dirname(os.path.abspath(__file__))
 if BASE not in sys.path:
@@ -607,12 +610,48 @@ def scan_date_of(meta):
     return str(d)
 
 
-def scan(data, insider_signal=None):
+def attach_filings(rows, staged, today):
+    """P-02 / E16: lay the 10-K/10-Q text-change features onto every row's `features`
+    block when `filings_signal.json` was staged. Logged for ic.py --by-feature; scored by
+    nothing — the intended use, once E16 has a result, is a slow negative screen.
+
+    `staged` is filings.load_staged()'s dict, or None when the file is not there, in which
+    case nothing is touched (a row with no feature block stays without one, exactly as
+    before). With the file present every row carries the three keys, null for a symbol the
+    file does not name or whose filing post-dates the scan — "not covered" must never read
+    as "unchanged". Returns {"n_symbols", "n_matched", "n_changers"} for the meta block."""
+    if not isinstance(staged, dict):
+        return None
+    n_matched = n_changers = 0
+    for r in rows:
+        f = filings.features_for(staged.get(r["ticker"]), today)
+        feats = r.get("features") if isinstance(r.get("features"), dict) else {}
+        feats.update(f)
+        r["features"] = feats
+        if f["filing_change_score"] is not None:
+            n_matched += 1
+            n_changers += 1 if f["filing_changer"] else 0
+    return {"n_symbols": sum(1 for k in staged if not str(k).startswith("_")),
+            "n_matched": n_matched, "n_changers": n_changers,
+            "threshold": (staged.get("_meta") or {}).get("threshold", filings.CHANGER_THRESHOLD)}
+
+
+def scan(data, *, insider_signal=None, filings_signal=None):
     """Score one scan_data.json document.
 
-    `insider_signal` is the insiders_signal.json document to attach as features; when
+    Every optional input is a staged file the scheduled task may or may not have put in
+    the run directory; each attaches *logged* features (scored by nothing) and a `meta`
+    block only when present, so the output of a scan with none of them is byte-identical
+    to one that never had the arguments.
+
+    `insider_signal` (P-01): the insiders_signal.json document to attach as features; when
     None (the normal CLI path) it is read from $SCAN_DIR if staged there, and when nothing
     is staged no insider feature is attached at all.
+
+    `filings_signal` (P-02): the parsed filings_signal.json (filings.load_staged), or None.
+    It is an explicit argument rather than a file read here so that a backtest replay —
+    which calls scan() per historical date — cannot pick up today's staged file by
+    accident; __main__ loads it for the live path.
     """
     today = datetime.strptime(scan_date_of(data["meta"]), "%Y-%m-%d").date()
     mult, regime_label, regime_notes = score_regime(data["regime"])
@@ -705,12 +744,16 @@ def scan(data, insider_signal=None):
         # archive record and the snapshot carry them for ic.py --by-feature; NOT an input
         # to any pillar above, and absent rather than null when nothing computed them.
         if isinstance(c.get("features"), dict):
-            rows[-1]["features"] = c["features"]
+            rows[-1]["features"] = dict(c["features"])
         # P-01: the insider signal, when staged. Same rule — logged, scored by nothing.
         if insider_sig is not None:
             feats = dict(rows[-1].get("features") or {})
             feats.update(insider_features(insider_sig, tk))
             rows[-1]["features"] = feats
+
+    # P-02: filing text-change features, when the staged file is present. Rows only;
+    # nothing above reads them.
+    filings_meta = attach_filings(rows, filings_signal, today)
 
     # Score trail across today's slots, with this scan appended as the final point
     prior_top5 = set()
@@ -830,6 +873,10 @@ def scan(data, insider_signal=None):
     # Which commit of the engine produced this scan. Written by the clone step as
     # $SCAN_DIR/engine_sha; None when the engine was not run from a repo.
     meta["engine_sha"] = config.engine_sha()
+    # P-02: only when the staged file was there — an absent key is "not staged", and the
+    # golden output of a run without it must not move.
+    if filings_meta is not None:
+        meta["filings_signal"] = filings_meta
 
     return {"meta": meta, "ipo": data.get("ipo"), "insider_panel": data.get("insider"),
             "sector_concentration": dict(conc),
@@ -841,7 +888,13 @@ if __name__ == "__main__":
     import shutil
     import archive
     src = sys.argv[1] if len(sys.argv) > 1 else os.path.join(BASE, "scan_data.json")
-    out = scan(json.load(open(src, encoding="utf-8")))
+    # Every optional staged file lives in the run directory ($SCAN_DIR); each is None when
+    # the scheduled task did not stage it, and the rows then carry none of its features.
+    # P-01: insiders_signal.json.  P-02: filings_signal.json.
+    staged_insiders = load_insider_signal(BASE)
+    staged_filings = filings.load_staged(BASE)
+    out = scan(json.load(open(src, encoding="utf-8")),
+               insider_signal=staged_insiders, filings_signal=staged_filings)
     # Every run owns its own file names. The unstamped scan_results.json stays as the
     # "latest" copy the rest of the pipeline reads; the stamped copy is the one that is
     # still here after the next slot runs. The input is snapshotted too, so a board can
@@ -874,6 +927,20 @@ if __name__ == "__main__":
         json.dump(out, open(os.path.join(BASE, name), "w", encoding="utf-8"), indent=2)
     print(f"RUN {rid}  ->  {fn['results']} + {fn['data']}")
     print(f"{snap_note}\n")
+    # One line per optional source, staged or not, so the run log says what was looked at.
+    im = out["meta"].get("insider_signal_meta")
+    if im:
+        print(f"INSIDERS (E15, not scored): {len(im['covered'])} of {len(out['results'])} rows covered, "
+              f"{im.get('n_cluster_buy')} cluster buy(s) across {im.get('n_symbols')} symbol(s) as of {im.get('as_of')}")
+    else:
+        print("INSIDERS: insiders_signal.json not staged — no insider features attached")
+    fm = out["meta"].get("filings_signal")
+    if fm:
+        print(f"FILINGS (E16, not scored): {fm['n_matched']} of {len(out['results'])} rows carry a "
+              f"10-K/10-Q change score, {fm['n_changers']} changer(s) at threshold {fm['threshold']}")
+    else:
+        print("FILINGS: filings_signal.json not staged — no filing features attached")
+    print()
     print(f"REGIME: {out['regime']['label']} (x{out['regime']['multiplier']})   "
           f"coverage avg {out['meta']['coverage_avg']:.0f}%\n")
     print(f"{'#':<3}{'TKR':<7}{'SCORE':>6}  {'VERDICT':<12}{'SETUP':<22}{'T/M/F/C/I':<16}"

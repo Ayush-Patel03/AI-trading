@@ -41,6 +41,7 @@ absent from every replay (see `docs/BACKTEST.md` §1).
 | Retail attention (RH) | `get_popular_watchlists` + `get_watchlist_items` | universe (live) | per slot | per list | Live only. **This is the attention universe `universe.py` exists to replace** |
 | Liquid movers | Universe saved scan `55138bd9-…` | universe (live) | per slot | market-wide | Live; relative volume is understated early in the session |
 | SEC filings | `get_sec_filing*` | on demand | — | — | Filing-dated |
+| **10-K / 10-Q text change (E16)** | **EDGAR `data.sec.gov/submissions` → Archives primary document; `engine/filings.py`** | **scan rows (`features.filing_*`, not scored)** | **after each filing; a fetch step on the box, then the batch CLI** | **10 req/s, `User-Agent` mandatory — see §5** | **Filing-dated; `features_for` nulls anything filed after the scan date — see §5** |
 
 ### Scraped (WebSearch → WebFetch; provenance-gated in scheduled runs)
 
@@ -346,3 +347,141 @@ signal on every scan for a few weeks, then `ic.py --by-feature` over the archive
 the rest), `insider_opportunistic_buy_usd_30d` the dollar-weighted version, and
 `insider_net_usd_90d` the control that should carry less than either if the paper is
 right. Recipe and the honesty rules in `docs/BACKTEST.md` §6d.
+## 5. 10-K / 10-Q text change — "Lazy Prices" (P-02, E16)
+
+**The evidence.** Cohen, Malloy & Nguyen (2020, *Journal of Finance*, "Lazy Prices"): firms
+whose periodic filings change little against the prior year's filing of the same form
+("non-changers") outperform the "changers" — up to 188 bp/month of five-factor alpha on the
+Risk Factors section alone, 30–60 bp/month on broader whole-document measures — with the drift
+playing out over roughly three months on a monthly rebalance. The changes that carry the
+information are in Risk Factors, MD&A, litigation and the CEO/CFO language. The mechanism is
+inattention: the document is long, the change is buried, and the price takes a quarter to
+reflect it. That makes it a **slow negative screen** — a changer is a name to leave alone for
+~60 sessions — and not an entry trigger, and it is not scored by anything until E16 has a
+result.
+
+**The feed — EDGAR, not a vendor.** Three URLs, all free, all filing-dated, `engine/filings.py
+--edgar-plan --symbols A,B --cik-map cik.json` prints them per symbol in the order to pull:
+
+1. `https://www.sec.gov/files/company_tickers.json` — ticker → CIK, once; keep it as the cik
+   map (a symbol without a CIK gets this as step 0).
+2. `https://data.sec.gov/submissions/CIK##########.json` (10-digit zero-padded CIK) — the
+   filing index. `filings.recent` is column-oriented (`form[]`, `filingDate[]`,
+   `accessionNumber[]`, `primaryDocument[]`, `reportDate[]`); `filings.pick_filing_pair(payload,
+   "10-K")` turns it into `(current, prior)` where prior is the **same form filed 270–460 days
+   earlier** (the paper's year-over-year comparison: 10-K vs last year's 10-K, Q2 10-Q vs last
+   year's Q2 10-Q), falling back to the previous filing of that form. Amendments (`/A`) are
+   skipped.
+3. `https://www.sec.gov/Archives/edgar/data/<cik>/<accession-without-dashes>/<primaryDocument>`
+   — the document itself, HTML (older filings: text). `filings.primary_document_url()` builds it.
+
+Full-text search — `https://efts.sec.gov/LATEST/search-index?q=<phrase>&forms=10-K
+&dateRange=custom&startdt=…&enddt=…` — is for finding filings by content (e.g. every 10-K that
+mentions a phrase in a window); it is not on the per-symbol path.
+
+**Fair access — the fetch step must obey this or the IP is blocked for ten minutes at a
+time.** Every request carries `User-Agent: <project or company name> <contact email>`; at most
+**10 requests per second**; `Accept-Encoding: gzip, deflate`; `Host: data.sec.gov` on the
+submissions call and `Host: www.sec.gov` on the Archives. The engine never opens the socket —
+`filings.py` is URL construction and parsing only, and the tests run without a network — so
+the rules live in the fetch step on the box (`runner/`), which also keeps every fetched
+document under the run archive: an accession never changes, so it never needs a second GET.
+The fetch is a weekly task plus a per-name refresh when the earnings calendar shows a 10-Q
+is due; a whole-universe first pull is `2 × N` documents and takes minutes at the rate limit,
+not hours.
+
+**What the module computes** (`engine/filings.py`, stdlib only: `html.parser`, `re`, `math`,
+`difflib`):
+
+* `extract_sections(text_or_html, form)` → `{risk_factors, mdna, legal_proceedings,
+  business}`, by locating the Item headings — 10-K: Items 1A / 7 / 3 / 1; 10-Q: Part II
+  Item 1A / Part I Item 2 / Part II Item 1 (a 10-Q has no Business section, it is `null`).
+  Tolerant of HTML, tables, page headers ("Table of Contents" back-links, bare page numbers),
+  case and `&nbsp;`. Every line-start `Item N` is a candidate; the table of contents loses
+  because its body is one line, a cross-reference in prose loses because it is not at a line
+  start, and the longest body wins. A section that cannot be located is **`null`, never `""`**.
+* `similarity(a, b)` → cosine on term-frequency vectors (lower-cased, stop-words and bare
+  numbers stripped — numbers move every year, the signal is the prose), Jaccard on the word
+  sets, and `minimum_edit_ratio` = `difflib.SequenceMatcher.ratio()` over the **sentence**
+  lists. The last is quadratic in the worst case and is only ever run on a section, never a
+  whole filing. Identical → 1.0 on all three; nothing in common → 0.0; both empty → `null`.
+* `change_score(current, prior)` → per-section `{cosine, jaccard, minimum_edit_ratio}` (or
+  `null` when either side lacks the section), `risk_factors_change` = 1 − cosine(Risk
+  Factors), `mdna_change`, `overall_change` = weighted mean of 1 − cosine over the sections
+  present on **both** sides (weights Risk Factors 0.40, MD&A 0.30, Legal 0.15, Business 0.15,
+  renormalised over what is present), `changer` = `overall_change >= threshold`,
+  `n_sections_compared`, and the `threshold` and `weights` that produced the flag. No
+  comparable section at all → `overall_change` and `changer` are `null`, not a non-changer.
+* **The threshold is provisional.** `CHANGER_THRESHOLD = 0.15` is a top-quintile proxy taken
+  from the paper's reported distribution of cosine similarity (its bottom similarity quintile
+  sits at roughly 0.85 and below). The paper sorts on quintiles of a cross-section; we do not
+  have one yet. When the archive holds a few hundred scored filings, set the threshold from
+  the observed 80th percentile of `overall_change` (`--threshold` on the batch CLI) and record
+  that in the staged file's `_meta`. Until then every output carries the threshold that made
+  the flag, and the ic.py test below ranks on the continuous score, which does not depend on it.
+
+**The staged file — `filings_signal.json`, in the run directory.** Written by
+`python3 filings.py --batch <dir> --out filings_signal.json` from `<dir>/<SYMBOL>/current.htm +
+prior.htm (+ meta.json)`; read by `scanner.py` (`filings.load_staged`). Shape:
+
+```json
+{
+  "_meta": {"generated_at": "2026-09-10T07:40:00", "threshold": 0.15,
+            "n_symbols": 2, "n_changers": 1, "skipped": ["NOPE: current/prior file missing"],
+            "basis": "filings.py --batch"},
+  "ACME": {
+    "filed": "2026-08-01", "form": "10-K", "prior_filed": "2025-08-01",
+    "accession": "0000000001-26-000001", "prior_accession": "0000000001-25-000001",
+    "change_score": {
+      "sections": {"risk_factors": {"cosine": 0.573, "jaccard": 0.339, "minimum_edit_ratio": 0.462},
+                   "mdna": {"cosine": 1.0, "jaccard": 1.0, "minimum_edit_ratio": 1.0},
+                   "legal_proceedings": {"cosine": 1.0, "jaccard": 1.0, "minimum_edit_ratio": 1.0},
+                   "business": null},
+      "risk_factors_change": 0.427, "mdna_change": 0.0, "overall_change": 0.171,
+      "changer": true, "n_sections_compared": 3, "threshold": 0.15,
+      "weights": {"risk_factors": 0.4, "mdna": 0.3, "legal_proceedings": 0.15, "business": 0.15},
+      "basis": "weighted mean of 1 - cosine(...)", "form": "10-K",
+      "sections_found": {"current": ["risk_factors", "mdna", "legal_proceedings"], "prior": ["..."]}
+    }
+  }
+}
+```
+
+`filed`, `form`, `prior_filed`, `accession`, `prior_accession` come from `meta.json` beside
+the documents (the fetch step writes it from the submissions payload); they are `null` when
+it was not written, and a row with no `filed` date yields **no features at all** — the
+point-in-time guard cannot run without it.
+
+**What the scan row carries.** With the file staged, every row's `features` block gets three
+keys (`null` for a symbol the file does not name):
+
+| key | value |
+|---|---|
+| `filing_change_score` | `change_score.overall_change` — 0 identical, 1 disjoint |
+| `filing_changer` | the boolean; `ic.py --by-feature` reads it as 1.0 / 0.0 |
+| `filing_days_since` | calendar days from `filed` to the scan date |
+
+All three are `null` when the filing's `filed` date is **after** the scan date — a filing is
+knowable from its filing date, not before — which is what makes the same file safe to lay
+over a historical replay. `scanner.scan()` takes the parsed file as an explicit argument
+(`filings_signal=`) precisely so a backtest cannot pick up today's file by accident; only the
+live `python3 scanner.py` path loads it from `$SCAN_DIR`. `meta.filings_signal` on the results
+records `n_symbols`, `n_matched`, `n_changers` and the threshold. Without the file nothing is
+added and the golden output does not move (`tests/test_filings.py`).
+
+**The E16 test.** Do changers underperform non-changers over the next 20 and 60 sessions?
+With the archive records carrying `features.filing_changer` and `features.filing_change_score`:
+
+```bash
+python3 engine/ic.py --records records/ --bars bars.json --horizons 20,60 --by-feature \
+    --md ic_e16.md --json ic_e16.json
+```
+
+Read the `filing_change_score` row: the paper predicts a **negative** IC (more change, lower
+forward return) and a negative top-minus-bottom quantile spread at both horizons, larger at
+60. `filing_changer` gives the same test as a two-group split. The recipe, the sample-size
+floor and the promotion rule are in `docs/BACKTEST.md` §6e. What this cannot tell you: whether
+the effect survives the paper's 2020 publication (post-publication decay is the norm), and
+whether it holds on a liquid large-cap universe where the filings are read faster — both are
+reasons the sign test comes before any screen.
+

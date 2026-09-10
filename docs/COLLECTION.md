@@ -210,6 +210,50 @@ the Intelligence pillar simply drops out of the denominator.
 
 ---
 
+## 4a. Filings — `filings_signal.json` (P-02 / E16, 2026-09-10)
+
+A second optional staged input, alongside `technicals.json` and `sentiment.json`. It carries
+the 10-K/10-Q text-change score ("Lazy Prices", `docs/DATA.md` §5) and is read by
+`scanner.py` at the top of a run; when it is not in `$SCAN_DIR` nothing changes. **Not
+scored** — it lands on each row's `features` block for `ic.py --by-feature`.
+
+The scan slot does **not** fetch filings. A separate task on the box does, at most weekly
+per name, under the SEC fair-access rules (`User-Agent` with a contact, ≤ 10 requests/s):
+
+```bash
+# on the box: URLs per symbol, in order — submissions index, then the two primary documents
+python3 filings.py --edgar-plan --symbols ACME,WIDG --cik-map cik.json
+# fetch step saves <batch>/<SYMBOL>/current.htm + prior.htm + meta.json
+#   meta.json = {"filed", "form", "prior_filed", "accession", "prior_accession"}
+#   (form, filed and the accessions straight from data.sec.gov/submissions; prior = same
+#    form ~one year earlier, filings.pick_filing_pair does the choosing)
+python3 filings.py --batch <batch> --out filings_signal.json
+# then stage filings_signal.json into $SCAN_DIR before:
+python3 scanner.py
+```
+
+Shape of the staged file (full schema in `docs/DATA.md` §5):
+`{"_meta": {generated_at, threshold, n_symbols, n_changers, skipped}, "<SYMBOL>": {filed,
+form, prior_filed, accession, prior_accession, change_score: {sections, risk_factors_change,
+mdna_change, overall_change, changer, n_sections_compared, threshold, weights}}}`.
+
+Rules that are in the code, not the prompt:
+
+| Trap | Handling |
+|---|---|
+| A filing dated after the scan | `features_for` returns all-null — not knowable yet |
+| A row with no `filed` date | no features (the point-in-time guard cannot run) |
+| A section the parser could not find | `null` in `sections`, excluded from `overall_change`; **never 0** |
+| No comparable section at all | `overall_change` and `changer` are `null`, not "unchanged" |
+| Table of contents / cross-references | lose to the longest line-start body, never the section |
+| Symbol not in the file | row carries the three keys as `null` — "not covered" ≠ "no change" |
+| Threshold | provisional 0.15, travels in every output; reset from the archive's 80th percentile when there is one |
+
+`filings.py` is a data dependency of the scan and an import of `scanner.py`; it is in
+`engine/MANIFEST.txt` and the CI stdlib allowlist, and it imports nothing else from the engine.
+
+---
+
 ## 5. Corroboration — the finding the probe actually forced
 
 On 2026-09-01 ApeWisdom and StockTwits trending shared **4 of 15** top names, and
