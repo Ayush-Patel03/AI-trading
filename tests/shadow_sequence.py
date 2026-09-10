@@ -96,7 +96,9 @@ if __name__ == "__main__":
         sys.path.insert(0, str(ENGINE))
         import pm
         importlib.reload(pm)
-        out = replay(pm, pathlib.Path(d))
+        # The golden is the engine WITHOUT the shadow model: regenerate it with the model
+        # off whenever a sibling change adds keys to the book/journal/state.
+        out = replay(pm, pathlib.Path(d), {"shadow": {"enabled": False}})
     if "--write" in sys.argv:
         GOLDEN.write_text(json.dumps(out, indent=1, sort_keys=True), encoding="utf-8")
         print(f"wrote {GOLDEN}")
