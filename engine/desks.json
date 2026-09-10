@@ -1,6 +1,6 @@
 {
   "_what": "Strategy desks for the Portfolio Manager. Same engine, same risk rules unless overridden, different candidate mandate, SEPARATE paper book and journal per desk — so the weekly review can attribute results to a setup class instead of to the blend. pm.py --desk <name> loads this file from $SCAN_DIR. The default desk 'swing' is the unfiltered book on the unsuffixed files and is what the Trade Desk board shows.",
-  "_rules": "Every desk starts from the same $5,000 of paper capital, runs under the same account lock and paper lock, and is written back under the same revision/--check protocol. Desk books live at claude/paper-book-<desk>.json and journals at claude/pm-journal-<desk>.json. A desk with no candidates in its mandate simply reports that and manages its own holdings. A desk may name its day-trade / margin regime as rules.broker_policy (legacy_pdt | intraday_margin | cash_settled, see docs/PM.md section 4); unset, the book, engine-config.json and finally the default intraday_margin decide. A desk names its stop policy as rules.stop_policy (fixed_atr | chandelier | time_catastrophe, parameters in rules.stop_params — docs/PM.md 'Stops by desk type'); unset, fixed_atr. A desk with top-level \"inactive\": true is a TEMPLATE: pm.py --desk refuses it without --allow-inactive, no book is created for it, and the peer loader and paper mirror skip it.",
+  "_rules": "Every desk starts from the same $5,000 of paper capital, runs under the same account lock and paper lock, and is written back under the same revision/--check protocol. Desk books live at claude/paper-book-<desk>.json and journals at claude/pm-journal-<desk>.json. A desk with no candidates in its mandate simply reports that and manages its own holdings. A desk may name its day-trade / margin regime as rules.broker_policy (legacy_pdt | intraday_margin | cash_settled, see docs/PM.md section 4); unset, the book, engine-config.json and finally the default intraday_margin decide. A desk names its stop policy as rules.stop_policy (fixed_atr | chandelier | time_catastrophe, parameters in rules.stop_params — docs/PM.md 'Stops by desk type'); unset, fixed_atr. A desk with top-level \"inactive\": true is a TEMPLATE: pm.py --desk refuses it without --allow-inactive, no book is created for it, and the peer loader and paper mirror skip it. A desk with \"kind\": \"options\" is the paper options desk (D-02 / E27): pm.py --desk dispatches it to options_desk.run_slot under the same write protocol; its book carries `structures` (defined-risk spreads) instead of `positions`, and the house tally counts each structure as its beta-weighted-delta equity equivalent.",
   "desks": {
     "swing": {
       "label": "Swing — the unfiltered book",
@@ -70,6 +70,35 @@
       "publishes_board": false,
       "_thesis": "Opening-range breakout (E24): enter on a break of the first bar's range in the direction of the gap, stop at 10% of ATR (the paper's stop, implemented as chandelier k_init 0.1), flatten at the close — never held overnight. Needs intraday bars and an entry slot the engine does not have yet.",
       "_note": "Template only (E24). No book exists; pm.py refuses --desk orb without --allow-inactive. `flatten_at_close` closes every position at the power-hour slot; intraday_margin is required because every trade is a day trade."
+    },
+    "options": {
+      "inactive": true,
+      "kind": "options",
+      "label": "Options — XSP/SPY put credit spreads, paper (E27) — INACTIVE TEMPLATE",
+      "doc_book": "claude/paper-book-options.json",
+      "doc_journal": "claude/pm-journal-options.json",
+      "book": "paper_book_options.json",
+      "journal": "pm_journal_current_options.json",
+      "starting_equity": 5000.0,
+      "rules": {
+        "underlyings": ["XSP", "SPY"],
+        "dte_min": 30, "dte_max": 45, "dte_target": 40,
+        "short_delta": 0.20, "width": {"XSP": 5.0, "SPY": 5.0},
+        "max_risk_per_structure_pct": 8.0, "max_total_risk_pct": 40.0,
+        "max_structures": 5, "max_per_sector": 2,
+        "profit_take_pct": 50.0, "exit_dte": 21, "defensive_close_on_breach": true,
+        "vix_max": 30.0, "require_vix_below_vix3m": true, "require_gex_positive": true,
+        "beta_delta_limit_pct_nav": 0.5, "vega_limit_pct": 0.5, "theta_limit_pct": 0.3,
+        "fill": {"slip_per_leg": 0.02, "max_spread_over_mid": 0.10, "min_bid": 0.01},
+        "fees": {"regulatory_per_contract": 0.04, "index_per_contract": 0.35,
+                 "equity_commission_per_contract": 0.0,
+                 "index_underlyings": ["XSP", "SPX", "NDX", "RUT", "VIX", "DJX"]},
+        "broker_policy": "intraday_margin"
+      },
+      "filter": {},
+      "publishes_board": false,
+      "_thesis": "E27, plan §6 / Appendix H §2, §7. XSP (fallback SPY) put credit spreads, 30–45 DTE, short strike nearest 20Δ, $5 wide. Premium at risk per structure ≤ 8% of desk equity ($400 on $5k: width×100 − credit×100); total defined risk ≤ 40%; ≤ 5 concurrent, ≤ 2 per sector; never on an underlying a stock desk holds. Exit at 50% of max profit or 21 DTE, whichever first; defensive close when spot trades under the short strike. No new short vol when VIX > VIX3M, VIX > 30, or SPY GEX < 0 (GEX from the chain snapshot; skipped and logged when the chain carries no gamma/OI). Portfolio limits: β-weighted delta within ±0.5% of house NAV per 1% SPY move, net short vega ≤ 0.5% of desk equity per vol point, theta ≤ 0.3%/day. Paper fills at the spread mid − $0.02/leg, legs with bid = 0 or spread/mid > 10% refused; fees $0.04/contract regulatory + $0.35 index ($0 equity commission). Marked every slot from chain mids; stress replay weekly (2024-08-05, 2025-04-07/08) by Black–Scholes. Reviewed at 60 sessions against the Cboe PUT benchmark's risk profile. The short-vol sleeve is a higher-Sharpe form of equity beta, not diversification — the house tally counts it as the hidden long it is.",
+      "_note": "Template only (D-02). No book exists; pm.py refuses --desk options without --allow-inactive. Activate by removing `inactive`, creating the two project docs (python3 options_desk.py --init-book paper_book_options.json for the seed), adding the desk to runner/slots.json, and staging option_chains.json (XSP/SPY puts) and vix.json ({vix, vix3m}) with every PM slot. Shadow fills do not apply — the paper fill is the conservative model. The dead-man's switch stamps no stop on a spread: defined risk bounds it."
     }
   }
 }

@@ -134,6 +134,15 @@ ADDED 2026-09-10
     deny-list checks WOULD have refused live (jrn["live_would_refuse"]). PM.md § "Stops by
     desk type" and § "Live guardrails".
 
+  * D-02 — the PAPER OPTIONS DESK (options_desk.py, E27). desks.json can now carry a desk
+    with `"kind": "options"`; `--desk` on such a desk dispatches the decision run to
+    options_desk.run_slot() and then applies exactly the protocol below — revision,
+    --check, heartbeat, journal merge, pm_book_next / pm_state files. The equity engine
+    (run()) is not touched and the three equity desks are unchanged. The desk ships
+    INACTIVE; house_exposure() folds an options peer book in as a beta-weighted-delta
+    equity equivalent (house.options_holdings). Paper only: options_desk imports nothing
+    that can reach a broker.
+
 Paths resolve from SCAN_DIR, else from this file's own directory.
 """
 import json, os, sys, argparse, datetime as dt
@@ -235,7 +244,7 @@ SENTINEL = "sentinel"
 
 # The active strategy desk. main() fills this from desks.json when --desk is given;
 # the default is the unfiltered "swing" desk with the unsuffixed file names.
-DESK = {"name": "swing", "filter": {}, "suffix": ""}
+DESK = {"name": "swing", "filter": {}, "suffix": "", "kind": "equity"}
 
 # HOUSE-01 — the other desks' books, loaded by main() from desks.json. Empty means the
 # house caps were not evaluated this run, and that is journaled rather than assumed safe.
@@ -278,7 +287,8 @@ def use_desk(name, desks_path="desks.json", allow_inactive=False):
         cfg = desks.get("swing") or {}
         if cfg.get("inactive") and not allow_inactive:
             raise InactiveDesk("desk 'swing' is marked inactive in desks.json")
-        DESK.update({"name": "swing", "filter": {}, "suffix": "", "rules": cfg.get("rules") or {}})
+        DESK.update({"name": "swing", "filter": {}, "suffix": "", "rules": cfg.get("rules") or {},
+                     "kind": cfg.get("kind") or "equity"})
         return cfg
     desks = (_load(desks_path) or {}).get("desks") or {}
     cfg = desks.get(name)
@@ -290,7 +300,8 @@ def use_desk(name, desks_path="desks.json", allow_inactive=False):
             f"{cfg.get('_note') or 'it has no book and is not scheduled'}. "
             "Pass --allow-inactive to run it deliberately against a staged book.")
     DESK.update({"name": name, "filter": cfg.get("filter") or {},
-                 "suffix": f"-{name}", "rules": cfg.get("rules") or {}})
+                 "suffix": f"-{name}", "rules": cfg.get("rules") or {},
+                 "kind": cfg.get("kind") or "equity"})
     for k, v in (cfg.get("rules") or {}).items():
         if k in RULES:
             RULES[k] = v          # portfolio.RULES is the dict build_proposals defaults to
@@ -602,6 +613,22 @@ def house_exposure(this_book, pb, peers=None):
             continue
         desk_label = DESK["name"] if name == "__this__" else name
         inv = 0.0
+        if bk.get("kind") == "options":
+            # D-02: a peer options book holds no shares. Its cash is house equity (less the
+            # debit to close what it has sold), and each open structure enters the tally as
+            # its beta-weighted-delta EQUITY EQUIVALENT — house.options_holdings(): net delta
+            # × 100 × contracts × spot × beta — so a short put spread counts as the hidden
+            # long it is, under the underlying's symbol and the "Index" sector.
+            eq_o = house_mod.options_equity(bk)
+            oh = house_mod.options_holdings(bk, desk_label)
+            for h in oh:
+                holdings.append(h)
+                by_symbol[h["symbol"]] = round(by_symbol.get(h["symbol"], 0.0) + h["notional"], 2)
+                by_sector[h["sector"]] = round(by_sector.get(h["sector"], 0.0) + h["notional"], 2)
+            equity += eq_o
+            desks[name] = {"equity": round(eq_o, 2), "invested": round(sum(h["notional"] for h in oh), 2),
+                           "committed": 0.0, "kind": "options"}
+            continue
         for p in bk.get("positions", []):
             px = _px(p["symbol"], p.get("last_price") or p.get("avg_cost") or 0.0)
             mv = px * p.get("shares", 0.0)
@@ -2061,7 +2088,9 @@ def write_heartbeat(base, sfx, desk, slot, ts, book, quiet, decisions=0, warning
     hb = {
         "ts": ts, "date": ts[:10], "desk": desk, "slot": slot,
         "quiet": bool(quiet), "reason": reason,
-        "positions": len(book.get("positions", []) if isinstance(book, dict) else []),
+        # D-02: an options book carries `structures` instead of `positions`; both count.
+        "positions": len((book.get("positions") or book.get("structures") or [])
+                         if isinstance(book, dict) else []),
         "working_orders": len(book.get("working_orders", []) if isinstance(book, dict) else []),
         "decisions": decisions, "warnings": warnings,
         # The revision that is actually STORED after this run. run() increments
@@ -2174,7 +2203,8 @@ def main():
 
     mode = args.mode or book.get("mode", "paper")
     ts_now = _now(args.now).isoformat().replace("+00:00", "Z")
-    if args.slot == SENTINEL and not (book.get("positions") or book.get("working_orders")):
+    if args.slot == SENTINEL and not (book.get("positions") or book.get("working_orders")
+                                      or book.get("structures")):
         write_heartbeat(BASE, sfx, DESK["name"], args.slot, ts_now, book, quiet=True,
                         reason="flat — no positions and no working orders")
         print("SENTINEL QUIET — the book holds no positions and no working orders. "
@@ -2190,8 +2220,16 @@ def main():
         prices.update(parsed)      # broker quotes outrank a hand-written override
 
     try:
-        book, jrn, state = run(book, scan, prices, args.slot, args.now, mode,
-                               policy_name=args.broker_policy)
+        if DESK.get("kind") == "options":
+            # D-02 — the paper options desk. Same protocol from here on; different engine.
+            import options_desk
+            book, jrn, state = options_desk.run_slot(
+                BASE, book, args.slot, args.now, rules=DESK.get("rules"), peers=PEERS,
+                mode=mode, prices=prices, desk_name=DESK["name"],
+                policy_name=args.broker_policy)
+        else:
+            book, jrn, state = run(book, scan, prices, args.slot, args.now, mode,
+                                   policy_name=args.broker_policy)
     except ValueError as e:          # an unknown broker policy name in the book or config
         print(f"FATAL: {e}", file=sys.stderr)
         sys.exit(2)
@@ -2233,8 +2271,11 @@ def main():
         b = state["book"]
         write_heartbeat(BASE, sfx, DESK["name"], args.slot, jrn["ts"], book, quiet=True,
                         reason="every stop checked, nothing fired", exposure=exposure)
+        # D-02: an options book carries `structures`, not `positions` / `working_orders`.
+        n_pos = len(book.get("positions") or book.get("structures") or [])
+        noun = "structure(s)" if DESK.get("kind") == "options" else "position(s)"
         print(f"SENTINEL QUIET — {jrn['date']} {jrn['ts'][11:16]}Z  equity ${b['equity']:,.2f}  "
-              f"{len(book['positions'])} position(s), {len(book['working_orders'])} working "
+              f"{n_pos} {noun}, {len(book.get('working_orders') or [])} working "
               "order(s), every stop checked, nothing fired. Nothing written — do not "
               "project_write the book or the journal, do not publish.")
         print(house_mod.console_line((state.get("house") or {}).get("exposure")))

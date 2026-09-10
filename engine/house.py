@@ -200,6 +200,57 @@ def factor_exposure(positions, features, combined_equity=None, w=None):
             "crowded_names": sorted(names)}
 
 
+# ------------------------------------------------------------------ options desk (D-02)
+OPTIONS_MULTIPLIER = 100
+
+
+def options_equity(book):
+    """An options book's equity: cash less the debit to close every open structure at its
+    last mark (value × multiplier × contracts). Mirrors options_desk.desk_equity()."""
+    liab = 0.0
+    for s in (book or {}).get("structures") or []:
+        if s.get("status", "open") != "open":
+            continue
+        liab += (float(s.get("value") or 0.0) * float(s.get("contracts") or 0)
+                 * float(s.get("multiplier") or OPTIONS_MULTIPLIER))
+    return round(float((book or {}).get("cash") or 0.0) - liab, 2)
+
+
+def options_holdings(book, desk="options"):
+    """The house-exposure lines for an options book's open structures.
+
+    THE CONVERSION. A defined-risk put credit spread has a net delta (short put delta
+    negated plus long put delta — positive, a hidden long). Its EQUITY EQUIVALENT is what
+    a share position with the same first-order sensitivity to the underlying would be:
+
+        notional = |net delta per share| × multiplier × contracts × spot × beta
+
+    with beta the underlying's beta to SPY (1.0 for SPY / XSP / SPX). A structure the
+    desk has not been able to mark (no delta, no spot) contributes nothing and is not
+    reported as hedged — it is simply absent, exactly as an unpriced share position is
+    from beta_exposure(). Sector is "Index" for an index underlying, else the structure's
+    own `sector`. One line per structure, `kind: "options-delta"`."""
+    out = []
+    for s in (book or {}).get("structures") or []:
+        if s.get("status", "open") != "open":
+            continue
+        g = s.get("greeks") or {}
+        delta = g.get("delta")
+        spot = s.get("spot")
+        if not isinstance(delta, (int, float)) or not isinstance(spot, (int, float)) or spot <= 0:
+            continue
+        beta = s.get("beta") if isinstance(s.get("beta"), (int, float)) else 1.0
+        notional = (abs(float(delta)) * float(s.get("multiplier") or OPTIONS_MULTIPLIER)
+                    * float(s.get("contracts") or 0) * float(spot) * float(beta))
+        if notional <= 0:
+            continue
+        out.append({"desk": desk, "symbol": str(s.get("underlying") or "?").upper(),
+                    "sector": s.get("sector") or "Index", "notional": round(notional, 2),
+                    "kind": "options-delta", "structure_id": s.get("id"),
+                    "net_delta": round(float(delta), 4)})
+    return out
+
+
 # ------------------------------------------------------------------ concentration
 def largest_sector_share(positions, combined_equity):
     """(sector, share of combined equity) for the biggest GICS sector, or (None, None)."""

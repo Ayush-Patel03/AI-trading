@@ -13,6 +13,7 @@ ic.py
 ladder.py
 ledger.py
 mirror.py
+options_desk.py
 paper_mirror.py
 pm.py
 portfolio.py
