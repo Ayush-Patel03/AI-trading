@@ -5,7 +5,7 @@ entry has a kill-switch warning; the board shows the red banner. A session loss 
 against the session's opening equity did it (PM.md §7).
 
 **How it shows up.** The journal entry for that run, the book's `day` block, the coverage row's
-warning count, the Trade Desk banner, and `HOUSE`/`halted` on the page's desk chip.
+warning count, the Trade Desk banner, `HOUSE`/`halted` on the page's desk chip, and the health sheet's `halt_state` check (`warn` on a halt or a ladder rung, `fail` on a rung-3 flatten).
 
 **What the halt does.** Cancels working buys and blocks new entries for the rest of the session.
 **Exits stay live** — stops and targets still fire at every sentinel and slot. Nothing here is

@@ -3,7 +3,7 @@
 **Symptom.** The dashboard on the box (`C:\ai-trading-mirror\`, served by nginx) shows a
 `manifest.json` older than two slots while the state repo has newer commits.
 
-**How it shows up.** The page's "as of" chip; `mirror age` on the health sheet (plan 1.5).
+**How it shows up.** The page's "as of" chip; `mirror_age` on the health sheet (`warn` at 2 expected runs since `manifest.json` `generated_at`, `fail` at 4; the runner passes `--mirror C:\ai-trading-mirror`).
 The books in git are fine — this is the projection that is behind, not the state.
 
 **Recovery — a session.** The mirror is built from the state repo by `engine/mirror.py` on the

@@ -5,7 +5,7 @@
 Exit code is still 0: the state is safe, on the box.
 
 **How it shows up.** `git -C C:\ai-trading-state status -sb` shows `[ahead N]`; the health
-sheet's `push_backlog` check fails; the project's synced copy of `ai-trading-state` stops
+sheet's `push_backlog` check is `warn` at 1 unpushed commit and `fail` at 2 (`value.ahead`); the project's synced copy of `ai-trading-state` stops
 moving while the box keeps committing.
 
 **Two causes, two fixes.**

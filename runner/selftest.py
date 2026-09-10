@@ -15,7 +15,12 @@ through tests/test_runner.py. It proves, on this machine and this interpreter:
   5. the lock is released after every outcome;
   6. a scan run over the frozen scan_data fixture commits scans/latest.json, the compact
      record, the index, the history, the per-slot scan snapshot and the followed set;
-  7. the tz database resolves America/New_York (the engine's freshness gates depend on it).
+  7. the tz database resolves America/New_York (the engine's freshness gates depend on it);
+  8. the health slot runs engine/health.py over the state repo and writes the sheet, and
+     every invocation leaves health/heartbeat.json (U-01, K-05);
+  9. the dead-man's switch (runner/deadman.py) trips on a stale heartbeat during market
+     hours — working buys cancelled, protective stops stamped on the paper books — and
+     clears on a fresh one.
 
     python runner/selftest.py [--keep]         exit 0 on PASS, 1 on FAIL
 
@@ -36,6 +41,7 @@ ROOT = HERE.parent
 FIX = ROOT / "tests" / "fixtures"
 sys.path.insert(0, str(HERE))
 import run as runner  # noqa: E402
+import deadman        # noqa: E402
 
 DESK_FIXTURES = {"swing": "book_swing.json", "pullback": "book_pullback.json",
                  "momentum": "book_momentum.json"}
@@ -286,6 +292,53 @@ def run_selftest(work, engine_root=None, log=print):
           "a symbol closed on the day it was first seen")
     step("scan snapshot and followed set written back",
          detail=f"{len(followed['symbols'])} symbol(s) followed")
+
+    # 7. the health slot and the heartbeat (U-01 / K-05)
+    hb = runner.load_json(state / "health" / "heartbeat.json")
+    check(hb and hb.get("run_id") == man3["run_id"], "health/heartbeat.json not left by the last run")
+    h_now = synthetic_now("16:15")
+    h_inputs = write_inputs(work / "inputs-health", {}, as_of=h_now)
+    code = runner.main(["--slot", "health", "--inputs", str(h_inputs), "--state", str(state),
+                        "--engine", str(engine_root), "--no-push", "--now", runner.iso(h_now)])
+    check(code == 0, f"health slot exited {code}: {runner.load_json(h_inputs / 'outcome.json')}")
+    sheet = runner.load_json(state / "health" / f"{date}.json")
+    check(sheet and sheet.get("verdict") in ("pass", "warn", "fail"), "health sheet has no verdict")
+    names = [c["name"] for c in sheet["checks"]]
+    for want in ("book_freshness", "coverage_today", "runner_heartbeat", "deadman", "lock_free", "engine_sha"):
+        check(want in names, f"health sheet lacks the {want} check")
+    check((state / "health" / f"{date}.md").exists(), "health/<date>.md not written")
+    step("health slot wrote the sheet and the heartbeat",
+         detail=f"verdict {sheet['verdict']}, {len(names)} checks")
+
+    # 8. the dead-man's switch, on a fixed trading-day clock so it is the same on a weekend
+    runner.write_json(state / "health" / "heartbeat.json",
+                      {"ts": "2026-09-10T13:30:00Z", "slot": "sentinel", "desk": "all",
+                       "run_id": "selftest", "outcome": "committed"})
+    _git(state, "add", "-A")
+    _git(state, "-c", "user.name=selftest", "-c", "user.email=selftest@local", "commit", "-q", "-m", "hb")
+    code = deadman.main(["--state", str(state), "--now", "2026-09-10T15:50:00Z"])
+    check(code == deadman.EXIT_TRIPPED, f"deadman exited {code}, expected {deadman.EXIT_TRIPPED} (tripped)")
+    dm = runner.load_json(state / "health" / "deadman.json")
+    check(dm and dm.get("tripped") is True and dm.get("missed") >= 2, f"deadman record wrong: {dm}")
+    for desk in desks:
+        b = runner.load_json(state / "books" / f"{desk}.json")
+        check(all(p.get("protective_stop", {}).get("reason") == "deadman" for p in b["positions"]),
+              f"{desk}: a position lacks the deadman protective_stop stamp")
+        check(not any(o.get("side") == "buy" for o in b["working_orders"]), f"{desk}: a working buy survived")
+        j = runner.load_json(state / "journals" / f"{desk}.json")
+        check(j["entries"][-1].get("slot") == "deadman", f"{desk}: no deadman journal entry")
+    check(not _git(state, "status", "--porcelain").strip(), "deadman left the tree dirty")
+    check(deadman.main(["--state", str(state), "--now", "2026-09-10T16:20:00Z"]) == 0,
+          "a second run while tripped did not stay quiet")
+    runner.write_json(state / "health" / "heartbeat.json",
+                      {"ts": "2026-09-10T16:40:00Z", "slot": "sentinel", "desk": "all",
+                       "run_id": "selftest-2", "outcome": "committed"})
+    check(deadman.main(["--state", str(state), "--now", "2026-09-10T16:45:00Z"]) == 0, "clear run failed")
+    dm = runner.load_json(state / "health" / "deadman.json")
+    check(dm.get("tripped") is False and dm.get("cleared_at"), "deadman did not clear on a fresh heartbeat")
+    step("dead-man's switch trips on a stale heartbeat and clears on a fresh one",
+         detail=f"{sum(len(runner.load_json(state / 'books' / f'{d}.json')['positions']) for d in desks)} "
+                "position(s) stamped")
 
     n = len(_git(state, "log", "--oneline").strip().splitlines())
     report["commits"] = n

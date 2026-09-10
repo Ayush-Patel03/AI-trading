@@ -5,9 +5,13 @@ without `RUNNER …` on its last line and without `outcome.json` appearing in
 `C:\ai-trading-inputs\<run_id>\`.
 
 **How it shows up.** Nothing on the box wrote anything, so the runner could not leave its own
-record. The gap is visible only as a missing `manifests\<date>\<slot>-<desk>.json`, a missing
-coverage row for that slot, and a `last_commit_age_h` failure on the next health sheet. The
-page shows the previous run's timestamp going stale.
+record — not even `health\heartbeat.json`, which every invocation writes first. The gap is
+visible as a missing `manifests\<date>\<slot>-<desk>.json`, a missing coverage row for that slot,
+and on the next health sheet (`health\<date>.json`): `runner_heartbeat` with `value.missed` ≥ 1
+(`warn` at 2, `fail` at 3), `coverage_today.value.missing` naming the slot, `book_freshness`
+counting the same silence per desk, and `state_commit_age.value.missed`. Two missed runs during
+market hours trip the dead-man's switch (`deadman-tripped.md`), which the sheet reports as
+`deadman: fail`. The page shows the previous run's timestamp going stale.
 
 **Recovery — the session, now.**
 1. Retry once: `start_process` the same command. The runner is idempotent; a run that did
@@ -18,6 +22,8 @@ page shows the previous run's timestamp going stale.
    unreachable: <error text>", "engine_source": "session"}` under today's date, write it back,
    and say so in the report. Do not commit it — the next successful run's `git add -A` will.
 3. Push a notification: a slot that did not run is a position that was not checked.
+4. If two runs are missed the dead-man's task will stamp the paper books on its own — do not
+   pre-empt it, and do not clear its record by hand (`deadman-tripped.md`).
 
 **Recovery — Vishal.** Check Desktop Commander is running and the box is signed in
 (`box-dark.md`). Run `C:\ai-trading-runner\.venv\Scripts\python.exe

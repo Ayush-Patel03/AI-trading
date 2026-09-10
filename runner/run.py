@@ -636,59 +636,75 @@ def watch_steps(ctx, session, desks, cfg):
     return results
 
 
-def health_steps(ctx, state, engine_root, engine_sha, engine_branch, now, slots):
-    """A runner-side health probe: pass/fail per check, written to health/<date>.json.
+HEALTH_STATUS_RANK = {"pass": 0, "warn": 1, "fail": 2}
 
-    The engine carries no health module today; if `engine/health.py` ever appears it is
-    run after these checks and its exit code recorded.
+
+def _health_row(name, status, value, threshold, detail):
+    return {"name": name, "status": status, "value": value, "threshold": threshold, "detail": detail}
+
+
+def health_steps(ctx, state, engine_root, engine_sha, engine_branch, now, slots, mirror=None,
+                 slots_path=None, config_path=None):
+    """The health slot: engine/health.py over the state repo, plus the runner's own checks.
+
+    `engine/health.py` (U-01) owns everything that can be read off the state repo — book
+    freshness, coverage, unjudged names, the shadow gap, halts and the ladder, the broker
+    policy, commit age and push backlog, the mirror, the heartbeat, the dead-man's switch,
+    tzdata and the engine branch. The runner adds only what the engine cannot see from a
+    directory: whether the lock is free and whether it could identify the engine at all.
+    The sheet is `{"checks": [{name, status, value, threshold, detail}], "verdict", ...}`
+    and is written to health/<date>.json (and .md) by main().
     """
     state = Path(state)
-    checks = {}
-    tz_ok = to_et(now, slots.get("timezone", "America/New_York"))[1] == "zoneinfo"
-    checks["tz_database"] = {"ok": tz_ok, "detail": "zoneinfo resolves America/New_York"
-                             if tz_ok else "no tz database — install tzdata"}
-    checks["engine_branch"] = {"ok": engine_branch == "production", "detail": engine_branch}
-    checks["engine_sha"] = {"ok": bool(engine_sha), "detail": engine_sha}
-    desks = slots.get("desks") or []
-    ages = {}
-    for desk in desks:
-        b = load_json(state / "books" / f"{desk}.json")
-        if not isinstance(b, dict):
-            ages[desk] = None
-            continue
-        try:
-            ages[desk] = round((now - parse_iso(b.get("last_run"))).total_seconds() / 3600, 2)
-        except (ValueError, TypeError):
-            ages[desk] = None
-    checks["books_present"] = {"ok": all(a is not None for a in ages.values()), "detail": ages}
-    checks["book_freshness_h"] = {"ok": all(a is not None and a <= 30 for a in ages.values()),
-                                  "detail": ages}
-    cov = load_json(state / "coverage" / "pm-coverage.json") or {}
-    today = to_et(now, slots.get("timezone", "America/New_York"))[0].date().isoformat()
-    runs = ((cov.get("days") or {}).get(today) or {}).get("runs") or []
-    aborted = [r for r in runs if r.get("aborted")]
-    sentinels = [r for r in runs if r.get("slot") == "sentinel" and not r.get("aborted")]
-    checks["coverage_today"] = {"ok": bool(runs), "detail": {"runs": len(runs),
-                                "sentinels": len(sentinels), "aborted": len(aborted)}}
+    args = ["--state", str(state), "--engine", str(engine_root), "--out", "health.json",
+            "--md", "health.md", "--slots", str(slots_path or SLOTS_PATH)]
+    if mirror:
+        args += ["--mirror", str(mirror)]
+    if config_path:
+        args += ["--config", str(config_path)]
+    rec = ctx.run("engine-health", "health.py", *args, *_now_args(ctx), fatal=False)
+    doc = load_json(ctx.run_dir / "health.json")
+    if not isinstance(doc, dict) or not isinstance(doc.get("checks"), list):
+        tail = (rec["stderr"] or rec["stdout"]).strip().splitlines()[-2:]
+        doc = {"as_of": iso(now), "verdict": "fail", "checks": [
+            _health_row("engine_health", "fail", rec["exit_code"], "health.py exits 0/1/2 and writes health.json",
+                        f"health.py exited {rec['exit_code']} without a sheet: " + " | ".join(tail))]}
+    checks = list(doc["checks"])
     lock = state / LOCK_NAME
-    checks["lock_free"] = {"ok": not lock.exists() or load_json(lock, {}).get("pid") == os.getpid(),
-                           "detail": str(lock)}
-    last = git(state, "log", "-1", "--format=%cI")
-    if last.returncode == 0 and last.stdout.strip():
-        age_h = round((now - parse_iso(last.stdout.strip())).total_seconds() / 3600, 2)
-        checks["last_commit_age_h"] = {"ok": age_h <= 30, "detail": age_h}
-    else:
-        checks["last_commit_age_h"] = {"ok": False, "detail": "no commits"}
-    behind = git(state, "status", "-sb")
-    checks["push_backlog"] = {"ok": "[ahead" not in behind.stdout, "detail": behind.stdout.strip()[:120]}
-    doc = {"generated": iso(now), "runner_version": RUNNER_VERSION, "engine_sha": engine_sha,
-           "python": platform.python_version(), "host": platform.node(),
-           "ok": all(c["ok"] for c in checks.values()), "checks": checks}
-    if (ctx.run_dir / "health.py").exists():
-        rec = ctx.run("engine-health", "health.py", fatal=False)
-        doc["engine_health_exit"] = rec["exit_code"]
+    lock_ok = not lock.exists() or (load_json(lock, {}) or {}).get("pid") == os.getpid()
+    checks.append(_health_row("lock_free", "pass" if lock_ok else "warn", lock_ok,
+                              "no foreign .runner.lock", str(lock) if lock.exists() else "no lock"))
+    checks.append(_health_row("engine_sha", "pass" if engine_sha else "fail", engine_sha,
+                              "the engine clone answers rev-parse HEAD",
+                              f"{engine_sha[:10]}@{engine_branch}" if engine_sha else "engine sha unknown"))
+    doc["checks"] = checks
+    doc["verdict"] = max((c["status"] for c in checks), key=lambda s: HEALTH_STATUS_RANK.get(s, 2))
+    doc.update({"generated": iso(now), "runner_version": RUNNER_VERSION, "engine_sha": engine_sha,
+                "python": platform.python_version(), "host": platform.node(),
+                "engine_health_exit": rec["exit_code"], "ok": doc["verdict"] != "fail"})
     write_json(ctx.run_dir / "health.json", doc)
+    md = ctx.run_dir / "health.md"
+    if md.exists():
+        extra = "".join(f"| `{c['name']}` | {c['status'].upper()} | {c['detail']} | {c['threshold']} |\n"
+                        for c in checks[-2:])
+        md.write_text(md.read_text(encoding="utf-8").rstrip("\n") + "\n" + extra, encoding="utf-8")
     return doc
+
+
+def write_heartbeat(state, ts, slot, desk, run_id, outcome):
+    """K-05 — `<state>/health/heartbeat.json`: proof the runner was invoked at all.
+
+    Written on every invocation, any slot, any outcome (refused and already_done included),
+    so an independent checker (runner/deadman.py) can tell "the box is running the runner
+    and the runner is saying no" from "nothing is running". Never on a dry run.
+    """
+    try:
+        write_json(Path(state) / "health" / "heartbeat.json",
+                   {"ts": ts, "slot": slot, "desk": desk, "run_id": run_id, "outcome": outcome,
+                    "pid": os.getpid(), "host": platform.node(), "runner_version": RUNNER_VERSION})
+        return True
+    except OSError:
+        return False
 
 
 # ------------------------------------------------------------------ (f) write-back
@@ -907,6 +923,8 @@ def parse_args(argv=None):
                     help="engine-config.json (identifiers; never committed). Default: "
                          "<engine clone>/../engine-config.json, then <state>/engine-config.json")
     ap.add_argument("--slots", default=None, help="alternative slots.json")
+    ap.add_argument("--mirror", default=None,
+                    help="health only: the served mirror directory (manifest.json age check)")
     ap.add_argument("--dry-run", action="store_true",
                     help="verify, stage and run the engine, but write nothing back and do not commit")
     ap.add_argument("--no-push", action="store_true")
@@ -986,6 +1004,10 @@ def main(argv=None):
         manifest["outcome"] = outcome
         manifest["reason"] = reason
         manifest["log"] = lines[-80:]
+        # K-05: the heartbeat, before anything else can fail — any slot, any outcome.
+        if not a.dry_run and (state / ".git").exists():
+            manifest["heartbeat"] = write_heartbeat(state, manifest["finished"], a.slot, a.desk,
+                                                    run_id, outcome)
         if not a.dry_run and outcome != "already_done":
             write_json(manifest_path(state, date, key), manifest)
             if commit_msg:
@@ -1110,14 +1132,20 @@ def main(argv=None):
                 merge_coverage(state, row)
                 written.append("coverage/pm-coverage.json")
         elif step == "health":
-            doc = health_steps(ctx, state, engine_root, engine_sha, engine_branch, now, slots)
-            manifest["engine_exit_code"] = 0 if doc["ok"] else 3
-            manifest["health"] = {k: v["ok"] for k, v in doc["checks"].items()}
+            doc = health_steps(ctx, state, engine_root, engine_sha, engine_branch, now, slots,
+                               mirror=a.mirror, slots_path=a.slots, config_path=config_path)
+            manifest["engine_exit_code"] = HEALTH_STATUS_RANK.get(doc["verdict"], 2)
+            manifest["health"] = {c["name"]: c["status"] for c in doc["checks"]}
+            manifest["health_verdict"] = doc["verdict"]
             if not a.dry_run:
                 write_json(state / "health" / f"{date}.json", doc)
                 written.append(f"health/{date}.json")
-            log("health: " + ("PASS" if doc["ok"] else "FAIL — " + ", ".join(
-                k for k, v in doc["checks"].items() if not v["ok"])))
+                md = run_dir / "health.md"
+                if md.exists():
+                    shutil.copyfile(md, state / "health" / f"{date}.md")
+                    written.append(f"health/{date}.md")
+            flagged = [f"{c['name']} ({c['status']})" for c in doc["checks"] if c["status"] != "pass"]
+            log(f"health: {doc['verdict'].upper()}" + (" — " + ", ".join(flagged) if flagged else ""))
         manifest["steps"] = [{k: v for k, v in s.items() if k not in ("stdout", "stderr")}
                              for s in ctx.steps]
         manifest["written"] = written
