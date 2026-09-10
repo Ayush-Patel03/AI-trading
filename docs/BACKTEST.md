@@ -494,6 +494,39 @@ nothing.
 
 ---
 
+## 6d. E15 — opportunistic insider buying (P-01, 2026-09-10)
+
+**The claim.** Cohen, Malloy & Pomorski (2012) — an insider's trade is *routine* when they
+traded in the same calendar month in each of the three prior years, *opportunistic*
+otherwise; opportunistic buys earned ≈ 82 bp/month abnormal, routine trades ≈ 0. The
+retail-friendly version is the cluster buy: ≥ 2 distinct non-routine insiders buying on the
+open market inside 30 days. `engine/insiders.py` parses Form 4 XML into `insiders.json`,
+computes `insiders_signal.json`, and the scanner logs three keys on every row's `features`
+dict — `insider_cluster_buy` (bool), `insider_opportunistic_buy_usd_30d`, `insider_net_usd_90d`
+— null for a name with no filings, absent when nothing was staged (`docs/DATA.md` §4).
+**Scored by nothing.** The test is the same table §6a describes: over the scan archive, the
+20- and 60-session forward return of cluster-buy names against the rest. `ic.py --by-feature`
+treats the boolean as a two-quantile split, so the quantile-spread row *is* cluster-minus-rest
+with its block-bootstrap interval; the dollar feature is the graded version and the 90-day
+net is the control that should carry less than either. Expected signs: `insider_cluster_buy`
+**+**, `insider_opportunistic_buy_usd_30d` **+**, `insider_net_usd_90d` **+ but weaker**.
+Two honesty rules: the filing date, not the trade date, is the signal time (stage `filed`;
+the signal already drops anything filed after `as_of`), and a cluster of *unknown-history*
+buyers is counted as opportunistic because a 90-day stager cannot see three years back —
+`unknown_history_buyers_30d` in the signal says how much of the count rests on that.
+
+```bash
+# stage insiders_signal.json on every scan (COLLECTION.md §7) for several weeks, archive as
+# usual, then — the archive's scan records and snapshots carry features.insider_*:
+python3 engine/ic.py --records archive/ --bars bars_all.json --horizons 20,60 \
+    --by-feature --md ic_e15.md --json ic_e15.json
+python3 engine/ledger.py --path experiments/ledger.jsonl --list      # E15 is the next row
+# read features.insider_cluster_buy at h=20 and h=60: quantile spread, its 90% interval, n;
+# under 30 cluster observations the row is not a sample, whatever the interval says
+```
+
+---
+
 ## 7. Where this sits in the plan
 
 Phase 2 of the roadmap (`claude/health/2026-09-02-system-review-and-roadmap.md`) is *prove the

@@ -178,6 +178,9 @@ python3 sentiment.py --apewisdom apewisdom.json --stocktwits-trending st_trendin
                      --watchlists rh_watchlists.json --quotes quotes_min.json \
                      --options-scan options_scan.json --earnings-days earnings_days.json \
                      --out sentiment.json --merge-into scan_data.json
+# INSIDERS (COLLECTION.md §7, DATA.md §4): only when insiders.json / form4/ were staged from
+# the box. Writes insiders_signal.json; scanner.py logs features.insider_* — never scored.
+python3 insiders.py --run-dir . --as-of "$SCAN_DATE" --out insiders_signal.json
 python3 scanner.py            # → scan_results.json + ranked console table
 # >>> HAND-OFF, IMMEDIATELY: project_write scan_results.json → claude/latest-scan.json  <<<
 # PAPER MIRROR (STATE-01): build portfolio.json from the paper books, so the panel and

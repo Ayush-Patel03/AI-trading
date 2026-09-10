@@ -254,3 +254,39 @@ insiderscreener, and every keyed news-sentiment API — AlphaVantage's free tier
 **Cboe option chains** (`cdn.cboe.com/api/global/delayed_quotes/options/<T>.json`) are
 reachable and fresh but **unusable on this fetch path** — section 0. They become
 viable only with a raw-bytes fetch route.
+
+---
+
+## 7. Insider transactions — the staged `insiders.json` (P-01 / E15, 2026-09-10)
+
+The insider **panel** at the 15:00 slot stays exactly as it is (§6, MarketBeat). This is a
+second, separate input: parsed Form 4 transactions that `engine/insiders.py` turns into a
+per-symbol signal the scanner logs as research features. **Reported, not scored** — the
+§5 rule — until `docs/BACKTEST.md` §6d says otherwise.
+
+**What to stage, into `$SCAN_DIR`, before `scanner.py` runs:**
+
+| File | Shape | Who writes it |
+|---|---|---|
+| `insiders.json` | a list of parsed transactions, or `{"_meta", "transactions": [...]}` — schema in `docs/DATA.md` §4 | the box, from `insiders.py --dump-transactions` after a `--fetch`; or a session that parsed filings some other way |
+| `form4/*.xml`, `form4/*.txt` | raw Form 4 documents (bare XML or the EDGAR complete-submission `.txt`) | the box (`insiders.py --fetch`); never a sandbox — SEC rate-limits and requires a contact User-Agent |
+| `insiders_signal.json` | the output — what `scanner.py` reads | `insiders.py` |
+
+```bash
+cd "$SCAN_DIR"
+# either input may be absent; both are merged and deduplicated
+python3 insiders.py --run-dir . --as-of "$SCAN_DATE" --out insiders_signal.json \
+    [--history-since 2023-01-01]     # the date the staged history is complete from
+python3 scanner.py                   # attaches features.insider_* to every row
+```
+
+Exit 2 means nothing was staged; the signal file is still written (empty), and the scan
+proceeds with no insider feature on any row — which is the correct record of "we did not
+look". Do **not** fabricate an `insiders.json` from the MarketBeat panel: it has no owner
+CIK, no filing date and no history, so every row would be an *unknown* buyer and the routine
+rule could never fire.
+
+The scanner adds `meta.insider_signal_meta` (`as_of`, `n_txns`, `n_symbols`,
+`n_cluster_buy`, `covered`) and prefixes the module's warnings with `INSIDERS:` in
+`data_warnings`. A signal whose `as_of` is older than the scan date is stale — say so on the
+board rather than carrying it silently.

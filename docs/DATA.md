@@ -51,7 +51,8 @@ absent from every replay (see `docs/BACKTEST.md` §1).
 | WSB mentions | `apewisdom.io/api/v1.0/filter/wallstreetbets/page/1` | `sentiment.py` | per slot | **page 1 only** (ranks recompute between requests) | **No vendor timestamp**; snapshot per slot is the only history that exists |
 | StockTwits trending + gauge | `api.stocktwits.com/api/2/trending/symbols.json`, `stocktwits.com/symbol/<T>` | `sentiment.py` | per slot | keyless; never the `streams/symbol` endpoint (variable-TTL cache, 50 h stale observed) | No timestamp; snapshot per slot |
 | Reddit raw posts | `arctic-shift.photon-reddit.com/api/posts/search?…&sort=desc` | `sentiment.py` | per slot | ~120k req/h; `sort=desc` mandatory | `created_utc` per post — the one attention feed with real timestamps |
-| Insider purchases | `marketbeat.com/insider-trades/purchases/`; `efts.sec.gov` full-text search | scan | daily | efts is open JSON | Filing date is the signal time (~1 day lag on marketbeat) |
+| Insider purchases (panel) | `marketbeat.com/insider-trades/purchases/`; `efts.sec.gov` full-text search | scan (display panel) | daily | efts is open JSON | Filing date is the signal time (~1 day lag on marketbeat) |
+| **Insider transactions (feature)** | **EDGAR full-index `form.idx` → Form 4 complete submission → `ownershipDocument` XML — `insiders.py`** | **`features.insider_*` on every scan row (E15)** | **daily, staged as `insiders.json` / `form4/`** | **SEC fair access: User-Agent with a contact, ≤ 10 req/s; run on the box** | **Trade date in the XML, filing date in the index / SGML header; the signal drops trades filed after `as_of` — see §4** |
 | Breadth ($ADDN, $ADRN, $S5FI, $S5TW), highs/lows | `barchart.com` | regime | daily | — | **Timestamp does not render — undated** |
 | Market-wide put/call, off-exchange share | `cboe.com/us/options/market_statistics/daily/`, `/us/equities/market_statistics/` | regime | daily | — | Put/call carries no date stamp; label prior-session |
 | Macro calendar | `tradingeconomics.com/united-states/calendar`, `investing.com/economic-calendar/` | PM macro gate | daily | — | Forward calendar; times in UTC on TE |
@@ -221,3 +222,127 @@ whether the followed set — which is chosen today — leaks hindsight into the 
 independently of index membership. The upgrade trigger in the plan is Sharadar's constituent
 history, which is complete and delisting-inclusive; until a promotion decision depends on it,
 this file is the honest free version.
+
+---
+
+## 4. Insider transactions — Form 4 → `insiders.py` → `features.insider_*` (P-01, E15)
+
+### Why a second insider feed
+
+The scan's insider panel is a hand-collected list scraped at the 15:00 slot (SCAN.md §9.3):
+a display, not a series, with no owner identity and no history, so nothing can be tested
+against it. Cohen, Malloy & Pomorski (2012, *Decoding Inside Information*) showed the
+information is in **which** insider trades: an insider who traded in the same calendar month
+in each of the three prior years is *routine* (a plan, a bonus cycle, a tax date) and those
+trades predict nothing; every other trade is *opportunistic*, and opportunistic buys earned
+about 82 bp/month abnormal in their sample. The retail-friendly form of the same idea is the
+**cluster buy**: two or more distinct insiders buying on the open market inside 30 days.
+`engine/insiders.py` computes both from the primary source and the scanner logs them as
+research features — **scored by nothing** until E15 says otherwise.
+
+### The path from EDGAR to a feature
+
+1. **Index.** `https://www.sec.gov/Archives/edgar/full-index/<YYYY>/QTR<n>/form.idx` — one
+   fixed-width row per filing: form type, company, CIK, date filed, and the path of the
+   complete submission. A Form 4 appears twice, once under the issuer's CIK and once under
+   the reporting owner's; filter on the **issuer**. `insiders.full_index_url(date)` builds
+   the URL; the file is ~50 MB a quarter and is downloaded once, not fetched through
+   WebFetch (rule 1 above).
+2. **Ticker → CIK.** `https://www.sec.gov/files/company_tickers.json` (`insiders.symbols_to_ciks`).
+3. **Accession → document.** The index path `edgar/data/<cik>/<accession>.txt` under
+   `https://www.sec.gov/Archives/` is the complete submission: an SGML header (which carries
+   `FILED AS OF DATE`) wrapping the `ownershipDocument` XML inside `<XML>…</XML>`.
+   `parse_form4` reads that file or the bare XML. It takes `issuer/issuerTradingSymbol`,
+   `reportingOwner/rptOwnerName` + `rptOwnerCik` + the relationship flags, and every
+   `nonDerivativeTransaction` (date, `transactionCode`, shares, price, acquired/disposed,
+   shares after, direct/indirect, the `aff10b5One` flag). The derivative table is ignored.
+4. **Fair access.** SEC requires a `User-Agent` naming a person and a contact
+   (`"Jane Doe jane@example.com"`) and limits clients to 10 requests per second; anything
+   else gets 403 and, repeated, an IP block. `insiders.py --fetch` reads the header from
+   `$SEC_USER_AGENT`, refuses to run without an `@` in it, and sleeps to stay under the
+   limit. **Run it on the box (or a laptop), never from a scheduled session's sandbox:** the
+   egress proxy is the wrong place for a rate-limited crawl, and the fetched files are what
+   gets staged, not the crawl.
+
+```bash
+# on the box: list, then fetch, the Form 4 submissions for the followed set
+python3 engine/insiders.py --edgar-index form.idx --symbols AAPL,MSFT,NVDA \
+    --company-tickers company_tickers.json --since 2026-06-01            # URLs only
+SEC_USER_AGENT="Jane Doe jane@example.com" python3 engine/insiders.py --edgar-index form.idx \
+    --symbols AAPL,MSFT,NVDA --company-tickers company_tickers.json --since 2026-06-01 \
+    --fetch --form4-dir form4/
+# then, anywhere: parse + signal
+python3 engine/insiders.py --form4-dir form4/ --as-of 2026-09-10 \
+    --out insiders_signal.json --dump-transactions insiders.json
+```
+
+### The staged file — `insiders.json`
+
+What the scheduled task stages into `$SCAN_DIR` (COLLECTION.md §7). Either a bare list of
+transactions or `{"_meta": {...}, "transactions": [...]}`; `insiders.py --dump-transactions`
+writes the second shape. One transaction:
+
+| key | | |
+|---|---|---|
+| `symbol` | `"AAPL"` | `issuerTradingSymbol`, upper-cased |
+| `issuer_cik`, `issuer_name` | `"0000320193"`, `"Apple Inc."` | |
+| `owner`, `owner_cik` | `"DOE JANE"`, `"0001214128"` | the CIK is the identity a cluster counts; the name is the fallback |
+| `relationship` | `["director"]` | any of `director`, `officer`, `ten_percent_owner`, `other` |
+| `officer_title` | `"Senior Vice President"` or null | |
+| `date` | `"2026-08-14"` | the trade (`transactionDate`) |
+| `filed` | `"2026-08-18"` or null | when it became public — from the index row or the SGML header; null on a bare XML |
+| `code` | `"P"` | `transactionCode`: **P** purchase, **S** sale, A grant, M exercise, F tax withholding, G gift, … |
+| `acquired_disposed` | `"A"` / `"D"` | |
+| `shares`, `price`, `value` | `1000.0`, `150.25`, `150250.0` | value = shares × price |
+| `shares_after` | `5000.0` or null | |
+| `direct` | true / false / null | D vs I ownership |
+| `plan_10b5_1` | false | the `aff10b5One` flag (schema X0508+); older filings say it only in a footnote, so false means *not flagged* |
+| `accession`, `source` | `"0001214128-26-000123"`, `"form4/….xml"` | |
+
+Only **P** and **S** enter the signal; every other code is kept for the record. A row with
+no symbol or no date is skipped and counted in the warnings.
+
+### The signal file — `insiders_signal.json`
+
+`{"_meta": {as_of, window_days: 30, net_window_days: 90, routine_rule, history_since,
+n_txns, n_symbols, n_with_filed_date, history_span, n_cluster_buy, sources, warnings},
+"symbols": {SYMBOL: {...}}}`, per symbol:
+
+`opportunistic_buyers_30d` (distinct owners), `unknown_history_buyers_30d` (the subset whose
+history is too short for the rule), `opportunistic_buy_usd_30d`, `routine_buy_usd_30d`,
+`buy_usd_90d`, `sell_usd_90d`, `net_insider_usd_90d` (buys − sales, open market only),
+`cluster_buy` (≥ 2 distinct non-routine buyers in 30 days), `last_buy_date`, `n_txns`,
+`n_open_market_30d`, `buy_classes_30d`.
+
+**Routine needs history.** The rule looks at the owner's trades in the same month of each
+of the three prior years. A stager that pulls 90 days of filings cannot see them, so nearly
+every buy is *unknown* — which is counted as **not routine** (the paper's own definition of
+opportunistic is "everything else") and reported as unknown beside it. A prior year the
+history does not cover is never scored as a miss: `--history-since` tells the module the
+date from which the staged history is complete, and without it the earliest staged trade is
+used, which is the conservative reading.
+
+**Point in time.** The windows use the trade date; a transaction whose `filed` date is after
+`as_of` is dropped because it was not public yet. Without `filed` the window is optimistic
+by up to two business days (the Form 4 deadline) and `_meta.warnings` says so. For the E15
+replay the filing date is the one to use, and the index supplies it.
+
+### What the scanner does with it
+
+When `insiders_signal.json` is in `$SCAN_DIR`, `scanner.py` adds three keys to every
+scored row's `features` dict — `insider_cluster_buy`, `insider_opportunistic_buy_usd_30d`,
+`insider_net_usd_90d` — **null** for a name the signal has no transactions for, and records
+`meta.insider_signal_meta` (`as_of`, counts, which candidates were covered). When the file
+is absent the row is untouched, so "we did not look" and "no insider bought" stay
+distinguishable and the golden output does not move. No pillar reads them; the
+hand-collected `insider_panel` is unchanged; the archive record and the scan snapshot carry
+the features exactly as they carry `technicals.features()`.
+
+### The E15 test
+
+*Do cluster-buy names outperform the rest over the next 20 and 60 sessions?* Stage the
+signal on every scan for a few weeks, then `ic.py --by-feature` over the archive: the
+`insider_cluster_buy` row is the binary split (top-minus-bottom quantile = cluster minus
+the rest), `insider_opportunistic_buy_usd_30d` the dollar-weighted version, and
+`insider_net_usd_90d` the control that should carry less than either if the paper is
+right. Recipe and the honesty rules in `docs/BACKTEST.md` §6d.

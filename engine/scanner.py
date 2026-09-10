@@ -515,6 +515,46 @@ def pillar_coverage(c):
                         or present(c.get("insider")) or present(c.get("catalysts")),
     }
 
+# ---------------------------------------------------------------- insider features (P-01 / E15)
+# insiders.py (a data dependency, not an import — the sentiment.py rule) writes
+# insiders_signal.json into the run directory when the scheduled task staged Form 4 data.
+# When that file is present, every scored row's `features` dict gains the three keys below
+# — null for a name the signal has no transactions for — and the archive record and the
+# scan snapshot carry them like every other research feature. When it is absent the row
+# is untouched: "we did not look" and "no insider bought" must stay distinguishable, and
+# the golden output must not move. NOT an input to any pillar; the existing `insider`
+# panel is a separate, hand-collected display and is not read here.
+INSIDER_SIGNAL_FILE = "insiders_signal.json"
+INSIDER_FEATURE_KEYS = ("insider_cluster_buy", "insider_opportunistic_buy_usd_30d",
+                        "insider_net_usd_90d")
+
+def load_insider_signal(base=None):
+    """The staged insiders_signal.json ({_meta, symbols}), or None when not staged."""
+    p = os.path.join(base or BASE, INSIDER_SIGNAL_FILE)
+    if not os.path.exists(p):
+        return None
+    try:
+        with open(p, encoding="utf-8") as fh:
+            doc = json.load(fh)
+    except (OSError, ValueError):
+        return None
+    return doc if isinstance(doc, dict) and isinstance(doc.get("symbols"), dict) else None
+
+def insider_features(sig, ticker):
+    """The three feature values for one ticker from a loaded signal; all None when the
+    signal carries nothing for it."""
+    row = (sig or {}).get("symbols", {}).get(str(ticker).upper())
+    if not isinstance(row, dict):
+        return {k: None for k in INSIDER_FEATURE_KEYS}
+    cb = row.get("cluster_buy")
+    return {
+        "insider_cluster_buy": bool(cb) if cb is not None else None,
+        "insider_opportunistic_buy_usd_30d": (row.get("opportunistic_buy_usd_30d")
+                                              if isnum(row.get("opportunistic_buy_usd_30d")) else None),
+        "insider_net_usd_90d": (row.get("net_insider_usd_90d")
+                                if isnum(row.get("net_insider_usd_90d")) else None),
+    }
+
 def data_confidence(c):
     """Not scored — reported. How much should you trust this row's price?"""
     n = c.get("price_sources", 1)
@@ -567,9 +607,16 @@ def scan_date_of(meta):
     return str(d)
 
 
-def scan(data):
+def scan(data, insider_signal=None):
+    """Score one scan_data.json document.
+
+    `insider_signal` is the insiders_signal.json document to attach as features; when
+    None (the normal CLI path) it is read from $SCAN_DIR if staged there, and when nothing
+    is staged no insider feature is attached at all.
+    """
     today = datetime.strptime(scan_date_of(data["meta"]), "%Y-%m-%d").date()
     mult, regime_label, regime_notes = score_regime(data["regime"])
+    insider_sig = insider_signal if insider_signal is not None else load_insider_signal()
 
     # Prior scans from earlier slots today: [{slot, time, regime_label, avg, scores:{TKR:score}}]
     history = [h for h in data.get("history", [])
@@ -659,6 +706,11 @@ def scan(data):
         # to any pillar above, and absent rather than null when nothing computed them.
         if isinstance(c.get("features"), dict):
             rows[-1]["features"] = c["features"]
+        # P-01: the insider signal, when staged. Same rule — logged, scored by nothing.
+        if insider_sig is not None:
+            feats = dict(rows[-1].get("features") or {})
+            feats.update(insider_features(insider_sig, tk))
+            rows[-1]["features"] = feats
 
     # Score trail across today's slots, with this scan appended as the final point
     prior_top5 = set()
@@ -765,6 +817,16 @@ def scan(data):
     meta["coverage_avg"] = (round(sum(r["coverage_pct"] for r in rows) / len(rows), 0)
                             if rows else 0)
     meta["dropped"] = sorted(skipped)
+    if insider_sig is not None:
+        sm = insider_sig.get("_meta") or {}
+        meta["insider_signal_meta"] = {
+            "as_of": sm.get("as_of"), "n_txns": sm.get("n_txns"),
+            "n_symbols": sm.get("n_symbols"), "n_cluster_buy": sm.get("n_cluster_buy"),
+            "covered": sorted(tk for tk in data["candidates"]
+                              if str(tk).upper() in insider_sig["symbols"]),
+        }
+        for w in (sm.get("warnings") or []):
+            warns.append("INSIDERS: " + str(w))
     # Which commit of the engine produced this scan. Written by the clone step as
     # $SCAN_DIR/engine_sha; None when the engine was not run from a repo.
     meta["engine_sha"] = config.engine_sha()
