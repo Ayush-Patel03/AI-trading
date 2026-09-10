@@ -19,3 +19,15 @@ approximate counts. The three slices are counted as separate trials on purpose: 
 look at the same data, and each look spends evidence.
 
     python3 engine/ledger.py --path experiments/ledger.jsonl --list
+
+## `universe_sp500.json` — point-in-time S&P 500 membership
+
+Written by `engine/universe_history.py` for `backtest.py --universe-history`. Read its
+`source.note` and `fetched_at` before quoting it: the 2026-09-10 file was built from a mirror
+of the Wikipedia tables (Wikipedia was egress-denied from the build session) and covers
+2019-01-18 onward. Refresh with
+
+    python3 engine/universe_history.py --index sp500 --out experiments/universe_sp500.json --since 2019-01-18
+
+from a host that can reach `en.wikipedia.org`. The procedure, the bars-fetch that has to go
+with it, and the bias every write-up must state are in `docs/DATA.md` §3.

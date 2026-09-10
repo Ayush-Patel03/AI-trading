@@ -19,5 +19,6 @@ scanner.py
 sentiment.py
 technicals.py
 universe.py
+universe_history.py
 validate.py
 watch.py
