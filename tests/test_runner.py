@@ -334,7 +334,9 @@ def test_missing_stored_book_is_refused_on_the_record(tmp_path):
 def test_stdlib_only():
     """The runner may import nothing the box does not ship with."""
     import ast
-    allowed = set(sys.stdlib_module_names) | {"run", "selftest", "deadman"}
+    # The runner may also import the engine's own stdlib-only modules (they sit next to it
+    # in the clone): fetch_bars.py reads the membership file through universe_history.
+    allowed = set(sys.stdlib_module_names) | {"run", "selftest", "deadman", "universe_history"}
     for p in (ROOT / "runner").glob("*.py"):
         for node in ast.walk(ast.parse(p.read_text(encoding="utf-8"))):
             if isinstance(node, ast.Import):

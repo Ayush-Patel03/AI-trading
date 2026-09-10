@@ -1,0 +1,19 @@
+Run the RISK SENTINEL for the "ai trading" project's three paper desks on the box runner (hourly :35, 09:35-15:35 ET). Your ONLY jobs: quote every held and working symbol, write the payload to C:\ai-trading-inputs\<run_id>\, start runner/run.py, read outcome.json, report. Under ten minutes.
+
+HOLIDAY GUARD FIRST: fires on NYSE holidays too (2026: Nov 26, Dec 25; unsure -> WebSearch). Closed today: do nothing, one line "Market holiday - sentinel skipped."
+
+RULES. Paper, absolute: never call place_equity_order, review_equity_order, cancel_equity_order or any option/crypto order tool, not even to preview. Account lock: only the Robinhood account get_accounts marks agentic_allowed=true, resolved at run time, never by nickname. Reading is not trading. Never write code to the box; the only path you write is C:\ai-trading-inputs\<run_id>\. Never edit the scrubber, mirror.py, the runner, the engine clone or C:\ai-trading-state. Do not work around a refusal: exit 1 means no - do not edit inputs to pass, do not run the engine in the sandbox, do not write a book by hand.
+
+WHY: no resting stop exists at the broker, so a position is protected only when something looks at it. NOT A DECISION SLOT: the engine runs exits only. QUIET is the normal outcome and writes only a heartbeat and a coverage row.
+
+INPUTS. read_multiple_files C:\ai-trading-state\books\swing.json, pullback.json, momentum.json; every symbol held or with a working order. Write pm_quotes.json = raw get_equity_quotes for ALL of them (20 per call; an unquoted holding is UNPROTECTED) and optionally pm_broker.json = raw get_equity_positions. All books flat: quote SPY alone so the coverage row and heartbeat still land - the dead-man's switch reads that heartbeat.
+
+BOX (detail: runner/README.md). Desktop Commander only (ToolSearch mcp__remote-devices__Desktop_Commander__*; never device_* tools). run_id = <YYYY-MM-DD ET>-sentinel-<HHMM>. create_directory C:\ai-trading-inputs\<run_id>; write_file each payload as compact single-line JSON, the RAW connector response (over 60,000 chars: rewrite then append pieces, get_file_info lineCount 1); sha256 over the exact UTF-8 text you wrote. Quotes LAST; as_of = the UTC time of that call. Write manifest.json {"as_of", "files": {name: {"sha256"}}}, then within 25 min:
+start_process("C:\\ai-trading-runner\\.venv\\Scripts\\python.exe C:\\ai-trading-runner\\engine\\runner\\run.py --slot sentinel --desk all --inputs C:\\ai-trading-inputs\\<run_id> --state C:\\ai-trading-state", timeout_ms 300000)
+Wait for the RUNNER line, read_file <run_id>\outcome.json: exit 0 committed/already_done, 1 refused (reason inside; the aborted coverage row is already written), 2 failed. Report from outcome.json only.
+
+DONE: outcome.json committed (or already_done for this ET hour) with all three desks at exit_code 0; quiet true is the good case. No project writes, no artifact: state lives in C:\ai-trading-state, the board is rendered on the box, the 16:15 health check mirrors state back to the project.
+
+RUNNER UNREACHABLE (start_process fails, hangs past 2 min, or no RUNNER line and no outcome.json): retry once. Still nothing: docs/runbooks/runner-unreachable.md step 2 - append the aborted row {ts, slot "sentinel", desk "all", aborted true, reason "runner unreachable: <error>", engine_source "session"} to C:\ai-trading-state\coverage\pm-coverage.json under today, uncommitted. Box dark (Desktop Commander down): project_write claude/health/<date>-sentinel-<HHMM>-blocked.md with the error, push, stop. Never run the engine in the sandbox instead.
+
+REPORT: all quiet -> one line "sentinel HH:MM - N positions checked across M desks, nothing fired." Anything fired or warned (stop-out, fill, UNPROTECTED, kill switch, refused quotes on a held name, abandoned desk, refused/failed/unreachable run) -> PushNotification: desk, symbol, price, why. Say "paper" where a decision could be mistaken for a real trade.
