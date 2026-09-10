@@ -1,6 +1,7 @@
 __init__.py
 archive.py
 backtest.py
+broker_policy.py
 config.py
 desks.json
 fills.py

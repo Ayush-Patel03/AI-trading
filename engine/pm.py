@@ -6,8 +6,9 @@ simulates the orders against a paper book or emits live order tickets.
 
 It never invents a rule. Sizing, stops and every risk gate come from
 portfolio.py, which mirrors the trading-system repo. What lives here is
-execution policy: fills, order lifecycle, the PDT guard, the daily kill
-switch, and the decision journal.
+execution policy: fills, order lifecycle, the broker policy (the day-trade /
+margin regime — see broker_policy.py), the daily kill switch, and the decision
+journal.
 
 MODES
   paper  (default) — orders are simulated against paper_book.json. Nothing is
@@ -82,6 +83,15 @@ ADDED 2026-09-02
     line for the caller to merge into claude/pm-coverage.json. The book and the
     journals are still untouched by a quiet run.
 
+ADDED 2026-09-10
+  * K-01 — the PDT guard became a BROKER POLICY. FINRA Regulatory Notice 26-10 amended
+    Rule 4210 effective 2026-06-04 and replaced pattern-day-trader counting with an
+    intraday margin requirement; Robinhood adopted it that day and the Agentic account is
+    under it. broker_policy.py carries three regimes (legacy_pdt, intraday_margin — the
+    default — and cash_settled), selected by --broker-policy, the book, desks.json or
+    engine-config.json in that order. Every sale, entry gate and state line goes through
+    the policy object; legacy_pdt reproduces the old guard byte-for-byte.
+
 Paths resolve from SCAN_DIR, else from this file's own directory.
 """
 import json, os, sys, argparse, datetime as dt
@@ -90,6 +100,7 @@ BASE = os.environ.get("SCAN_DIR") or os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, BASE)
 
 import archive
+import broker_policy
 import portfolio as pf_mod
 from portfolio import RULES, build_proposals
 
@@ -108,10 +119,10 @@ PM_RULES = {
     "max_rebalances_per_session": 1,  # count: stop the every-slot shave of one name
     "rebalance_deadband_pct": 1.5,    # size: a name oscillating around 15.0% is not a breach.
                                       # Trigger above cap + deadband; still trim back to the cap.
-    "pdt_max_day_trades": 3,        # FINRA: 3 per 5 rolling business days under $25k
-    "pdt_window_business_days": 5,
-    "pdt_reserve": 1,               # keep one day trade back as an exit hatch
-    "pdt_equity_threshold": 25000.0,
+    # The legacy PDT numbers live in broker_policy.LEGACY_PDT_RULES; the keys stay here so a
+    # desk's pm_rules override still reaches the legacy_pdt policy (it reads PM_RULES by
+    # reference). Nothing else in this module reads them any more.
+    **broker_policy.LEGACY_PDT_RULES,
     "scan_stale_minutes": 240,      # older than this and entries are frozen (ENFORCED — TIMING-01)
     "warn_price_drift_pct": 3.0,    # live quote vs the price the scan scored: note it
     "max_price_drift_pct": 5.0,     # beyond this the row no longer describes the price
@@ -138,6 +149,18 @@ DESK = {"name": "swing", "filter": {}, "suffix": ""}
 # HOUSE-01 — the other desks' books, loaded by main() from desks.json. Empty means the
 # house caps were not evaluated this run, and that is journaled rather than assumed safe.
 PEERS = {"books": {}, "loaded": [], "missing": []}
+
+# K-01 — the broker policy for this run, built once by run() from the resolution order in
+# broker_policy.get_policy(). None until then; _policy() resolves a default for any helper
+# called outside run() so nothing ever gates on a missing object.
+POLICY = None
+
+
+def _policy():
+    global POLICY
+    if POLICY is None:
+        POLICY = broker_policy.get_policy(None, {}, DESK, pm_rules=PM_RULES, risk_rules=RULES)
+    return POLICY
 
 
 def desk_filter(rows, jrn):
@@ -206,23 +229,19 @@ def _round_shares(v, rules=RULES):
     return round(v, dec) if rules.get("fractional") else float(int(v))
 
 
-def _business_days_back(today, n):
-    """The n most recent business days ending at `today` (inclusive)."""
-    out, d = [], today
-    while len(out) < n:
-        if d.weekday() < 5:
-            out.append(d.isoformat())
-        d -= dt.timedelta(days=1)
-    return out
+_business_days_back = broker_policy.business_days_back
 
 
 def day_trades_used(book, today):
-    window = set(_business_days_back(today, PM_RULES["pdt_window_business_days"]))
-    return len([d for d in book.get("day_trades", []) if d.get("date") in window])
+    """Day trades in the legacy five-business-day window. Reporting only — whether it
+    GATES anything is the policy's decision (K-01)."""
+    return broker_policy.day_trades_in_window(book, today, PM_RULES["pdt_window_business_days"])
 
 
 def pdt_applies(book, equity):
-    return equity < PM_RULES["pdt_equity_threshold"]
+    """True only under the legacy_pdt policy and under its equity threshold."""
+    pol = _policy()
+    return isinstance(pol, broker_policy.LegacyPDT) and pol.applies(book, equity)
 
 
 # ------------------------------------------------------------------ pricing
@@ -581,6 +600,8 @@ def _apply_buy(book, sym, shares, price, meta, today, jrn, reason):
             "high_water": round(price, 6), "last_price": round(price, 6),
             "last_priced": jrn["ts"],
         })
+        pos = book["positions"][-1]
+    _policy().record_buy(book, pos, shares, today, price)
     jrn["decisions"].append({"action": "fill-buy", "symbol": sym, "shares": round(shares, 6),
                             "price": round(price, 4), "reason": reason,
                             "detail": f"${cost:,.2f} filled at the resting limit"})
@@ -595,15 +616,12 @@ def _apply_sell(book, sym, shares, price, today, jrn, reason, detail):
     pnl = (price - pos["avg_cost"]) * shares
     book["cash"] = round(book["cash"] + proceeds, 6)
     book["realized_pnl"] = round(book.get("realized_pnl", 0.0) + pnl, 6)
-    # PDT: closing shares acquired today is a day trade
+    # The policy books the sale (a day-trade record, settlement, a GFV) off the position's
+    # intraday tag BEFORE it is decremented; the tag itself is the book's, not the policy's.
+    _policy().record_sale(book, pos, shares, today, price, reason)
     intraday = pos.get("intraday_shares", 0.0)
     if intraday > 0 and shares > 0:
-        closed_intraday = min(shares, intraday)
-        pos["intraday_shares"] = _round_shares(intraday - closed_intraday)
-        if closed_intraday > 0:
-            book.setdefault("day_trades", []).append(
-                {"date": today.isoformat(), "symbol": sym, "shares": round(closed_intraday, 6),
-                 "reason": reason})
+        pos["intraday_shares"] = _round_shares(intraday - min(shares, intraday))
     book.setdefault("closed_trades", []).append({
         "symbol": sym, "shares": round(shares, 6), "entry": pos["avg_cost"],
         "exit": round(price, 4), "opened": pos.get("opened"), "closed": today.isoformat(),
@@ -689,24 +707,9 @@ def kill_switch(book, marked, jrn):
 
 # ------------------------------------------------------------------ 3. exits
 def _sellable(pos, want_shares, reason, book, today, equity, jrn):
-    """Apply the PDT guard to a proposed sale. Returns the shares actually sellable."""
-    if not pdt_applies(book, equity):
-        return want_shares, None
-    intraday = pos.get("intraday_shares", 0.0)
-    if intraday <= 0:
-        return want_shares, None
-    used = day_trades_used(book, today)
-    settled = max(0.0, pos["shares"] - intraday)
-    if used < PM_RULES["pdt_max_day_trades"] and reason == "stop":
-        return want_shares, ("Day trade used to honour a stop — "
-                             f"{used + 1}/{PM_RULES['pdt_max_day_trades']} in the rolling window")
-    if settled >= want_shares:
-        return want_shares, None
-    if settled * pos.get("last_price", 0) >= RULES["min_notional"]:
-        return settled, (f"PDT guard: only the {settled:.6f} settled shares are sellable "
-                         f"({used}/{PM_RULES['pdt_max_day_trades']} day trades used)")
-    return 0.0, (f"PDT guard: selling would be day trade "
-                 f"{used + 1}/{PM_RULES['pdt_max_day_trades']} and this is not a stop — held")
+    """Ask the broker policy about a proposed sale. Returns (shares actually sellable, note).
+    Under legacy_pdt this is the old PDT guard; under intraday_margin every sale goes."""
+    return _policy().sellable(pos, want_shares, reason, book, today, equity)
 
 
 def exit_pass(book, pb, scan_by_tk, today, equity, jrn):
@@ -783,9 +786,9 @@ def exit_pass(book, pb, scan_by_tk, today, equity, jrn):
                                    "reason": f"{action} wanted to fire — " + (note or "blocked")})
             if action == "stop":
                 jrn["warnings"].append(
-                    f"UNPROTECTED: {sym} broke its stop and the PDT budget is exhausted — "
-                    "the position is still open and cannot be closed today without a "
-                    "pattern-day-trader violation. Close it by hand if you disagree.")
+                    f"UNPROTECTED: {sym} broke its stop and the {_policy().name} policy refused "
+                    "the sale — the position is still open and cannot be closed today without "
+                    "a violation. Close it by hand if you disagree.")
             continue
         if sellable * px < RULES["min_notional"] and sellable < pos["shares"]:
             jrn["skipped"].append({"symbol": sym,
@@ -995,14 +998,17 @@ def entry_pass(book, scan, pb, today, marked, jrn, scan_stale, house=None):
                                " later today — entries frozen until it is out; exits stay live.")
         return []
     equity = marked["equity"]
-    used = day_trades_used(book, today)
-    if pdt_applies(book, equity) and used >= PM_RULES["pdt_max_day_trades"] - PM_RULES["pdt_reserve"]:
-        jrn["skipped"].append({"symbol": "*", "reason":
-                               f"PDT guard: {used}/{PM_RULES['pdt_max_day_trades']} day trades used "
-                               "— no new entries, one is held back as an exit hatch"})
+    # K-01: the broker policy's entry gate. legacy_pdt refuses at 2 of 3 day trades used;
+    # intraday_margin refuses on a projected maintenance deficit or a freeze; cash_settled
+    # never refuses here but caps the spendable cash below.
+    ok, pnote = _policy().entries_allowed(book, today, equity)
+    if not ok:
+        jrn["skipped"].append({"symbol": "*", "reason": pnote})
         return []
+    if pnote:
+        jrn["warnings"].append(pnote)
 
-    avail = max(0.0, marked["cash"] - reserved_cash(book))
+    avail = max(0.0, _policy().buying_power(book, today, marked["cash"]) - reserved_cash(book))
     # CAP-01 (2026-09-01): a working buy order is capital and risk the book has already
     # COMMITTED — it is simply not filled yet. SIZE-01 stopped its cash being spent twice,
     # but every COUNT-based cap in portfolio.py still read `marked["positions"]` alone, so a
@@ -1163,9 +1169,11 @@ def entry_pass(book, scan, pb, today, marked, jrn, scan_stale, house=None):
 
 
 # ------------------------------------------------------------------ orchestration
-def run(book, scan, prices_override, slot, now_iso, mode):
+def run(book, scan, prices_override, slot, now_iso, mode, policy_name=None):
+    global POLICY
     now = _now(now_iso)
     today = now.date()
+    POLICY = broker_policy.get_policy(policy_name, book, DESK, pm_rules=PM_RULES, risk_rules=RULES)
     sentinel = (slot == SENTINEL)
     # A sentinel fires many times a day, so its run key carries the clock time: each run
     # is its own journal entry rather than replacing the previous sentinel's.
@@ -1173,6 +1181,7 @@ def run(book, scan, prices_override, slot, now_iso, mode):
                else f"{today.isoformat()}#{slot}")
     jrn = {"ts": now.isoformat().replace("+00:00", "Z"), "date": today.isoformat(),
            "slot": slot, "run_key": run_key, "mode": mode, "desk": DESK["name"],
+           "broker_policy": POLICY.name,
            "sentinel": sentinel, "decisions": [], "skipped": [], "warnings": [],
            "daily_pnl_pct": 0.0}
 
@@ -1315,9 +1324,9 @@ def run(book, scan, prices_override, slot, now_iso, mode):
                  "daily_pnl_pct": jrn["daily_pnl_pct"],
                  "halted": bool(book["day"].get("halted")),
                  "halt_reason": book["day"].get("halt_reason"),
-                 "day_trades_used": day_trades_used(book, today),
-                 "day_trade_limit": PM_RULES["pdt_max_day_trades"],
-                 "pdt_applies": pdt_applies(book, marked["equity"])},
+                 # K-01: broker_policy, day_trades_used, day_trade_limit, pdt_applies and
+                 # whatever else the regime reports (deficits, settlement, GFVs).
+                 **POLICY.state(book, today, marked["equity"])},
         "positions": [dict(p, market_value=round((pb.get(p["symbol"], {}).get("price")
                                                   or p["avg_cost"]) * p["shares"], 2),
                            price=pb.get(p["symbol"], {}).get("price"),
@@ -1337,6 +1346,7 @@ def run(book, scan, prices_override, slot, now_iso, mode):
         "closed_trades": book["closed_trades"][-40:],
         "equity_curve": book["equity_curve"],
         "journal": jrn, "rules": RULES, "pm_rules": PM_RULES,
+        "broker_policy": {"name": POLICY.name, "describe": POLICY.describe()},
         "house": house,
         "scan_as_of": jrn["scan_as_of"], "scan_stale": scan_stale,
         "orders_to_place": placed if mode == "live" else [],
@@ -1455,6 +1465,9 @@ def main():
                     help="raw get_equity_positions response for the live agentic account; "
                          "any live holding raises a divergence warning (STATE-02). Optional.")
     ap.add_argument("--quote-max-age-min", type=float, default=30.0)
+    ap.add_argument("--broker-policy", default=None, choices=list(broker_policy.VALID),
+                    help="day-trade / margin regime (K-01). Overrides the book, desks.json and "
+                         "engine-config.json; default intraday_margin (FINRA Reg. Notice 26-10)")
     ap.add_argument("--journal", default=None)
     ap.add_argument("--no-house-caps", action="store_true",
                     help="HOUSE-01 escape hatch: measure and report cross-desk exposure but "
@@ -1472,7 +1485,7 @@ def main():
             print(f"FATAL: desk {args.desk!r} is not defined in {args.desks}", file=sys.stderr)
             sys.exit(2)
         DESK.update({"name": args.desk, "filter": cfg.get("filter") or {},
-                     "suffix": f"-{args.desk}"})
+                     "suffix": f"-{args.desk}", "rules": cfg.get("rules") or {}})
         for k, v in (cfg.get("rules") or {}).items():
             if k in RULES:
                 RULES[k] = v          # portfolio.RULES is the dict build_proposals defaults to
@@ -1530,7 +1543,12 @@ def main():
                                                  args.quote_max_age_min)
         prices.update(parsed)      # broker quotes outrank a hand-written override
 
-    book, jrn, state = run(book, scan, prices, args.slot, args.now, mode)
+    try:
+        book, jrn, state = run(book, scan, prices, args.slot, args.now, mode,
+                               policy_name=args.broker_policy)
+    except ValueError as e:          # an unknown broker policy name in the book or config
+        print(f"FATAL: {e}", file=sys.stderr)
+        sys.exit(2)
     if quote_rejects:
         msg = ("Broker quotes refused as unusable: " + ", ".join(quote_rejects) +
                ". Those symbols fall back to the scan price, or to no price at all.")
@@ -1635,9 +1653,11 @@ def main():
     b = state["book"]
     print(f"[{mode.upper()}] {jrn['date']} {args.slot}   equity ${b['equity']:,.2f}  "
           f"cash ${b['cash']:,.2f}  invested ${b['invested']:,.2f} ({b['deployed_pct']:.1f}%)")
+    regime = (f"day trades {b['day_trades_used']}/{b['day_trade_limit']}"
+              if b.get("broker_policy") == "legacy_pdt" else f"policy {b.get('broker_policy')}")
     print(f"day P&L {b['daily_pnl_pct']:+.2f}%   realised ${b['realized_pnl']:+,.2f}   "
-          f"total {b['total_return_pct']:+.2f}%   day trades {b['day_trades_used']}/"
-          f"{b['day_trade_limit']}" + ("   *HALTED*" if b["halted"] else ""))
+          f"total {b['total_return_pct']:+.2f}%   {regime}"
+          + ("   *HALTED*" if b["halted"] else ""))
     h = state.get("house")
     if h:
         top = sorted(h["sector_pct"].items(), key=lambda kv: -kv[1])[:3]

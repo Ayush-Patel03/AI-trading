@@ -23,6 +23,7 @@ health record — lives in a private claude.ai project and never appears here.
 | `engine/technicals.py` | Wilder ATR(14), RSI, moving averages from daily bars |
 | `engine/portfolio.py` | sizing and every per-book risk rule |
 | `engine/pm.py` | the Portfolio Manager: fills, exits, rebalancing, entries, house caps |
+| `engine/broker_policy.py` | the day-trade / margin regime the PM trades under: `intraday_margin` (FINRA Reg. Notice 26-10, default), `legacy_pdt`, `cash_settled` |
 | `engine/watch.py` | the read-only extended-session watch; no write path to a book, by construction |
 | `engine/archive.py` | run identity, book fingerprints, when a run earns a frozen board |
 | `engine/config.py` | reads identifiers from the private `engine-config.json` |

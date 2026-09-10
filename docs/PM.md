@@ -162,8 +162,8 @@ The manager was built against the 18:48Z rebuild of `portfolio.py`, in which
 function directly — `build_proposals` does — but a future change to its signature is the
 kind of thing that breaks quietly, so check it if the engine is rebuilt again.
 
-What lives in `pm.py` is execution policy only: order lifecycle, fills, the PDT guard, the
-kill switch, the journal.
+What lives in `pm.py` is execution policy only: order lifecycle, fills, the broker policy
+(section 4), the kill switch, the journal.
 
 ### No entries at power hour
 
@@ -309,32 +309,91 @@ for going live on its own.
 
 ---
 
-## 4. Pattern day trading — the constraint that actually binds
+## 4. Day-trade / broker policy — the regime the book trades under
 
-The Agentic account is **limited margin**, which means intraday buying power and also means
-PDT applies: under $25,000 equity, **three day trades per five rolling business days**. A
-fourth restricts the account for ninety days. On a $50 book that is not a theoretical risk,
-because entries fill at slot N+1 and an exit can fire at slot N+2 of the same session.
+Until 2026-09-10 the manager carried one regime, hard-wired: the FINRA pattern-day-trader
+rule. It no longer describes the account. **FINRA Regulatory Notice 26-10** amended Rule
+4210, **effective 2026-06-04**, and replaced pattern-day-trader counting with an intraday
+margin requirement; **Robinhood adopted it on 2026-06-04**, and the Agentic account is under
+it. The regime is now a **policy object** in `engine/broker_policy.py`, chosen by name, and
+`pm.py` asks it four things: may this sale go and how much of it, may this slot place
+entries at all, how much of the cash is spendable, and what to record after a fill. Every
+note a policy writes into the journal is prefixed with its name (`intraday_margin: …`,
+`legacy_pdt: …`) so a line can never be misread as coming from a regime the book is not
+under. The journal entry and `pm_state.json` carry `broker_policy` on every run.
 
-The guard, in `pm.py`:
+**Selection, in order of precedence:** `--broker-policy` on the command line, then
+`broker_policy` in the book, then `rules.broker_policy` for the desk in `desks.json`, then
+`broker_policy` in the private `engine-config.json`, then the default. **The default is
+`intraday_margin`** — Vishal's decision, because that is the rule the account is actually
+under. An unknown name is fatal (exit 2, naming the three valid ones); it is never silently
+replaced with a default.
 
+### `intraday_margin` — FINRA 4210 as amended by Notice 26-10 (default)
+
+- **No day-trade count and no $25,000 threshold.** Day trades are still recorded in the
+  book (`day_trades`) because the weekly review reads them, but nothing gates on them.
+- **Sales are always allowed.** A stop, target, trim or rebalance on shares bought the same
+  session goes through. The `UNPROTECTED … policy refused the sale` state of the old guard
+  cannot arise under this policy.
+- **The constraint is an intraday margin deficit.** After any proposed transaction, equity
+  must cover the maintenance requirement — 25% of long market value (`maintenance_pct`),
+  counting working buy orders as if filled. A shortfall is a call: `entries_allowed` refuses
+  new entries while it stands, and the deficit is booked in `book["imd_events"]` with its
+  date and amount. A deficit under **min(5% of equity, $1,000)** is *de minimis* — still a
+  call, but not counted against the account's record.
+- **A practice freezes the book.** A deficit still unmet on the **fifth business day**, on
+  a book that already has **two counted deficits inside 90 days**, sets
+  `book["freeze_until"]` to today + 90 calendar days. While frozen: no new entries, exits
+  untouched. The freeze thaws on its own on the date stamped.
+- The **$2,000 margin-account minimum** survived the amendment. Below it entries are limited
+  to cash — which the paper book does anyway — so it is noted in the journal, not enforced
+  twice.
+- On a cash-only paper book (buying power = cash, no leverage) this policy is met by
+  construction and never binds. It is implemented in full so that a book that *is*
+  overdrawn — a negative cash line, a fill the mark did not anticipate — is handled the way
+  the broker would handle it rather than silently.
+
+### `legacy_pdt` — the guard the manager ran under until 2026-09-10
+
+Selecting it reproduces the old behaviour byte-for-byte, with the old numbers (they still
+sit in `PM_RULES` under their `pdt_*` keys, so a desk's `pm_rules` override reaches them as
+before). Keep it for a broker that has not adopted the amendment, and for reading any
+journal written before June.
+
+- Under $25,000 equity, **three day trades per five rolling business days**; a fourth
+  restricts the account for ninety days.
 - Every sale that closes shares bought the same day is counted as a day trade.
 - **New entries stop at 2 of 3 used.** One day trade is always held back as an exit hatch,
   because being unable to honour a stop is worse than missing an entry.
 - A same-day exit is allowed only for a **stop**. A target or a trim on a position opened
-  today waits for tomorrow, when the shares have settled — which is what a PDT-constrained
-  trader actually does.
-- Where only part of a position is intraday, the settled part is sold and the rest held.
+  today waits for tomorrow, when the shares have settled.
+- Where only part of a position is intraday, the settled part is sold if it clears the
+  broker minimum and the rest held.
+- **The state to fear.** If the budget is exhausted and a position opened today breaks its
+  stop, the manager will not sell it. It emits `UNPROTECTED: <SYM> broke its stop and the
+  legacy_pdt policy refused the sale` as a banner on the board and a warning in the journal.
+  That is a deliberate trade — a ninety-day restriction is worse than one bad hold — and it
+  is the loudest thing the system can say. If you see it, decide by hand. **Every PM task
+  prompt pushes a phone notification on it** (section 12).
+- Above $25,000 equity the guard disables itself.
 
-**The state to fear.** If the budget is exhausted and a position opened today breaks its
-stop, the manager will not sell it. It emits `UNPROTECTED: <SYM> broke its stop and the PDT
-budget is exhausted` as a banner on the board and a warning in the journal. That is a
-deliberate trade — a ninety-day restriction is worse than one bad hold — and it is the
-loudest thing the system can say. If you see it, decide by hand. **Every PM task prompt now
-pushes a phone notification on it** (section 12).
+### `cash_settled` — a cash account, T+1
 
-Above $25,000 equity the guard disables itself. It is written against the threshold, not
-against the current balance.
+- Sale proceeds settle the **next business day** and cannot fund an entry until they have.
+  The book carries an `unsettled` list of `{date, settles, amount}`; settled cash is derived
+  as cash minus the unsettled total, never stored, so a deposit or a hand edit to the cash
+  line cannot leave the two out of step. Entries are sized against settled cash only.
+- Buying with unsettled proceeds is allowed. **Selling that position before the proceeds
+  that paid for it settle is a good-faith violation**, counted in `book["gfv"]` with the
+  date. Three GFVs in a rolling twelve months set `book["restricted_until"]` to today + 90
+  days; the restriction limits entries to settled cash — which this policy does on every
+  day anyway — so it is flagged in the state and the journal rather than changing what the
+  book may do.
+
+The board's *Day trades* tile shows the count with the budget pips under `legacy_pdt`, and
+the count with the policy's name and no pips under the other two: a budget that does not
+exist is not drawn.
 
 ---
 
@@ -840,7 +899,8 @@ class rather than to the blend. `claude/engine/desks.json` defines them:
 
 Every desk starts from the same $5,000 of paper capital, runs under the same paper lock,
 account lock, risk rules (`portfolio.RULES`, overridable per desk in `desks.json` but not
-overridden today), spread gate, macro gate and PDT guard, and is written back under the
+overridden today), spread gate, macro gate and broker policy (section 4; overridable per
+desk through `rules.broker_policy`), and is written back under the
 same revision / `--check` protocol. `pm.py --desk <name>` loads the desk, filters the scan
 rows to its mandate (the number declined is journaled once, not listed — a pullback desk is
 not "skipping" momentum names), and suffixes every output file and run id with the desk

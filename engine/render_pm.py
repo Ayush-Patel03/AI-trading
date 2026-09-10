@@ -635,9 +635,19 @@ def render(state):
         banners.append(banner(kind, "▲", "Attention.", esc(w)))
 
     dt_used = b.get("day_trades_used") or 0
-    dt_lim = b.get("day_trade_limit") or 3
-    pips = "".join(f'<span class="pip {"used" if i < dt_used else ("res" if i == dt_lim - 1 else "")}"></span>'
-                   for i in range(dt_lim))
+    policy = b.get("broker_policy") or "legacy_pdt"
+    if policy == "legacy_pdt":
+        dt_lim = b.get("day_trade_limit") or 3
+        pips = "".join(f'<span class="pip {"used" if i < dt_used else ("res" if i == dt_lim - 1 else "")}"></span>'
+                       for i in range(dt_lim))
+        dt_tile = (f'<div class="val">{dt_used}<span style="color:var(--ink-3);font-size:14px">'
+                   f'/{dt_lim}</span></div><div class="pips">{pips}</div>')
+    else:
+        # K-01: under intraday_margin / cash_settled nothing caps day trades; the count is
+        # reported, the regime is named, and no budget pips are drawn for a budget that
+        # does not exist.
+        dt_tile = (f'<div class="val">{dt_used}</div>'
+                   f'<div class="delta">no cap &middot; {esc(policy)}</div>')
 
     rail = f"""<div class="rail">
   <div class="tile hero">
@@ -658,8 +668,7 @@ def render(state):
     <div class="val {tone(b.get('realized_pnl'))}">{signed_money(b.get('realized_pnl'))}</div>
     <div class="delta">{len(state.get('closed_trades') or [])} closed</div></div>
   <div class="tile"><div class="lab">Day trades</div>
-    <div class="val">{dt_used}<span style="color:var(--ink-3);font-size:14px">/{dt_lim}</span></div>
-    <div class="pips">{pips}</div></div>
+    {dt_tile}</div>
 </div>"""
 
     stop_basis_mix_s = stop_basis_mix(state)

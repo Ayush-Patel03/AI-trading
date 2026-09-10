@@ -1,6 +1,6 @@
 {
   "_what": "Strategy desks for the Portfolio Manager. Same engine, same risk rules unless overridden, different candidate mandate, SEPARATE paper book and journal per desk — so the weekly review can attribute results to a setup class instead of to the blend. pm.py --desk <name> loads this file from $SCAN_DIR. The default desk 'swing' is the unfiltered book on the unsuffixed files and is what the Trade Desk board shows.",
-  "_rules": "Every desk starts from the same $5,000 of paper capital, runs under the same account lock and paper lock, and is written back under the same revision/--check protocol. Desk books live at claude/paper-book-<desk>.json and journals at claude/pm-journal-<desk>.json. A desk with no candidates in its mandate simply reports that and manages its own holdings.",
+  "_rules": "Every desk starts from the same $5,000 of paper capital, runs under the same account lock and paper lock, and is written back under the same revision/--check protocol. Desk books live at claude/paper-book-<desk>.json and journals at claude/pm-journal-<desk>.json. A desk with no candidates in its mandate simply reports that and manages its own holdings. A desk may name its day-trade / margin regime as rules.broker_policy (legacy_pdt | intraday_margin | cash_settled, see docs/PM.md section 4); unset, the book, engine-config.json and finally the default intraday_margin decide.",
   "desks": {
     "swing": {
       "label": "Swing — the unfiltered book",
