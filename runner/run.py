@@ -810,11 +810,16 @@ def archive_logs(state, run_dir, run_id):
 # ------------------------------------------------------------------ coverage
 def coverage_row_from_results(results, slot, run_id, engine_sha, ts, step="pm", key=None):
     desks = {}
+    exposure = None
     for r in results:
         hb = r.get("heartbeat") or {}
         if hb:
             desks[r["desk"]] = {k: hb.get(k) for k in ("quiet", "positions", "working_orders",
                                                        "decisions", "warnings", "book_revision")}
+            # K-03: every desk's heartbeat carries the SAME house-wide summary (it is one
+            # combined book); the row keeps one copy, from the last desk that measured it.
+            if isinstance(hb.get("exposure"), dict):
+                exposure = hb["exposure"]
         else:
             desks[r["desk"]] = {"failed": True, "exit_code": r.get("exit_code")}
         if r.get("exit_code") not in (0, None):
@@ -822,9 +827,12 @@ def coverage_row_from_results(results, slot, run_id, engine_sha, ts, step="pm", 
             desks[r["desk"]]["exit_code"] = r["exit_code"]
         if r.get("check") not in (None, 0):
             desks[r["desk"]]["abandoned"] = "concurrent write (--check exit 2)"
-    return {"ts": ts, "slot": slot, "step": step, "run_id": run_id, "key": key,
-            "engine_sha": engine_sha, "engine_source": "runner",
-            "runner_version": RUNNER_VERSION, "desks": desks}
+    row = {"ts": ts, "slot": slot, "step": step, "run_id": run_id, "key": key,
+           "engine_sha": engine_sha, "engine_source": "runner",
+           "runner_version": RUNNER_VERSION, "desks": desks}
+    if exposure is not None:
+        row["exposure"] = exposure      # additive; absent when no desk measured the house
+    return row
 
 
 def aborted_row(slot, step, desk, run_id, engine_sha, ts, outcome, reason, key=None):
