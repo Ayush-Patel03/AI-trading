@@ -46,6 +46,10 @@ THREE BIASES YOU CANNOT REMOVE, ONLY STATE
    symbols that exist TODAY. Names that delisted, went bankrupt or were acquired out of the
    index are absent, and they are disproportionately the losers. Every summary this writes
    carries the warning; do not delete it because the report reads better without it.
+   `--universe-history <json>` (from `universe_history.py`) REDUCES it: each replay date
+   then scores only the names that were index members on that date, removed names
+   included — provided the bars file has their bars. It does not remove it, and the
+   summary, every record and the ledger row say which of the two was run.
 2. **The universe is chosen with hindsight**, for the same reason.
 3. **Entry at the scored close.** A row is scored on date D's close and the forward return is
    measured from it. Real entry is the next open at best. `--entry next_open` measures that
@@ -87,12 +91,20 @@ import ic
 import ledger
 import scanner
 import technicals
+import universe_history
 
 SURVIVORSHIP = (
     "SURVIVORSHIP BIAS: the universe is the symbol list in the bars file, which is a list of "
     "companies that still exist. Names that delisted, went bankrupt or were acquired out of "
     "the index are absent, and they are disproportionately the losers. Every number in this "
     "run is optimistic by an unknown amount for that reason alone. Do not delete this line."
+)
+SURVIVORSHIP_WITH_HISTORY = (
+    "SURVIVORSHIP, REDUCED NOT REMOVED: each replay date scores only the names that were "
+    "index members on that date (--universe-history), so names removed later are in for the "
+    "dates they were members — IF the bars file has their bars. A member with no bars is "
+    "silently absent, which is the old bias in miniature; the ledger row and the summary "
+    "carry the file's own bias statement. Do not delete this line."
 )
 MODEL_SUBSET = (
     "PARTIAL MODEL: only the trend (25) and momentum (15) pillars are reconstructable from "
@@ -255,9 +267,24 @@ def regime_asof(bench_bars, as_of, universe_tech):
     return reg
 
 
+# ---------------------------------------------------------------- point-in-time universe
+def allowed_on(membership, as_of):
+    """The bars-file keys that were index members on as_of: the raw Wikipedia ticker and
+    its normalised form (BRK.B and BRK-B) both match, so the membership file does not have
+    to know how the bars source spells a share class."""
+    mem = universe_history.members_on(membership, as_of)
+    out = set(mem)
+    out.update(universe_history.normalize_ticker(t) for t in mem)
+    return out
+
+
 # ---------------------------------------------------------------- the replay
-def replay(bars, as_of, benchmark="SPY", financials=None, slot="Backtest"):
-    """One historical scan. Returns the scanner's output, or None if nothing scored."""
+def replay(bars, as_of, benchmark="SPY", financials=None, slot="Backtest", allowed=None,
+           universe_bias=None):
+    """One historical scan. Returns the scanner's output, or None if nothing scored.
+
+    `allowed` is the set of symbols that were index members on as_of (see `allowed_on`);
+    None means the whole bars file, which is the survivor universe and is labelled as such."""
     bench_bars = bars.get(benchmark) or []
     bench_tech = None
     if bench_bars:
@@ -269,6 +296,8 @@ def replay(bars, as_of, benchmark="SPY", financials=None, slot="Backtest"):
     for sym, b in bars.items():
         if sym == benchmark:
             continue
+        if allowed is not None and sym not in allowed:
+            continue                     # not a member that day: not scored that day
         fin = financials_asof((financials or {}).get(sym), as_of) if financials else None
         c = candidate(sym, b, as_of, bench_tech, fin)
         if c:
@@ -276,10 +305,15 @@ def replay(bars, as_of, benchmark="SPY", financials=None, slot="Backtest"):
     if not candidates:
         return None
 
+    warnings = [SURVIVORSHIP if allowed is None else SURVIVORSHIP_WITH_HISTORY, MODEL_SUBSET]
+    if universe_bias:
+        warnings.append(universe_bias)
     data = {
         "meta": {"scan_date": as_of, "slot": slot, "time": "16:00",
-                 "data_warnings": [SURVIVORSHIP, MODEL_SUBSET],
-                 "sources": ["backtest: historical daily bars"]},
+                 "data_warnings": warnings,
+                 "sources": ["backtest: historical daily bars"]
+                            + (["universe: point-in-time index membership"]
+                               if allowed is not None else [])},
         "regime": regime_asof(bench_bars, as_of, list(candidates.values())),
         "candidates": candidates,
         "history": [],
@@ -309,6 +343,10 @@ def main(argv=None):
                          "produces heavily overlapping observations — see the note on "
                          "effective n in the module docstring.")
     ap.add_argument("--financials", help="point-in-time fundamentals table (see load_financials)")
+    ap.add_argument("--universe-history", dest="universe_history", metavar="JSON",
+                    help="a universe_history.py file: each replay date scores only the names "
+                         "that were index members on that date. Absent = the whole bars file, "
+                         "which is a survivor universe and is labelled as such.")
     ap.add_argument("--out-records", required=True)
     ap.add_argument("--summary")
     # The trial ledger. `--ledger` alone uses the default path; omitted, the run is not
@@ -337,10 +375,15 @@ def main(argv=None):
               file=sys.stderr)
         return 2
 
+    uni = universe_block(a.universe_history, bars, a.benchmark, a.start, a.end)
+    membership = uni.pop("_membership", None)
+
     os.makedirs(a.out_records, exist_ok=True)
     written, rows_total, skipped = 0, 0, []
     for d in dates:
-        out = replay(bars, d, a.benchmark, fin)
+        allowed = allowed_on(membership, d) if membership is not None else None
+        out = replay(bars, d, a.benchmark, fin, allowed=allowed,
+                     universe_bias=uni.get("bias"))
         if not out or not out.get("results"):
             skipped.append(d)
             continue
@@ -353,10 +396,12 @@ def main(argv=None):
 
     summary = {
         "_what": "A backtest replay of the Scan Desk scoring model over historical bars.",
-        "_warnings": [SURVIVORSHIP, MODEL_SUBSET],
+        "_warnings": [SURVIVORSHIP if membership is None else SURVIVORSHIP_WITH_HISTORY,
+                      MODEL_SUBSET] + ([uni["bias"]] if uni.get("bias") else []),
         "benchmark": a.benchmark,
         "start": a.start, "end": a.end, "every_n_sessions": a.every,
         "universe_size": len(bars) - 1,
+        "universe": uni,
         "replays_written": written,
         "replays_skipped_no_candidates": skipped,
         "observations": rows_total,
@@ -372,12 +417,16 @@ def main(argv=None):
     print(f"BACKTEST  {written} replays, {rows_total} observations, "
           f"{len(bars) - 1} symbols, {a.start} -> {a.end} every {a.every} sessions")
     print(f"  records -> {a.out_records}")
-    print(f"  {SURVIVORSHIP}")
-    print(f"  {MODEL_SUBSET}")
+    if membership is not None:
+        print(f"  universe {uni['name']}: {uni['n_symbols_on_start']} members on {a.start}, "
+              f"{uni['n_symbols_on_end']} on {a.end}, {uni['n_ever']} ever; "
+              f"{uni['n_members_without_bars']} member(s) have no bars in the file")
+    for w in summary["_warnings"]:
+        print(f"  {w}")
     print(f"  next: {summary['next']}")
 
     if a.ledger:
-        row = ledger_row(a, argv, written, rows_total, len(bars) - 1)
+        row = ledger_row(a, argv, written, rows_total, len(bars) - 1, uni)
         row = ledger.append(a.ledger, row)
         print(f"  LEDGER  trial {row['n_trials_to_date']} of the ledger ({a.ledger}) "
               f"-> {row['id']}")
@@ -390,7 +439,40 @@ def main(argv=None):
     return 0
 
 
-def ledger_row(a, argv, written, rows_total, n_symbols):
+def universe_block(path, bars, benchmark, start, end):
+    """The `universe` block for the summary and the ledger row. Without a history file it
+    names the bars file, which is all the old row ever said. With one it carries the
+    point-in-time counts, the file's bias statement, and — the number that decides whether
+    the file did any good — how many members have no bars to be scored on."""
+    if not path:
+        return {"name": None, "n_symbols": len(bars) - 1, "point_in_time": False}
+    doc = universe_history.load(path)
+    mem = doc["membership"]
+    on_start, on_end = allowed_on(mem, start), allowed_on(mem, end)
+    ever = set(mem) | {universe_history.normalize_ticker(t) for t in mem}
+    have = set(bars) - {benchmark}
+    # a member spelled either way counts as covered
+    covered = {t for t in mem if t in have or universe_history.normalize_ticker(t) in have}
+    bias = universe_history.bias_statement(mem, start, end, doc.get("unparseable_rows") or 0,
+                                           doc.get("index") or "index", doc.get("notes"))
+    return {
+        "name": doc.get("name") or f"{doc.get('index', 'index')}-history",
+        "file": os.path.basename(path),
+        "fetched_at": doc.get("fetched_at"),
+        "point_in_time": True,
+        "n_symbols": len(bars) - 1,
+        "n_symbols_on_start": len(universe_history.members_on(mem, start)),
+        "n_symbols_on_end": len(universe_history.members_on(mem, end)),
+        "n_ever": len(mem),
+        "n_members_with_bars": len(covered),
+        "n_members_without_bars": len(mem) - len(covered),
+        "n_bars_symbols_never_members": len(have - ever),
+        "bias": bias,
+        "_membership": mem,
+    }
+
+
+def ledger_row(a, argv, written, rows_total, n_symbols, uni=None):
     """The ledger row for a finished run: the IC summary of what was just written."""
     horizons = [int(x) for x in a.horizons.split(",") if x.strip()]
     obs = ic.load_observations(a.out_records, a.bars, horizons) if written else []
@@ -402,13 +484,21 @@ def ledger_row(a, argv, written, rows_total, n_symbols):
         except ValueError:
             pass
     cmd = ["backtest.py"] + list(argv if argv is not None else sys.argv[1:])
+    universe = {"name": os.path.basename(a.bars), "n_symbols": n_symbols}
+    bias = None
+    if uni and uni.get("point_in_time"):
+        universe = {k: uni[k] for k in ("name", "file", "n_symbols", "n_symbols_on_start",
+                                        "n_symbols_on_end", "n_ever", "n_members_with_bars",
+                                        "n_members_without_bars")}
+        bias = uni.get("bias")
     return {
         "id": a.experiment_id,
         "hypothesis": a.hypothesis,
         "config_diff": diff,
         "harness_cmd": cmd,
         "window": {"start": a.start, "end": a.end},
-        "universe": {"name": os.path.basename(a.bars), "n_symbols": n_symbols},
+        "universe": universe,
+        "universe_bias": bias,
         "n": rows_total,
         "horizons": horizons,
         "in_sample": ins,

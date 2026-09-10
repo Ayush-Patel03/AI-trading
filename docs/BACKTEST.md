@@ -71,7 +71,12 @@ it.
    companies that exist *today*. Names that delisted, went bankrupt or were acquired out of
    the index are absent, and they are disproportionately the losers. Every summary and every
    record carries the warning. Do not delete it because the report reads better without it.
-   `universe.py` reduces this where point-in-time index membership is available (§4).
+   `universe_history.py` produces point-in-time index membership from Wikipedia's change
+   tables and `backtest.py --universe-history <json>` intersects every replay date with the
+   names that were members that day — removed names included, **if the bars file has their
+   bars**. That reduces the bias and relabels the warning `REDUCED NOT REMOVED`; the file's
+   own bias statement rides on the summary, every record and the ledger row.
+   `docs/DATA.md` §3 has the procedure and what still has to be stated.
 2. **The universe was chosen with hindsight**, for the same reason.
 3. **Entry at the scored close.** A row is scored on D's close and the forward return runs
    from it. Real entry is the next open at best. The gap between those two is a real cost and
@@ -171,6 +176,12 @@ it in the journal, and say so in PM.md section 3.
 python3 backtest.py --bars bars.json --start 2024-01-01 --end 2026-06-30 \
                     --every 5 --out-records records/ --summary backtest.json
 
+# the same run on point-in-time index membership (docs/DATA.md §3): the bars file must
+# then cover the names that were members on those dates, not today's list
+python3 backtest.py --bars bars.json --start 2024-01-01 --end 2026-06-30 --every 5 \
+                    --universe-history ../experiments/universe_sp500.json \
+                    --out-records records/ --summary backtest.json
+
 python3 validate.py --records records/ --bars bars.json \
                     --horizons 5,10,20 --out validation.json --md validation.md
 ```
@@ -217,7 +228,8 @@ evidence. The ledger already stands at **4** (§ backfill below), so the next tr
 | `config_diff` | dict or string: what differs from the incumbent |
 | `harness_cmd` | the argv that produced it |
 | `window` | `{"start", "end"}` |
-| `universe` | `{"name", "n_symbols"}` (`n_symbols` may be null) |
+| `universe` | `{"name", "n_symbols"}` (`n_symbols` may be null); with `--universe-history` also `file`, `n_symbols_on_start`, `n_symbols_on_end`, `n_ever`, `n_members_with_bars`, `n_members_without_bars` |
+| `universe_bias` | the membership file's bias statement, or null without `--universe-history` |
 | `n` | observations |
 | `horizons` | e.g. `[5, 10, 20]` |
 | `in_sample` | metrics dict — from `backtest.py`, the `ic.py` score table per horizon |

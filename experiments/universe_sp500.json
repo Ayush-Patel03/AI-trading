@@ -1,0 +1,6015 @@
+{
+  "_what": "Point-in-time index membership for the backtest, walked backwards from the current constituent list through the dated changes table. Intervals are [from, to) with `to` exclusive; null = open / before history. See engine/universe_history.py and docs/DATA.md.",
+  "name": "sp500-history",
+  "index": "sp500",
+  "fetched_at": "2026-09-10T17:55:04Z",
+  "source": {
+    "kind": "csv",
+    "changes": "changes_since_2019.csv",
+    "current": "sp500_mirror.csv",
+    "note": "Built 2026-09-10 from the fja05680/sp500 mirror of the Wikipedia tables (raw.githubusercontent.com/fja05680/sp500/master/sp500_changes_since_2019.csv and sp500.csv, current through 2026-08-18) because en.wikipedia.org is denied at the egress proxy of the build session; the mirror agrees with the live page row-for-row on 2024-09-23..2026-06-30 and additionally carries ticker renames (FISV/FI, BK/BNY, PARA/PSKY, MMC/MRSH, SATS/ECHO) the page's 'selected changes' table omits. Membership before 2019-01-18 is NOT in this file (--since clamps it). Re-run 'python3 engine/universe_history.py --index sp500 --out experiments/universe_sp500.json --since 2019-01-18' from a host that can reach Wikipedia to replace it with a direct fetch."
+  },
+  "since": "2019-01-18",
+  "changes_span": {
+    "oldest": "2019-01-18",
+    "newest": "2026-08-18",
+    "rows": 125
+  },
+  "n_current": 503,
+  "n_ever": 671,
+  "unparseable_rows": 0,
+  "notes": [],
+  "bias": "UNIVERSE sp500-history 2019-01-18..2026-09-10: 505 members on 2019-01-18, 503 on 2026-09-10, 671 distinct names over the window. 168 of those are NOT in the current constituent list (AAL, AAP, ABC, ABMD, ADS, AGN, AIV, ALK, ALXN, AMG, AMTM, ANSS, ...) \u2014 a backtest on today's list would have dropped them, and removals skew toward the losers (acquired at a discount, fallen below the size floor, or delisted). 0 change rows carried no parseable ticker or date and were skipped. RESIDUAL BIAS: the source table is 'selected' changes, not all of them; price bars for removed names are only present if the bars source still serves delisted symbols \u2014 a name with membership but no bars is silently absent, exactly the old bias in miniature; and names renamed without a row keep their old ticker. State this in every write-up; do not delete it because the report reads better without it.",
+  "current": [
+    "MMM",
+    "AOS",
+    "ABT",
+    "ABBV",
+    "ACN",
+    "ADBE",
+    "AMD",
+    "AES",
+    "AFL",
+    "A",
+    "APD",
+    "ABNB",
+    "AKAM",
+    "ALB",
+    "ARE",
+    "ALGN",
+    "ALLE",
+    "LNT",
+    "ALL",
+    "GOOGL",
+    "GOOG",
+    "MO",
+    "AMZN",
+    "AMCR",
+    "AEE",
+    "AEP",
+    "AXP",
+    "AIG",
+    "AMT",
+    "AWK",
+    "AMP",
+    "AME",
+    "AMGN",
+    "APH",
+    "ADI",
+    "AON",
+    "APA",
+    "APO",
+    "AAPL",
+    "AMAT",
+    "APP",
+    "APTV",
+    "ACGL",
+    "ADM",
+    "ARES",
+    "ANET",
+    "AJG",
+    "AIZ",
+    "T",
+    "ATO",
+    "ADSK",
+    "ADP",
+    "AZO",
+    "AVY",
+    "AXON",
+    "BKR",
+    "BALL",
+    "BAC",
+    "BAX",
+    "BDX",
+    "BRK.B",
+    "BBY",
+    "TECH",
+    "BIIB",
+    "BLK",
+    "BX",
+    "XYZ",
+    "BNY",
+    "BA",
+    "BKNG",
+    "BSX",
+    "BMY",
+    "AVGO",
+    "BR",
+    "BRO",
+    "BF.B",
+    "BLDR",
+    "BG",
+    "BXP",
+    "CHRW",
+    "CDNS",
+    "CPT",
+    "COF",
+    "CAH",
+    "CCL",
+    "CARR",
+    "CVNA",
+    "CASY",
+    "CAT",
+    "CBOE",
+    "CBRE",
+    "CDW",
+    "COR",
+    "CNC",
+    "CNP",
+    "CF",
+    "CRL",
+    "SCHW",
+    "CHTR",
+    "CVX",
+    "CMG",
+    "CB",
+    "CHD",
+    "CIEN",
+    "CI",
+    "CINF",
+    "CTAS",
+    "CSCO",
+    "C",
+    "CFG",
+    "CLX",
+    "CME",
+    "CMS",
+    "KO",
+    "CTSH",
+    "COHR",
+    "COIN",
+    "CL",
+    "CMCSA",
+    "FIX",
+    "COP",
+    "ED",
+    "STZ",
+    "CEG",
+    "COO",
+    "CPRT",
+    "GLW",
+    "CPAY",
+    "CTVA",
+    "CSGP",
+    "COST",
+    "CRH",
+    "CRWD",
+    "CCI",
+    "CSX",
+    "CMI",
+    "CVS",
+    "DHR",
+    "DRI",
+    "DDOG",
+    "DVA",
+    "DECK",
+    "DE",
+    "DELL",
+    "DAL",
+    "DVN",
+    "DXCM",
+    "FANG",
+    "DLR",
+    "DG",
+    "DLTR",
+    "D",
+    "DPZ",
+    "DASH",
+    "DOV",
+    "DOW",
+    "DHI",
+    "DTE",
+    "DUK",
+    "DD",
+    "ETN",
+    "EBAY",
+    "ECHO",
+    "ECL",
+    "EIX",
+    "EW",
+    "ELV",
+    "EME",
+    "EMR",
+    "ETR",
+    "EOG",
+    "EQT",
+    "EFX",
+    "EQIX",
+    "ERIE",
+    "ESS",
+    "EL",
+    "EG",
+    "EVRG",
+    "ES",
+    "EXC",
+    "EXE",
+    "EXPE",
+    "EXPD",
+    "EXR",
+    "XOM",
+    "FFIV",
+    "FDS",
+    "FICO",
+    "FAST",
+    "FRT",
+    "FDX",
+    "FDXF",
+    "FERG",
+    "FIS",
+    "FITB",
+    "FSLR",
+    "FE",
+    "FISV",
+    "FLEX",
+    "F",
+    "FTNT",
+    "FTV",
+    "FOXA",
+    "FOX",
+    "BEN",
+    "FCX",
+    "GRMN",
+    "IT",
+    "GE",
+    "GEHC",
+    "GEV",
+    "GEN",
+    "GNRC",
+    "GD",
+    "GIS",
+    "GM",
+    "GPC",
+    "GILD",
+    "GPN",
+    "GL",
+    "GDDY",
+    "GS",
+    "HAL",
+    "HIG",
+    "HAS",
+    "HCA",
+    "DOC",
+    "HSIC",
+    "HSY",
+    "HPE",
+    "HLT",
+    "HD",
+    "HONA",
+    "HON",
+    "HRL",
+    "HST",
+    "HWM",
+    "HPQ",
+    "HUBB",
+    "HUM",
+    "HBAN",
+    "HII",
+    "IBM",
+    "IEX",
+    "IDXX",
+    "ITW",
+    "INCY",
+    "IR",
+    "PODD",
+    "INTC",
+    "IBKR",
+    "ICE",
+    "IFF",
+    "IP",
+    "INTU",
+    "ISRG",
+    "IVZ",
+    "INVH",
+    "IQV",
+    "IRM",
+    "JBHT",
+    "JBL",
+    "JKHY",
+    "J",
+    "JNJ",
+    "JCI",
+    "JPM",
+    "KVUE",
+    "KDP",
+    "KEY",
+    "KEYS",
+    "KMB",
+    "KIM",
+    "KMI",
+    "KKR",
+    "KLAC",
+    "KHC",
+    "KR",
+    "LHX",
+    "LH",
+    "LRCX",
+    "LVS",
+    "LDOS",
+    "LEN",
+    "LII",
+    "LLY",
+    "LIN",
+    "LYV",
+    "LMT",
+    "L",
+    "LOW",
+    "LULU",
+    "LITE",
+    "LYB",
+    "MTB",
+    "MPC",
+    "MAR",
+    "MRSH",
+    "MLM",
+    "MRVL",
+    "MAS",
+    "MA",
+    "MKC",
+    "MCD",
+    "MCK",
+    "MDT",
+    "MRK",
+    "META",
+    "MET",
+    "MTD",
+    "MGM",
+    "MCHP",
+    "MU",
+    "MSFT",
+    "MAA",
+    "MRNA",
+    "TAP",
+    "MDLZ",
+    "MPWR",
+    "MNST",
+    "MCO",
+    "MS",
+    "MOS",
+    "MSI",
+    "MSCI",
+    "NDAQ",
+    "NTAP",
+    "NFLX",
+    "NEM",
+    "NWSA",
+    "NWS",
+    "NEE",
+    "NKE",
+    "NI",
+    "NDSN",
+    "NSC",
+    "NTRS",
+    "NOC",
+    "NCLH",
+    "NRG",
+    "NUE",
+    "NVDA",
+    "NVR",
+    "NXPI",
+    "ORLY",
+    "OXY",
+    "ODFL",
+    "OMC",
+    "ON",
+    "OKE",
+    "ORCL",
+    "OTIS",
+    "PCAR",
+    "PKG",
+    "PLTR",
+    "PANW",
+    "PSKY",
+    "PH",
+    "PAYX",
+    "PYPL",
+    "PNR",
+    "PEP",
+    "PFE",
+    "PCG",
+    "PM",
+    "PSX",
+    "PNW",
+    "PNC",
+    "PPG",
+    "PPL",
+    "PFG",
+    "PG",
+    "PGR",
+    "PLD",
+    "PRU",
+    "PEG",
+    "PTC",
+    "PSA",
+    "PHM",
+    "PWR",
+    "QCOM",
+    "DGX",
+    "Q",
+    "RL",
+    "RJF",
+    "RDDT",
+    "RTX",
+    "O",
+    "REG",
+    "REGN",
+    "RF",
+    "RSG",
+    "RMD",
+    "RVTY",
+    "HOOD",
+    "ROK",
+    "ROL",
+    "ROP",
+    "ROST",
+    "RCL",
+    "SPGI",
+    "CRM",
+    "SNDK",
+    "SBAC",
+    "SLB",
+    "STX",
+    "SRE",
+    "NOW",
+    "SHW",
+    "SPG",
+    "SWKS",
+    "SJM",
+    "SW",
+    "SNA",
+    "SOLV",
+    "SO",
+    "LUV",
+    "SWK",
+    "SBUX",
+    "STT",
+    "STLD",
+    "STE",
+    "SYK",
+    "SMCI",
+    "SYF",
+    "SNPS",
+    "SYY",
+    "TMUS",
+    "TROW",
+    "TTWO",
+    "TPR",
+    "TRGP",
+    "TGT",
+    "TEL",
+    "TDY",
+    "TER",
+    "TSLA",
+    "TXN",
+    "TPL",
+    "TXT",
+    "TMO",
+    "TJX",
+    "TKO",
+    "TTD",
+    "TSCO",
+    "TT",
+    "TDG",
+    "TRV",
+    "TRMB",
+    "TFC",
+    "TYL",
+    "TSN",
+    "USB",
+    "UBER",
+    "UDR",
+    "ULTA",
+    "UNP",
+    "UAL",
+    "UPS",
+    "URI",
+    "UNH",
+    "UHS",
+    "VLO",
+    "VEEV",
+    "VTR",
+    "VLTO",
+    "VRSN",
+    "VRSK",
+    "VZ",
+    "VRTX",
+    "VRT",
+    "VTRS",
+    "VICI",
+    "V",
+    "VST",
+    "VMRK",
+    "VMC",
+    "WRB",
+    "GWW",
+    "WAB",
+    "WMT",
+    "DIS",
+    "WBD",
+    "WM",
+    "WAT",
+    "WEC",
+    "WFC",
+    "WELL",
+    "WST",
+    "WDC",
+    "WY",
+    "WSM",
+    "WMB",
+    "WTW",
+    "WDAY",
+    "WYNN",
+    "XEL",
+    "XYL",
+    "YUM",
+    "ZBRA",
+    "ZBH",
+    "ZTS"
+  ],
+  "changes": [
+    {
+      "date": "2019-01-18",
+      "added": [
+        "TFX"
+      ],
+      "removed": [
+        "PCG"
+      ],
+      "reason": "",
+      "raw_date": "2019-01-18"
+    },
+    {
+      "date": "2019-02-15",
+      "added": [
+        "ATO"
+      ],
+      "removed": [
+        "NFX"
+      ],
+      "reason": "",
+      "raw_date": "2019-02-15"
+    },
+    {
+      "date": "2019-02-27",
+      "added": [
+        "WAB"
+      ],
+      "removed": [
+        "GT"
+      ],
+      "reason": "",
+      "raw_date": "2019-02-27"
+    },
+    {
+      "date": "2019-04-02",
+      "added": [
+        "DOW"
+      ],
+      "removed": [
+        "BHF"
+      ],
+      "reason": "",
+      "raw_date": "2019-04-02"
+    },
+    {
+      "date": "2019-06-01",
+      "added": [
+        "LHX"
+      ],
+      "removed": [
+        "HRS"
+      ],
+      "reason": "",
+      "raw_date": "2019-06-01"
+    },
+    {
+      "date": "2019-06-03",
+      "added": [
+        "CTVA",
+        "DD"
+      ],
+      "removed": [
+        "FLR",
+        "DWDP"
+      ],
+      "reason": "",
+      "raw_date": "2019-06-03"
+    },
+    {
+      "date": "2019-06-07",
+      "added": [
+        "AMCR"
+      ],
+      "removed": [
+        "MAT"
+      ],
+      "reason": "",
+      "raw_date": "2019-06-07"
+    },
+    {
+      "date": "2019-07-01",
+      "added": [
+        "MKTX"
+      ],
+      "removed": [
+        "LLL"
+      ],
+      "reason": "",
+      "raw_date": "2019-07-01"
+    },
+    {
+      "date": "2019-07-15",
+      "added": [
+        "TMUS"
+      ],
+      "removed": [
+        "RHT"
+      ],
+      "reason": "",
+      "raw_date": "2019-07-15"
+    },
+    {
+      "date": "2019-08-08",
+      "added": [
+        "GL"
+      ],
+      "removed": [
+        "TMK"
+      ],
+      "reason": "",
+      "raw_date": "2019-08-08"
+    },
+    {
+      "date": "2019-08-09",
+      "added": [
+        "IEX",
+        "LDOS"
+      ],
+      "removed": [
+        "FL",
+        "APC"
+      ],
+      "reason": "",
+      "raw_date": "2019-08-09"
+    },
+    {
+      "date": "2019-09-23",
+      "added": [
+        "CDW"
+      ],
+      "removed": [
+        "TSS"
+      ],
+      "reason": "",
+      "raw_date": "2019-09-23"
+    },
+    {
+      "date": "2019-09-26",
+      "added": [
+        "NVR"
+      ],
+      "removed": [
+        "JEF"
+      ],
+      "reason": "",
+      "raw_date": "2019-09-26"
+    },
+    {
+      "date": "2019-10-03",
+      "added": [
+        "LVS"
+      ],
+      "removed": [
+        "NKTR"
+      ],
+      "reason": "",
+      "raw_date": "2019-10-03"
+    },
+    {
+      "date": "2019-10-18",
+      "added": [
+        "BKR"
+      ],
+      "removed": [
+        "BHGE"
+      ],
+      "reason": "",
+      "raw_date": "2019-10-18"
+    },
+    {
+      "date": "2019-11-05",
+      "added": [
+        "PEAK",
+        "NLOK"
+      ],
+      "removed": [
+        "HCP",
+        "SYMC"
+      ],
+      "reason": "",
+      "raw_date": "2019-11-05"
+    },
+    {
+      "date": "2019-11-21",
+      "added": [
+        "NOW"
+      ],
+      "removed": [
+        "CELG"
+      ],
+      "reason": "",
+      "raw_date": "2019-11-21"
+    },
+    {
+      "date": "2019-12-05",
+      "added": [
+        "WRB",
+        "VIAC"
+      ],
+      "removed": [
+        "VIAB",
+        "CBS"
+      ],
+      "reason": "",
+      "raw_date": "2019-12-05"
+    },
+    {
+      "date": "2019-12-09",
+      "added": [
+        "ODFL",
+        "TFC"
+      ],
+      "removed": [
+        "STI",
+        "BBT"
+      ],
+      "reason": "",
+      "raw_date": "2019-12-09"
+    },
+    {
+      "date": "2019-12-10",
+      "added": [
+        "J"
+      ],
+      "removed": [
+        "JEC"
+      ],
+      "reason": "",
+      "raw_date": "2019-12-10"
+    },
+    {
+      "date": "2019-12-23",
+      "added": [
+        "STE",
+        "ZBRA",
+        "LYV"
+      ],
+      "removed": [
+        "MAC",
+        "TRIP",
+        "AMG"
+      ],
+      "reason": "",
+      "raw_date": "2019-12-23"
+    },
+    {
+      "date": "2020-01-28",
+      "added": [
+        "PAYC"
+      ],
+      "removed": [
+        "WCG"
+      ],
+      "reason": "",
+      "raw_date": "2020-01-28"
+    },
+    {
+      "date": "2020-03-03",
+      "added": [
+        "TT"
+      ],
+      "removed": [
+        "XEC"
+      ],
+      "reason": "",
+      "raw_date": "2020-03-03"
+    },
+    {
+      "date": "2020-04-03",
+      "added": [
+        "RTX",
+        "OTIS",
+        "CARR"
+      ],
+      "removed": [
+        "UTX"
+      ],
+      "reason": "",
+      "raw_date": "2020-04-03"
+    },
+    {
+      "date": "2020-04-06",
+      "added": [
+        "HWM"
+      ],
+      "removed": [
+        "ARNC",
+        "RTN",
+        "M"
+      ],
+      "reason": "",
+      "raw_date": "2020-04-06"
+    },
+    {
+      "date": "2020-05-12",
+      "added": [
+        "DXCM",
+        "DPZ"
+      ],
+      "removed": [
+        "AGN",
+        "CPRI"
+      ],
+      "reason": "",
+      "raw_date": "2020-05-12"
+    },
+    {
+      "date": "2020-05-22",
+      "added": [
+        "WST"
+      ],
+      "removed": [
+        "HP"
+      ],
+      "reason": "",
+      "raw_date": "2020-05-22"
+    },
+    {
+      "date": "2020-06-22",
+      "added": [
+        "TYL",
+        "TDY",
+        "BIO"
+      ],
+      "removed": [
+        "JWN",
+        "HOG",
+        "ADS"
+      ],
+      "reason": "",
+      "raw_date": "2020-06-22"
+    },
+    {
+      "date": "2020-09-18",
+      "added": [
+        "LUMN"
+      ],
+      "removed": [
+        "CTL"
+      ],
+      "reason": "",
+      "raw_date": "2020-09-18"
+    },
+    {
+      "date": "2020-09-21",
+      "added": [
+        "CTLT",
+        "TER",
+        "ETSY"
+      ],
+      "removed": [
+        "COTY",
+        "KSS",
+        "HRB"
+      ],
+      "reason": "",
+      "raw_date": "2020-09-21"
+    },
+    {
+      "date": "2020-10-07",
+      "added": [
+        "POOL"
+      ],
+      "removed": [
+        "ETFC"
+      ],
+      "reason": "",
+      "raw_date": "2020-10-07"
+    },
+    {
+      "date": "2020-10-12",
+      "added": [
+        "VNT"
+      ],
+      "removed": [
+        "NBL"
+      ],
+      "reason": "",
+      "raw_date": "2020-10-12"
+    },
+    {
+      "date": "2020-11-17",
+      "added": [
+        "VTRS"
+      ],
+      "removed": [
+        "MYL"
+      ],
+      "reason": "",
+      "raw_date": "2020-11-17"
+    },
+    {
+      "date": "2020-12-21",
+      "added": [
+        "TSLA"
+      ],
+      "removed": [
+        "AIV"
+      ],
+      "reason": "",
+      "raw_date": "2020-12-21"
+    },
+    {
+      "date": "2021-01-07",
+      "added": [
+        "ENPH"
+      ],
+      "removed": [
+        "TIF"
+      ],
+      "reason": "",
+      "raw_date": "2021-01-07"
+    },
+    {
+      "date": "2021-01-21",
+      "added": [
+        "TRMB"
+      ],
+      "removed": [
+        "CXO"
+      ],
+      "reason": "",
+      "raw_date": "2021-01-21"
+    },
+    {
+      "date": "2021-02-12",
+      "added": [
+        "MPWR"
+      ],
+      "removed": [
+        "FTI"
+      ],
+      "reason": "",
+      "raw_date": "2021-02-12"
+    },
+    {
+      "date": "2021-03-22",
+      "added": [
+        "CZR",
+        "GNRC",
+        "PENN",
+        "NXPI"
+      ],
+      "removed": [
+        "VNT",
+        "XRX",
+        "SLG",
+        "FLS"
+      ],
+      "reason": "",
+      "raw_date": "2021-03-22"
+    },
+    {
+      "date": "2021-04-20",
+      "added": [
+        "PTC"
+      ],
+      "removed": [
+        "VAR"
+      ],
+      "reason": "",
+      "raw_date": "2021-04-20"
+    },
+    {
+      "date": "2021-05-14",
+      "added": [
+        "CRL"
+      ],
+      "removed": [
+        "FLIR"
+      ],
+      "reason": "",
+      "raw_date": "2021-05-14"
+    },
+    {
+      "date": "2021-06-04",
+      "added": [
+        "OGN"
+      ],
+      "removed": [
+        "HFC"
+      ],
+      "reason": "",
+      "raw_date": "2021-06-04"
+    },
+    {
+      "date": "2021-07-21",
+      "added": [
+        "MRNA"
+      ],
+      "removed": [
+        "ALXN"
+      ],
+      "reason": "",
+      "raw_date": "2021-07-21"
+    },
+    {
+      "date": "2021-08-03",
+      "added": [
+        "BBWI"
+      ],
+      "removed": [
+        "LB"
+      ],
+      "reason": "",
+      "raw_date": "2021-08-03"
+    },
+    {
+      "date": "2021-08-30",
+      "added": [
+        "TECH"
+      ],
+      "removed": [
+        "MXIM"
+      ],
+      "reason": "",
+      "raw_date": "2021-08-30"
+    },
+    {
+      "date": "2021-09-20",
+      "added": [
+        "BRO",
+        "CDAY",
+        "MTCH"
+      ],
+      "removed": [
+        "NOV",
+        "UNM",
+        "PRGO"
+      ],
+      "reason": "",
+      "raw_date": "2021-09-20"
+    },
+    {
+      "date": "2021-10-04",
+      "added": [
+        "CTRA"
+      ],
+      "removed": [
+        "COG"
+      ],
+      "reason": "",
+      "raw_date": "2021-10-04"
+    },
+    {
+      "date": "2021-12-14",
+      "added": [
+        "EPAM"
+      ],
+      "removed": [
+        "KSU"
+      ],
+      "reason": "",
+      "raw_date": "2021-12-14"
+    },
+    {
+      "date": "2021-12-20",
+      "added": [
+        "SBNY",
+        "SEDG",
+        "FDS"
+      ],
+      "removed": [
+        "LEG",
+        "HBI",
+        "WU"
+      ],
+      "reason": "",
+      "raw_date": "2021-12-20"
+    },
+    {
+      "date": "2022-01-10",
+      "added": [
+        "WTW"
+      ],
+      "removed": [
+        "WLTW"
+      ],
+      "reason": "",
+      "raw_date": "2022-01-10"
+    },
+    {
+      "date": "2022-02-02",
+      "added": [
+        "CEG"
+      ],
+      "removed": [
+        "GPS"
+      ],
+      "reason": "",
+      "raw_date": "2022-02-02"
+    },
+    {
+      "date": "2022-02-15",
+      "added": [
+        "NDSN"
+      ],
+      "removed": [
+        "XLNX"
+      ],
+      "reason": "",
+      "raw_date": "2022-02-15"
+    },
+    {
+      "date": "2022-02-17",
+      "added": [
+        "PARA"
+      ],
+      "removed": [
+        "VIAC"
+      ],
+      "reason": "",
+      "raw_date": "2022-02-17"
+    },
+    {
+      "date": "2022-03-02",
+      "added": [
+        "MOH"
+      ],
+      "removed": [
+        "INFO"
+      ],
+      "reason": "",
+      "raw_date": "2022-03-02"
+    },
+    {
+      "date": "2022-04-04",
+      "added": [
+        "CPT"
+      ],
+      "removed": [
+        "PBCT"
+      ],
+      "reason": "",
+      "raw_date": "2022-04-04"
+    },
+    {
+      "date": "2022-04-11",
+      "added": [
+        "WBD"
+      ],
+      "removed": [
+        "DISCA",
+        "DISCK"
+      ],
+      "reason": "",
+      "raw_date": "2022-04-11"
+    },
+    {
+      "date": "2022-05-10",
+      "added": [
+        "BALL"
+      ],
+      "removed": [
+        "BLL"
+      ],
+      "reason": "",
+      "raw_date": "2022-05-10"
+    },
+    {
+      "date": "2022-06-08",
+      "added": [
+        "VICI"
+      ],
+      "removed": [
+        "CERN"
+      ],
+      "reason": "",
+      "raw_date": "2022-06-08"
+    },
+    {
+      "date": "2022-06-09",
+      "added": [
+        "META"
+      ],
+      "removed": [
+        "FB"
+      ],
+      "reason": "",
+      "raw_date": "2022-06-09"
+    },
+    {
+      "date": "2022-06-21",
+      "added": [
+        "ON",
+        "KDP"
+      ],
+      "removed": [
+        "IPGP",
+        "UA",
+        "UAA"
+      ],
+      "reason": "",
+      "raw_date": "2022-06-21"
+    },
+    {
+      "date": "2022-06-28",
+      "added": [
+        "ELV"
+      ],
+      "removed": [
+        "ANTM"
+      ],
+      "reason": "",
+      "raw_date": "2022-06-28"
+    },
+    {
+      "date": "2022-09-19",
+      "added": [
+        "INVH",
+        "CSGP"
+      ],
+      "removed": [
+        "PENN",
+        "PVH"
+      ],
+      "reason": "",
+      "raw_date": "2022-09-19"
+    },
+    {
+      "date": "2022-10-03",
+      "added": [
+        "EQT",
+        "PCG"
+      ],
+      "removed": [
+        "DRE",
+        "CTXS"
+      ],
+      "reason": "",
+      "raw_date": "2022-10-03"
+    },
+    {
+      "date": "2022-10-12",
+      "added": [
+        "TRGP"
+      ],
+      "removed": [
+        "NLSN"
+      ],
+      "reason": "",
+      "raw_date": "2022-10-12"
+    },
+    {
+      "date": "2022-11-01",
+      "added": [
+        "ACGL"
+      ],
+      "removed": [
+        "TWTR"
+      ],
+      "reason": "",
+      "raw_date": "2022-11-01"
+    },
+    {
+      "date": "2022-11-08",
+      "added": [
+        "GEN"
+      ],
+      "removed": [
+        "NLOK"
+      ],
+      "reason": "",
+      "raw_date": "2022-11-08"
+    },
+    {
+      "date": "2022-12-19",
+      "added": [
+        "FSLR"
+      ],
+      "removed": [
+        "FBHS"
+      ],
+      "reason": "",
+      "raw_date": "2022-12-19"
+    },
+    {
+      "date": "2022-12-22",
+      "added": [
+        "STLD"
+      ],
+      "removed": [
+        "ABMD"
+      ],
+      "reason": "",
+      "raw_date": "2022-12-22"
+    },
+    {
+      "date": "2023-01-04",
+      "added": [
+        "GEHC"
+      ],
+      "removed": [
+        "VNO"
+      ],
+      "reason": "",
+      "raw_date": "2023-01-04"
+    },
+    {
+      "date": "2023-03-15",
+      "added": [
+        "PODD",
+        "BG"
+      ],
+      "removed": [
+        "SIVB",
+        "SBNY"
+      ],
+      "reason": "",
+      "raw_date": "2023-03-15"
+    },
+    {
+      "date": "2023-03-20",
+      "added": [
+        "FICO"
+      ],
+      "removed": [
+        "LUMN"
+      ],
+      "reason": "",
+      "raw_date": "2023-03-20"
+    },
+    {
+      "date": "2023-05-04",
+      "added": [
+        "AXON"
+      ],
+      "removed": [
+        "FRC"
+      ],
+      "reason": "",
+      "raw_date": "2023-05-04"
+    },
+    {
+      "date": "2023-05-16",
+      "added": [
+        "RVTY"
+      ],
+      "removed": [
+        "PKI"
+      ],
+      "reason": "",
+      "raw_date": "2023-05-16"
+    },
+    {
+      "date": "2023-06-07",
+      "added": [
+        "FI"
+      ],
+      "removed": [
+        "FISV"
+      ],
+      "reason": "",
+      "raw_date": "2023-06-07"
+    },
+    {
+      "date": "2023-06-20",
+      "added": [
+        "PANW"
+      ],
+      "removed": [
+        "DISH"
+      ],
+      "reason": "",
+      "raw_date": "2023-06-20"
+    },
+    {
+      "date": "2023-07-10",
+      "added": [
+        "EG"
+      ],
+      "removed": [
+        "RE"
+      ],
+      "reason": "",
+      "raw_date": "2023-07-10"
+    },
+    {
+      "date": "2023-08-25",
+      "added": [
+        "KVUE"
+      ],
+      "removed": [
+        "AAP"
+      ],
+      "reason": "",
+      "raw_date": "2023-08-25"
+    },
+    {
+      "date": "2023-08-30",
+      "added": [
+        "COR"
+      ],
+      "removed": [
+        "ABC"
+      ],
+      "reason": "",
+      "raw_date": "2023-08-30"
+    },
+    {
+      "date": "2023-09-18",
+      "added": [
+        "ABNB",
+        "BX"
+      ],
+      "removed": [
+        "NWL",
+        "LNC"
+      ],
+      "reason": "",
+      "raw_date": "2023-09-18"
+    },
+    {
+      "date": "2023-10-02",
+      "added": [
+        "VLTO"
+      ],
+      "removed": [
+        "DXC"
+      ],
+      "reason": "",
+      "raw_date": "2023-10-02"
+    },
+    {
+      "date": "2023-10-18",
+      "added": [
+        "LULU",
+        "HUBB"
+      ],
+      "removed": [
+        "ATVI",
+        "OGN"
+      ],
+      "reason": "",
+      "raw_date": "2023-10-18"
+    },
+    {
+      "date": "2023-12-18",
+      "added": [
+        "UBER",
+        "JBL",
+        "BLDR"
+      ],
+      "removed": [
+        "SEE",
+        "ALK",
+        "SEDG"
+      ],
+      "reason": "",
+      "raw_date": "2023-12-18"
+    },
+    {
+      "date": "2024-02-01",
+      "added": [
+        "DAY"
+      ],
+      "removed": [
+        "CDAY"
+      ],
+      "reason": "",
+      "raw_date": "2024-02-01"
+    },
+    {
+      "date": "2024-03-04",
+      "added": [
+        "DOC"
+      ],
+      "removed": [
+        "PEAK"
+      ],
+      "reason": "",
+      "raw_date": "2024-03-04"
+    },
+    {
+      "date": "2024-03-18",
+      "added": [
+        "DECK",
+        "SMCI"
+      ],
+      "removed": [
+        "ZION",
+        "WHR"
+      ],
+      "reason": "",
+      "raw_date": "2024-03-18"
+    },
+    {
+      "date": "2024-03-25",
+      "added": [
+        "CPAY"
+      ],
+      "removed": [
+        "FLT"
+      ],
+      "reason": "",
+      "raw_date": "2024-03-25"
+    },
+    {
+      "date": "2024-04-01",
+      "added": [
+        "SOLV"
+      ],
+      "removed": [
+        "VFC"
+      ],
+      "reason": "",
+      "raw_date": "2024-04-01"
+    },
+    {
+      "date": "2024-04-02",
+      "added": [
+        "GEV"
+      ],
+      "removed": [
+        "XRAY"
+      ],
+      "reason": "",
+      "raw_date": "2024-04-02"
+    },
+    {
+      "date": "2024-05-08",
+      "added": [
+        "VST"
+      ],
+      "removed": [
+        "PXD"
+      ],
+      "reason": "",
+      "raw_date": "2024-05-08"
+    },
+    {
+      "date": "2024-06-24",
+      "added": [
+        "GDDY",
+        "CRWD",
+        "KKR"
+      ],
+      "removed": [
+        "ILMN",
+        "CMA",
+        "RHI"
+      ],
+      "reason": "",
+      "raw_date": "2024-06-24"
+    },
+    {
+      "date": "2024-07-08",
+      "added": [
+        "SW"
+      ],
+      "removed": [
+        "WRK"
+      ],
+      "reason": "",
+      "raw_date": "2024-07-08"
+    },
+    {
+      "date": "2024-09-23",
+      "added": [
+        "ERIE",
+        "DELL",
+        "PLTR"
+      ],
+      "removed": [
+        "BIO",
+        "ETSY",
+        "AAL"
+      ],
+      "reason": "",
+      "raw_date": "2024-09-23"
+    },
+    {
+      "date": "2024-09-30",
+      "added": [
+        "AMTM"
+      ],
+      "removed": [],
+      "reason": "",
+      "raw_date": "2024-09-30"
+    },
+    {
+      "date": "2024-10-01",
+      "added": [],
+      "removed": [
+        "BBWI"
+      ],
+      "reason": "",
+      "raw_date": "2024-10-01"
+    },
+    {
+      "date": "2024-11-26",
+      "added": [
+        "TPL"
+      ],
+      "removed": [
+        "MRO"
+      ],
+      "reason": "",
+      "raw_date": "2024-11-26"
+    },
+    {
+      "date": "2024-12-23",
+      "added": [
+        "APO",
+        "WDAY",
+        "LII"
+      ],
+      "removed": [
+        "QRVO",
+        "AMTM",
+        "CTLT"
+      ],
+      "reason": "",
+      "raw_date": "2024-12-23"
+    },
+    {
+      "date": "2025-03-24",
+      "added": [
+        "EXE",
+        "WSM",
+        "TKO",
+        "DASH"
+      ],
+      "removed": [
+        "FMC",
+        "CE",
+        "TFX",
+        "BWA"
+      ],
+      "reason": "",
+      "raw_date": "2025-03-24"
+    },
+    {
+      "date": "2025-05-19",
+      "added": [
+        "COIN"
+      ],
+      "removed": [
+        "DFS"
+      ],
+      "reason": "",
+      "raw_date": "2025-05-19"
+    },
+    {
+      "date": "2025-07-09",
+      "added": [
+        "DDOG"
+      ],
+      "removed": [
+        "JNPR"
+      ],
+      "reason": "",
+      "raw_date": "2025-07-09"
+    },
+    {
+      "date": "2025-07-18",
+      "added": [
+        "TTD"
+      ],
+      "removed": [
+        "ANSS"
+      ],
+      "reason": "",
+      "raw_date": "2025-07-18"
+    },
+    {
+      "date": "2025-07-23",
+      "added": [
+        "XYZ"
+      ],
+      "removed": [
+        "HES"
+      ],
+      "reason": "",
+      "raw_date": "2025-07-23"
+    },
+    {
+      "date": "2025-08-08",
+      "added": [
+        "PSKY"
+      ],
+      "removed": [
+        "PARA"
+      ],
+      "reason": "",
+      "raw_date": "2025-08-08"
+    },
+    {
+      "date": "2025-08-28",
+      "added": [
+        "IBKR"
+      ],
+      "removed": [
+        "WBA"
+      ],
+      "reason": "",
+      "raw_date": "2025-08-28"
+    },
+    {
+      "date": "2025-09-22",
+      "added": [
+        "APP",
+        "HOOD",
+        "EME"
+      ],
+      "removed": [
+        "MKTX",
+        "CZR",
+        "ENPH"
+      ],
+      "reason": "",
+      "raw_date": "2025-09-22"
+    },
+    {
+      "date": "2025-10-30",
+      "added": [
+        "SOLS"
+      ],
+      "removed": [],
+      "reason": "",
+      "raw_date": "2025-10-30"
+    },
+    {
+      "date": "2025-10-31",
+      "added": [],
+      "removed": [
+        "KMX"
+      ],
+      "reason": "",
+      "raw_date": "2025-10-31"
+    },
+    {
+      "date": "2025-11-03",
+      "added": [
+        "Q"
+      ],
+      "removed": [],
+      "reason": "",
+      "raw_date": "2025-11-03"
+    },
+    {
+      "date": "2025-11-04",
+      "added": [],
+      "removed": [
+        "EMN"
+      ],
+      "reason": "",
+      "raw_date": "2025-11-04"
+    },
+    {
+      "date": "2025-11-11",
+      "added": [
+        "FISV"
+      ],
+      "removed": [
+        "FI"
+      ],
+      "reason": "",
+      "raw_date": "2025-11-11"
+    },
+    {
+      "date": "2025-11-28",
+      "added": [
+        "SNDK"
+      ],
+      "removed": [
+        "IPG"
+      ],
+      "reason": "",
+      "raw_date": "2025-11-28"
+    },
+    {
+      "date": "2025-12-11",
+      "added": [
+        "ARES"
+      ],
+      "removed": [
+        "K"
+      ],
+      "reason": "",
+      "raw_date": "2025-12-11"
+    },
+    {
+      "date": "2025-12-22",
+      "added": [
+        "FIX",
+        "CVNA",
+        "CRH"
+      ],
+      "removed": [
+        "MHK",
+        "SOLS",
+        "LKQ"
+      ],
+      "reason": "",
+      "raw_date": "2025-12-22"
+    },
+    {
+      "date": "2026-01-14",
+      "added": [
+        "MRSH"
+      ],
+      "removed": [
+        "MMC"
+      ],
+      "reason": "",
+      "raw_date": "2026-01-14"
+    },
+    {
+      "date": "2026-02-09",
+      "added": [
+        "CIEN"
+      ],
+      "removed": [
+        "DAY"
+      ],
+      "reason": "",
+      "raw_date": "2026-02-09"
+    },
+    {
+      "date": "2026-03-23",
+      "added": [
+        "SATS",
+        "COHR",
+        "LITE",
+        "VRT"
+      ],
+      "removed": [
+        "PAYC",
+        "LW",
+        "MOH",
+        "MTCH"
+      ],
+      "reason": "",
+      "raw_date": "2026-03-23"
+    },
+    {
+      "date": "2026-04-09",
+      "added": [
+        "CASY"
+      ],
+      "removed": [
+        "HOLX"
+      ],
+      "reason": "",
+      "raw_date": "2026-04-09"
+    },
+    {
+      "date": "2026-05-07",
+      "added": [
+        "VEEV"
+      ],
+      "removed": [
+        "CTRA"
+      ],
+      "reason": "",
+      "raw_date": "2026-05-07"
+    },
+    {
+      "date": "2026-05-21",
+      "added": [
+        "BNY"
+      ],
+      "removed": [
+        "BK"
+      ],
+      "reason": "",
+      "raw_date": "2026-05-21"
+    },
+    {
+      "date": "2026-06-01",
+      "added": [
+        "FDXF"
+      ],
+      "removed": [],
+      "reason": "",
+      "raw_date": "2026-06-01"
+    },
+    {
+      "date": "2026-06-02",
+      "added": [],
+      "removed": [
+        "EPAM"
+      ],
+      "reason": "",
+      "raw_date": "2026-06-02"
+    },
+    {
+      "date": "2026-06-22",
+      "added": [
+        "FLEX",
+        "MRVL"
+      ],
+      "removed": [
+        "CPB",
+        "POOL"
+      ],
+      "reason": "",
+      "raw_date": "2026-06-22"
+    },
+    {
+      "date": "2026-06-24",
+      "added": [
+        "ECHO"
+      ],
+      "removed": [
+        "SATS"
+      ],
+      "reason": "",
+      "raw_date": "2026-06-24"
+    },
+    {
+      "date": "2026-06-29",
+      "added": [
+        "HONA"
+      ],
+      "removed": [],
+      "reason": "",
+      "raw_date": "2026-06-29"
+    },
+    {
+      "date": "2026-06-30",
+      "added": [],
+      "removed": [
+        "CAG"
+      ],
+      "reason": "",
+      "raw_date": "2026-06-30"
+    },
+    {
+      "date": "2026-08-05",
+      "added": [
+        "FERG"
+      ],
+      "removed": [
+        "EA"
+      ],
+      "reason": "",
+      "raw_date": "2026-08-05"
+    },
+    {
+      "date": "2026-08-18",
+      "added": [
+        "RDDT",
+        "VMRK"
+      ],
+      "removed": [
+        "AVB",
+        "EQR"
+      ],
+      "reason": "",
+      "raw_date": "2026-08-18"
+    }
+  ],
+  "membership": {
+    "RDDT": [
+      [
+        "2026-08-18",
+        null
+      ]
+    ],
+    "VMRK": [
+      [
+        "2026-08-18",
+        null
+      ]
+    ],
+    "FERG": [
+      [
+        "2026-08-05",
+        null
+      ]
+    ],
+    "HONA": [
+      [
+        "2026-06-29",
+        null
+      ]
+    ],
+    "ECHO": [
+      [
+        "2026-06-24",
+        null
+      ]
+    ],
+    "FLEX": [
+      [
+        "2026-06-22",
+        null
+      ]
+    ],
+    "MRVL": [
+      [
+        "2026-06-22",
+        null
+      ]
+    ],
+    "FDXF": [
+      [
+        "2026-06-01",
+        null
+      ]
+    ],
+    "BNY": [
+      [
+        "2026-05-21",
+        null
+      ]
+    ],
+    "VEEV": [
+      [
+        "2026-05-07",
+        null
+      ]
+    ],
+    "CASY": [
+      [
+        "2026-04-09",
+        null
+      ]
+    ],
+    "SATS": [
+      [
+        "2026-03-23",
+        "2026-06-24"
+      ]
+    ],
+    "COHR": [
+      [
+        "2026-03-23",
+        null
+      ]
+    ],
+    "LITE": [
+      [
+        "2026-03-23",
+        null
+      ]
+    ],
+    "VRT": [
+      [
+        "2026-03-23",
+        null
+      ]
+    ],
+    "CIEN": [
+      [
+        "2026-02-09",
+        null
+      ]
+    ],
+    "MRSH": [
+      [
+        "2026-01-14",
+        null
+      ]
+    ],
+    "FIX": [
+      [
+        "2025-12-22",
+        null
+      ]
+    ],
+    "CVNA": [
+      [
+        "2025-12-22",
+        null
+      ]
+    ],
+    "CRH": [
+      [
+        "2025-12-22",
+        null
+      ]
+    ],
+    "ARES": [
+      [
+        "2025-12-11",
+        null
+      ]
+    ],
+    "SNDK": [
+      [
+        "2025-11-28",
+        null
+      ]
+    ],
+    "FISV": [
+      [
+        "2019-01-18",
+        "2023-06-07"
+      ],
+      [
+        "2025-11-11",
+        null
+      ]
+    ],
+    "Q": [
+      [
+        "2025-11-03",
+        null
+      ]
+    ],
+    "SOLS": [
+      [
+        "2025-10-30",
+        "2025-12-22"
+      ]
+    ],
+    "APP": [
+      [
+        "2025-09-22",
+        null
+      ]
+    ],
+    "HOOD": [
+      [
+        "2025-09-22",
+        null
+      ]
+    ],
+    "EME": [
+      [
+        "2025-09-22",
+        null
+      ]
+    ],
+    "IBKR": [
+      [
+        "2025-08-28",
+        null
+      ]
+    ],
+    "PSKY": [
+      [
+        "2025-08-08",
+        null
+      ]
+    ],
+    "XYZ": [
+      [
+        "2025-07-23",
+        null
+      ]
+    ],
+    "TTD": [
+      [
+        "2025-07-18",
+        null
+      ]
+    ],
+    "DDOG": [
+      [
+        "2025-07-09",
+        null
+      ]
+    ],
+    "COIN": [
+      [
+        "2025-05-19",
+        null
+      ]
+    ],
+    "EXE": [
+      [
+        "2025-03-24",
+        null
+      ]
+    ],
+    "WSM": [
+      [
+        "2025-03-24",
+        null
+      ]
+    ],
+    "TKO": [
+      [
+        "2025-03-24",
+        null
+      ]
+    ],
+    "DASH": [
+      [
+        "2025-03-24",
+        null
+      ]
+    ],
+    "APO": [
+      [
+        "2024-12-23",
+        null
+      ]
+    ],
+    "WDAY": [
+      [
+        "2024-12-23",
+        null
+      ]
+    ],
+    "LII": [
+      [
+        "2024-12-23",
+        null
+      ]
+    ],
+    "TPL": [
+      [
+        "2024-11-26",
+        null
+      ]
+    ],
+    "AMTM": [
+      [
+        "2024-09-30",
+        "2024-12-23"
+      ]
+    ],
+    "ERIE": [
+      [
+        "2024-09-23",
+        null
+      ]
+    ],
+    "DELL": [
+      [
+        "2024-09-23",
+        null
+      ]
+    ],
+    "PLTR": [
+      [
+        "2024-09-23",
+        null
+      ]
+    ],
+    "SW": [
+      [
+        "2024-07-08",
+        null
+      ]
+    ],
+    "GDDY": [
+      [
+        "2024-06-24",
+        null
+      ]
+    ],
+    "CRWD": [
+      [
+        "2024-06-24",
+        null
+      ]
+    ],
+    "KKR": [
+      [
+        "2024-06-24",
+        null
+      ]
+    ],
+    "VST": [
+      [
+        "2024-05-08",
+        null
+      ]
+    ],
+    "GEV": [
+      [
+        "2024-04-02",
+        null
+      ]
+    ],
+    "SOLV": [
+      [
+        "2024-04-01",
+        null
+      ]
+    ],
+    "CPAY": [
+      [
+        "2024-03-25",
+        null
+      ]
+    ],
+    "DECK": [
+      [
+        "2024-03-18",
+        null
+      ]
+    ],
+    "SMCI": [
+      [
+        "2024-03-18",
+        null
+      ]
+    ],
+    "DOC": [
+      [
+        "2024-03-04",
+        null
+      ]
+    ],
+    "DAY": [
+      [
+        "2024-02-01",
+        "2026-02-09"
+      ]
+    ],
+    "UBER": [
+      [
+        "2023-12-18",
+        null
+      ]
+    ],
+    "JBL": [
+      [
+        "2023-12-18",
+        null
+      ]
+    ],
+    "BLDR": [
+      [
+        "2023-12-18",
+        null
+      ]
+    ],
+    "LULU": [
+      [
+        "2023-10-18",
+        null
+      ]
+    ],
+    "HUBB": [
+      [
+        "2023-10-18",
+        null
+      ]
+    ],
+    "VLTO": [
+      [
+        "2023-10-02",
+        null
+      ]
+    ],
+    "ABNB": [
+      [
+        "2023-09-18",
+        null
+      ]
+    ],
+    "BX": [
+      [
+        "2023-09-18",
+        null
+      ]
+    ],
+    "COR": [
+      [
+        "2023-08-30",
+        null
+      ]
+    ],
+    "KVUE": [
+      [
+        "2023-08-25",
+        null
+      ]
+    ],
+    "EG": [
+      [
+        "2023-07-10",
+        null
+      ]
+    ],
+    "PANW": [
+      [
+        "2023-06-20",
+        null
+      ]
+    ],
+    "FI": [
+      [
+        "2023-06-07",
+        "2025-11-11"
+      ]
+    ],
+    "RVTY": [
+      [
+        "2023-05-16",
+        null
+      ]
+    ],
+    "AXON": [
+      [
+        "2023-05-04",
+        null
+      ]
+    ],
+    "FICO": [
+      [
+        "2023-03-20",
+        null
+      ]
+    ],
+    "PODD": [
+      [
+        "2023-03-15",
+        null
+      ]
+    ],
+    "BG": [
+      [
+        "2023-03-15",
+        null
+      ]
+    ],
+    "GEHC": [
+      [
+        "2023-01-04",
+        null
+      ]
+    ],
+    "STLD": [
+      [
+        "2022-12-22",
+        null
+      ]
+    ],
+    "FSLR": [
+      [
+        "2022-12-19",
+        null
+      ]
+    ],
+    "GEN": [
+      [
+        "2022-11-08",
+        null
+      ]
+    ],
+    "ACGL": [
+      [
+        "2022-11-01",
+        null
+      ]
+    ],
+    "TRGP": [
+      [
+        "2022-10-12",
+        null
+      ]
+    ],
+    "EQT": [
+      [
+        "2022-10-03",
+        null
+      ]
+    ],
+    "PCG": [
+      [
+        "2022-10-03",
+        null
+      ]
+    ],
+    "INVH": [
+      [
+        "2022-09-19",
+        null
+      ]
+    ],
+    "CSGP": [
+      [
+        "2022-09-19",
+        null
+      ]
+    ],
+    "ELV": [
+      [
+        "2022-06-28",
+        null
+      ]
+    ],
+    "ON": [
+      [
+        "2022-06-21",
+        null
+      ]
+    ],
+    "KDP": [
+      [
+        "2022-06-21",
+        null
+      ]
+    ],
+    "META": [
+      [
+        "2022-06-09",
+        null
+      ]
+    ],
+    "VICI": [
+      [
+        "2022-06-08",
+        null
+      ]
+    ],
+    "BALL": [
+      [
+        "2022-05-10",
+        null
+      ]
+    ],
+    "WBD": [
+      [
+        "2022-04-11",
+        null
+      ]
+    ],
+    "CPT": [
+      [
+        "2022-04-04",
+        null
+      ]
+    ],
+    "MOH": [
+      [
+        "2022-03-02",
+        "2026-03-23"
+      ]
+    ],
+    "PARA": [
+      [
+        "2022-02-17",
+        "2025-08-08"
+      ]
+    ],
+    "NDSN": [
+      [
+        "2022-02-15",
+        null
+      ]
+    ],
+    "CEG": [
+      [
+        "2022-02-02",
+        null
+      ]
+    ],
+    "WTW": [
+      [
+        "2022-01-10",
+        null
+      ]
+    ],
+    "SBNY": [
+      [
+        "2021-12-20",
+        "2023-03-15"
+      ]
+    ],
+    "SEDG": [
+      [
+        "2021-12-20",
+        "2023-12-18"
+      ]
+    ],
+    "FDS": [
+      [
+        "2021-12-20",
+        null
+      ]
+    ],
+    "EPAM": [
+      [
+        "2021-12-14",
+        "2026-06-02"
+      ]
+    ],
+    "CTRA": [
+      [
+        "2021-10-04",
+        "2026-05-07"
+      ]
+    ],
+    "BRO": [
+      [
+        "2021-09-20",
+        null
+      ]
+    ],
+    "CDAY": [
+      [
+        "2021-09-20",
+        "2024-02-01"
+      ]
+    ],
+    "MTCH": [
+      [
+        "2021-09-20",
+        "2026-03-23"
+      ]
+    ],
+    "TECH": [
+      [
+        "2021-08-30",
+        null
+      ]
+    ],
+    "BBWI": [
+      [
+        "2021-08-03",
+        "2024-10-01"
+      ]
+    ],
+    "MRNA": [
+      [
+        "2021-07-21",
+        null
+      ]
+    ],
+    "OGN": [
+      [
+        "2021-06-04",
+        "2023-10-18"
+      ]
+    ],
+    "CRL": [
+      [
+        "2021-05-14",
+        null
+      ]
+    ],
+    "PTC": [
+      [
+        "2021-04-20",
+        null
+      ]
+    ],
+    "CZR": [
+      [
+        "2021-03-22",
+        "2025-09-22"
+      ]
+    ],
+    "GNRC": [
+      [
+        "2021-03-22",
+        null
+      ]
+    ],
+    "PENN": [
+      [
+        "2021-03-22",
+        "2022-09-19"
+      ]
+    ],
+    "NXPI": [
+      [
+        "2021-03-22",
+        null
+      ]
+    ],
+    "MPWR": [
+      [
+        "2021-02-12",
+        null
+      ]
+    ],
+    "TRMB": [
+      [
+        "2021-01-21",
+        null
+      ]
+    ],
+    "ENPH": [
+      [
+        "2021-01-07",
+        "2025-09-22"
+      ]
+    ],
+    "TSLA": [
+      [
+        "2020-12-21",
+        null
+      ]
+    ],
+    "VTRS": [
+      [
+        "2020-11-17",
+        null
+      ]
+    ],
+    "VNT": [
+      [
+        "2020-10-12",
+        "2021-03-22"
+      ]
+    ],
+    "POOL": [
+      [
+        "2020-10-07",
+        "2026-06-22"
+      ]
+    ],
+    "CTLT": [
+      [
+        "2020-09-21",
+        "2024-12-23"
+      ]
+    ],
+    "TER": [
+      [
+        "2020-09-21",
+        null
+      ]
+    ],
+    "ETSY": [
+      [
+        "2020-09-21",
+        "2024-09-23"
+      ]
+    ],
+    "LUMN": [
+      [
+        "2020-09-18",
+        "2023-03-20"
+      ]
+    ],
+    "TYL": [
+      [
+        "2020-06-22",
+        null
+      ]
+    ],
+    "TDY": [
+      [
+        "2020-06-22",
+        null
+      ]
+    ],
+    "BIO": [
+      [
+        "2020-06-22",
+        "2024-09-23"
+      ]
+    ],
+    "WST": [
+      [
+        "2020-05-22",
+        null
+      ]
+    ],
+    "DXCM": [
+      [
+        "2020-05-12",
+        null
+      ]
+    ],
+    "DPZ": [
+      [
+        "2020-05-12",
+        null
+      ]
+    ],
+    "HWM": [
+      [
+        "2020-04-06",
+        null
+      ]
+    ],
+    "RTX": [
+      [
+        "2020-04-03",
+        null
+      ]
+    ],
+    "OTIS": [
+      [
+        "2020-04-03",
+        null
+      ]
+    ],
+    "CARR": [
+      [
+        "2020-04-03",
+        null
+      ]
+    ],
+    "TT": [
+      [
+        "2020-03-03",
+        null
+      ]
+    ],
+    "PAYC": [
+      [
+        "2020-01-28",
+        "2026-03-23"
+      ]
+    ],
+    "STE": [
+      [
+        "2019-12-23",
+        null
+      ]
+    ],
+    "ZBRA": [
+      [
+        "2019-12-23",
+        null
+      ]
+    ],
+    "LYV": [
+      [
+        "2019-12-23",
+        null
+      ]
+    ],
+    "J": [
+      [
+        "2019-12-10",
+        null
+      ]
+    ],
+    "ODFL": [
+      [
+        "2019-12-09",
+        null
+      ]
+    ],
+    "TFC": [
+      [
+        "2019-12-09",
+        null
+      ]
+    ],
+    "WRB": [
+      [
+        "2019-12-05",
+        null
+      ]
+    ],
+    "VIAC": [
+      [
+        "2019-12-05",
+        "2022-02-17"
+      ]
+    ],
+    "NOW": [
+      [
+        "2019-11-21",
+        null
+      ]
+    ],
+    "PEAK": [
+      [
+        "2019-11-05",
+        "2024-03-04"
+      ]
+    ],
+    "NLOK": [
+      [
+        "2019-11-05",
+        "2022-11-08"
+      ]
+    ],
+    "BKR": [
+      [
+        "2019-10-18",
+        null
+      ]
+    ],
+    "LVS": [
+      [
+        "2019-10-03",
+        null
+      ]
+    ],
+    "NVR": [
+      [
+        "2019-09-26",
+        null
+      ]
+    ],
+    "CDW": [
+      [
+        "2019-09-23",
+        null
+      ]
+    ],
+    "IEX": [
+      [
+        "2019-08-09",
+        null
+      ]
+    ],
+    "LDOS": [
+      [
+        "2019-08-09",
+        null
+      ]
+    ],
+    "GL": [
+      [
+        "2019-08-08",
+        null
+      ]
+    ],
+    "TMUS": [
+      [
+        "2019-07-15",
+        null
+      ]
+    ],
+    "MKTX": [
+      [
+        "2019-07-01",
+        "2025-09-22"
+      ]
+    ],
+    "AMCR": [
+      [
+        "2019-06-07",
+        null
+      ]
+    ],
+    "CTVA": [
+      [
+        "2019-06-03",
+        null
+      ]
+    ],
+    "DD": [
+      [
+        "2019-06-03",
+        null
+      ]
+    ],
+    "LHX": [
+      [
+        "2019-06-01",
+        null
+      ]
+    ],
+    "DOW": [
+      [
+        "2019-04-02",
+        null
+      ]
+    ],
+    "WAB": [
+      [
+        "2019-02-27",
+        null
+      ]
+    ],
+    "ATO": [
+      [
+        "2019-02-15",
+        null
+      ]
+    ],
+    "TFX": [
+      [
+        "2019-01-18",
+        "2025-03-24"
+      ]
+    ],
+    "MMM": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "AOS": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "ABT": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "ABBV": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "ACN": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "ADBE": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "AMD": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "AES": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "AFL": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "A": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "APD": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "AKAM": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "ALB": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "ARE": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "ALGN": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "ALLE": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "LNT": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "ALL": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "GOOGL": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "GOOG": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "MO": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "AMZN": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "AEE": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "AEP": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "AXP": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "AIG": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "AMT": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "AWK": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "AMP": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "AME": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "AMGN": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "APH": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "ADI": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "AON": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "APA": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "AAPL": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "AMAT": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "APTV": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "ADM": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "ANET": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "AJG": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "AIZ": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "T": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "ADSK": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "ADP": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "AZO": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "AVY": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "BAC": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "BAX": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "BDX": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "BRK.B": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "BBY": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "BIIB": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "BLK": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "BA": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "BKNG": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "BSX": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "BMY": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "AVGO": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "BR": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "BF.B": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "BXP": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "CHRW": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "CDNS": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "COF": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "CAH": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "CCL": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "CAT": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "CBOE": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "CBRE": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "CNC": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "CNP": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "CF": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "SCHW": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "CHTR": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "CVX": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "CMG": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "CB": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "CHD": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "CI": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "CINF": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "CTAS": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "CSCO": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "C": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "CFG": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "CLX": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "CME": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "CMS": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "KO": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "CTSH": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "CL": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "CMCSA": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "COP": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "ED": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "STZ": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "COO": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "CPRT": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "GLW": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "COST": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "CCI": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "CSX": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "CMI": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "CVS": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "DHR": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "DRI": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "DVA": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "DE": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "DAL": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "DVN": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "FANG": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "DLR": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "DG": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "DLTR": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "D": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "DOV": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "DHI": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "DTE": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "DUK": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "ETN": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "EBAY": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "ECL": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "EIX": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "EW": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "EMR": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "ETR": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "EOG": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "EFX": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "EQIX": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "ESS": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "EL": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "EVRG": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "ES": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "EXC": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "EXPE": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "EXPD": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "EXR": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "XOM": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "FFIV": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "FAST": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "FRT": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "FDX": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "FIS": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "FITB": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "FE": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "F": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "FTNT": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "FTV": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "FOXA": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "FOX": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "BEN": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "FCX": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "GRMN": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "IT": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "GE": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "GD": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "GIS": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "GM": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "GPC": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "GILD": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "GPN": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "GS": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "HAL": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "HIG": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "HAS": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "HCA": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "HSIC": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "HSY": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "HPE": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "HLT": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "HD": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "HON": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "HRL": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "HST": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "HPQ": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "HUM": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "HBAN": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "HII": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "IBM": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "IDXX": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "ITW": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "INCY": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "IR": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "INTC": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "ICE": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "IFF": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "IP": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "INTU": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "ISRG": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "IVZ": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "IQV": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "IRM": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "JBHT": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "JKHY": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "JNJ": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "JCI": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "JPM": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "KEY": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "KEYS": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "KMB": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "KIM": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "KMI": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "KLAC": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "KHC": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "KR": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "LH": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "LRCX": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "LEN": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "LLY": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "LIN": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "LMT": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "L": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "LOW": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "LYB": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "MTB": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "MPC": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "MAR": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "MLM": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "MAS": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "MA": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "MKC": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "MCD": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "MCK": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "MDT": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "MRK": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "MET": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "MTD": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "MGM": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "MCHP": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "MU": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "MSFT": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "MAA": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "TAP": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "MDLZ": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "MNST": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "MCO": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "MS": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "MOS": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "MSI": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "MSCI": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "NDAQ": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "NTAP": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "NFLX": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "NEM": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "NWSA": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "NWS": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "NEE": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "NKE": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "NI": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "NSC": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "NTRS": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "NOC": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "NCLH": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "NRG": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "NUE": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "NVDA": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "ORLY": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "OXY": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "OMC": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "OKE": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "ORCL": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "PCAR": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "PKG": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "PH": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "PAYX": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "PYPL": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "PNR": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "PEP": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "PFE": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "PM": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "PSX": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "PNW": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "PNC": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "PPG": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "PPL": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "PFG": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "PG": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "PGR": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "PLD": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "PRU": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "PEG": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "PSA": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "PHM": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "PWR": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "QCOM": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "DGX": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "RL": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "RJF": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "O": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "REG": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "REGN": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "RF": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "RSG": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "RMD": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "ROK": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "ROL": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "ROP": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "ROST": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "RCL": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "SPGI": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "CRM": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "SBAC": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "SLB": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "STX": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "SRE": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "SHW": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "SPG": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "SWKS": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "SJM": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "SNA": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "SO": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "LUV": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "SWK": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "SBUX": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "STT": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "SYK": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "SYF": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "SNPS": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "SYY": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "TROW": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "TTWO": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "TPR": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "TGT": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "TEL": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "TXN": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "TXT": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "TMO": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "TJX": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "TSCO": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "TDG": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "TRV": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "TSN": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "USB": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "UDR": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "ULTA": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "UNP": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "UAL": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "UPS": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "URI": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "UNH": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "UHS": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "VLO": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "VTR": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "VRSN": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "VRSK": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "VZ": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "VRTX": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "V": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "VMC": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "GWW": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "WMT": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "DIS": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "WM": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "WAT": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "WEC": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "WFC": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "WELL": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "WDC": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "WY": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "WMB": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "WYNN": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "XEL": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "XYL": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "YUM": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "ZBH": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "ZTS": [
+      [
+        "2019-01-18",
+        null
+      ]
+    ],
+    "AVB": [
+      [
+        "2019-01-18",
+        "2026-08-18"
+      ]
+    ],
+    "EQR": [
+      [
+        "2019-01-18",
+        "2026-08-18"
+      ]
+    ],
+    "EA": [
+      [
+        "2019-01-18",
+        "2026-08-05"
+      ]
+    ],
+    "CAG": [
+      [
+        "2019-01-18",
+        "2026-06-30"
+      ]
+    ],
+    "CPB": [
+      [
+        "2019-01-18",
+        "2026-06-22"
+      ]
+    ],
+    "BK": [
+      [
+        "2019-01-18",
+        "2026-05-21"
+      ]
+    ],
+    "HOLX": [
+      [
+        "2019-01-18",
+        "2026-04-09"
+      ]
+    ],
+    "LW": [
+      [
+        "2019-01-18",
+        "2026-03-23"
+      ]
+    ],
+    "MMC": [
+      [
+        "2019-01-18",
+        "2026-01-14"
+      ]
+    ],
+    "MHK": [
+      [
+        "2019-01-18",
+        "2025-12-22"
+      ]
+    ],
+    "LKQ": [
+      [
+        "2019-01-18",
+        "2025-12-22"
+      ]
+    ],
+    "K": [
+      [
+        "2019-01-18",
+        "2025-12-11"
+      ]
+    ],
+    "IPG": [
+      [
+        "2019-01-18",
+        "2025-11-28"
+      ]
+    ],
+    "EMN": [
+      [
+        "2019-01-18",
+        "2025-11-04"
+      ]
+    ],
+    "KMX": [
+      [
+        "2019-01-18",
+        "2025-10-31"
+      ]
+    ],
+    "WBA": [
+      [
+        "2019-01-18",
+        "2025-08-28"
+      ]
+    ],
+    "HES": [
+      [
+        "2019-01-18",
+        "2025-07-23"
+      ]
+    ],
+    "ANSS": [
+      [
+        "2019-01-18",
+        "2025-07-18"
+      ]
+    ],
+    "JNPR": [
+      [
+        "2019-01-18",
+        "2025-07-09"
+      ]
+    ],
+    "DFS": [
+      [
+        "2019-01-18",
+        "2025-05-19"
+      ]
+    ],
+    "FMC": [
+      [
+        "2019-01-18",
+        "2025-03-24"
+      ]
+    ],
+    "CE": [
+      [
+        "2019-01-18",
+        "2025-03-24"
+      ]
+    ],
+    "BWA": [
+      [
+        "2019-01-18",
+        "2025-03-24"
+      ]
+    ],
+    "QRVO": [
+      [
+        "2019-01-18",
+        "2024-12-23"
+      ]
+    ],
+    "MRO": [
+      [
+        "2019-01-18",
+        "2024-11-26"
+      ]
+    ],
+    "AAL": [
+      [
+        "2019-01-18",
+        "2024-09-23"
+      ]
+    ],
+    "WRK": [
+      [
+        "2019-01-18",
+        "2024-07-08"
+      ]
+    ],
+    "ILMN": [
+      [
+        "2019-01-18",
+        "2024-06-24"
+      ]
+    ],
+    "CMA": [
+      [
+        "2019-01-18",
+        "2024-06-24"
+      ]
+    ],
+    "RHI": [
+      [
+        "2019-01-18",
+        "2024-06-24"
+      ]
+    ],
+    "PXD": [
+      [
+        "2019-01-18",
+        "2024-05-08"
+      ]
+    ],
+    "XRAY": [
+      [
+        "2019-01-18",
+        "2024-04-02"
+      ]
+    ],
+    "VFC": [
+      [
+        "2019-01-18",
+        "2024-04-01"
+      ]
+    ],
+    "FLT": [
+      [
+        "2019-01-18",
+        "2024-03-25"
+      ]
+    ],
+    "ZION": [
+      [
+        "2019-01-18",
+        "2024-03-18"
+      ]
+    ],
+    "WHR": [
+      [
+        "2019-01-18",
+        "2024-03-18"
+      ]
+    ],
+    "SEE": [
+      [
+        "2019-01-18",
+        "2023-12-18"
+      ]
+    ],
+    "ALK": [
+      [
+        "2019-01-18",
+        "2023-12-18"
+      ]
+    ],
+    "ATVI": [
+      [
+        "2019-01-18",
+        "2023-10-18"
+      ]
+    ],
+    "DXC": [
+      [
+        "2019-01-18",
+        "2023-10-02"
+      ]
+    ],
+    "NWL": [
+      [
+        "2019-01-18",
+        "2023-09-18"
+      ]
+    ],
+    "LNC": [
+      [
+        "2019-01-18",
+        "2023-09-18"
+      ]
+    ],
+    "ABC": [
+      [
+        "2019-01-18",
+        "2023-08-30"
+      ]
+    ],
+    "AAP": [
+      [
+        "2019-01-18",
+        "2023-08-25"
+      ]
+    ],
+    "RE": [
+      [
+        "2019-01-18",
+        "2023-07-10"
+      ]
+    ],
+    "DISH": [
+      [
+        "2019-01-18",
+        "2023-06-20"
+      ]
+    ],
+    "PKI": [
+      [
+        "2019-01-18",
+        "2023-05-16"
+      ]
+    ],
+    "FRC": [
+      [
+        "2019-01-18",
+        "2023-05-04"
+      ]
+    ],
+    "SIVB": [
+      [
+        "2019-01-18",
+        "2023-03-15"
+      ]
+    ],
+    "VNO": [
+      [
+        "2019-01-18",
+        "2023-01-04"
+      ]
+    ],
+    "ABMD": [
+      [
+        "2019-01-18",
+        "2022-12-22"
+      ]
+    ],
+    "FBHS": [
+      [
+        "2019-01-18",
+        "2022-12-19"
+      ]
+    ],
+    "TWTR": [
+      [
+        "2019-01-18",
+        "2022-11-01"
+      ]
+    ],
+    "NLSN": [
+      [
+        "2019-01-18",
+        "2022-10-12"
+      ]
+    ],
+    "DRE": [
+      [
+        "2019-01-18",
+        "2022-10-03"
+      ]
+    ],
+    "CTXS": [
+      [
+        "2019-01-18",
+        "2022-10-03"
+      ]
+    ],
+    "PVH": [
+      [
+        "2019-01-18",
+        "2022-09-19"
+      ]
+    ],
+    "ANTM": [
+      [
+        "2019-01-18",
+        "2022-06-28"
+      ]
+    ],
+    "IPGP": [
+      [
+        "2019-01-18",
+        "2022-06-21"
+      ]
+    ],
+    "UA": [
+      [
+        "2019-01-18",
+        "2022-06-21"
+      ]
+    ],
+    "UAA": [
+      [
+        "2019-01-18",
+        "2022-06-21"
+      ]
+    ],
+    "FB": [
+      [
+        "2019-01-18",
+        "2022-06-09"
+      ]
+    ],
+    "CERN": [
+      [
+        "2019-01-18",
+        "2022-06-08"
+      ]
+    ],
+    "BLL": [
+      [
+        "2019-01-18",
+        "2022-05-10"
+      ]
+    ],
+    "DISCA": [
+      [
+        "2019-01-18",
+        "2022-04-11"
+      ]
+    ],
+    "DISCK": [
+      [
+        "2019-01-18",
+        "2022-04-11"
+      ]
+    ],
+    "PBCT": [
+      [
+        "2019-01-18",
+        "2022-04-04"
+      ]
+    ],
+    "INFO": [
+      [
+        "2019-01-18",
+        "2022-03-02"
+      ]
+    ],
+    "XLNX": [
+      [
+        "2019-01-18",
+        "2022-02-15"
+      ]
+    ],
+    "GPS": [
+      [
+        "2019-01-18",
+        "2022-02-02"
+      ]
+    ],
+    "WLTW": [
+      [
+        "2019-01-18",
+        "2022-01-10"
+      ]
+    ],
+    "LEG": [
+      [
+        "2019-01-18",
+        "2021-12-20"
+      ]
+    ],
+    "HBI": [
+      [
+        "2019-01-18",
+        "2021-12-20"
+      ]
+    ],
+    "WU": [
+      [
+        "2019-01-18",
+        "2021-12-20"
+      ]
+    ],
+    "KSU": [
+      [
+        "2019-01-18",
+        "2021-12-14"
+      ]
+    ],
+    "COG": [
+      [
+        "2019-01-18",
+        "2021-10-04"
+      ]
+    ],
+    "NOV": [
+      [
+        "2019-01-18",
+        "2021-09-20"
+      ]
+    ],
+    "UNM": [
+      [
+        "2019-01-18",
+        "2021-09-20"
+      ]
+    ],
+    "PRGO": [
+      [
+        "2019-01-18",
+        "2021-09-20"
+      ]
+    ],
+    "MXIM": [
+      [
+        "2019-01-18",
+        "2021-08-30"
+      ]
+    ],
+    "LB": [
+      [
+        "2019-01-18",
+        "2021-08-03"
+      ]
+    ],
+    "ALXN": [
+      [
+        "2019-01-18",
+        "2021-07-21"
+      ]
+    ],
+    "HFC": [
+      [
+        "2019-01-18",
+        "2021-06-04"
+      ]
+    ],
+    "FLIR": [
+      [
+        "2019-01-18",
+        "2021-05-14"
+      ]
+    ],
+    "VAR": [
+      [
+        "2019-01-18",
+        "2021-04-20"
+      ]
+    ],
+    "XRX": [
+      [
+        "2019-01-18",
+        "2021-03-22"
+      ]
+    ],
+    "SLG": [
+      [
+        "2019-01-18",
+        "2021-03-22"
+      ]
+    ],
+    "FLS": [
+      [
+        "2019-01-18",
+        "2021-03-22"
+      ]
+    ],
+    "FTI": [
+      [
+        "2019-01-18",
+        "2021-02-12"
+      ]
+    ],
+    "CXO": [
+      [
+        "2019-01-18",
+        "2021-01-21"
+      ]
+    ],
+    "TIF": [
+      [
+        "2019-01-18",
+        "2021-01-07"
+      ]
+    ],
+    "AIV": [
+      [
+        "2019-01-18",
+        "2020-12-21"
+      ]
+    ],
+    "MYL": [
+      [
+        "2019-01-18",
+        "2020-11-17"
+      ]
+    ],
+    "NBL": [
+      [
+        "2019-01-18",
+        "2020-10-12"
+      ]
+    ],
+    "ETFC": [
+      [
+        "2019-01-18",
+        "2020-10-07"
+      ]
+    ],
+    "COTY": [
+      [
+        "2019-01-18",
+        "2020-09-21"
+      ]
+    ],
+    "KSS": [
+      [
+        "2019-01-18",
+        "2020-09-21"
+      ]
+    ],
+    "HRB": [
+      [
+        "2019-01-18",
+        "2020-09-21"
+      ]
+    ],
+    "CTL": [
+      [
+        "2019-01-18",
+        "2020-09-18"
+      ]
+    ],
+    "JWN": [
+      [
+        "2019-01-18",
+        "2020-06-22"
+      ]
+    ],
+    "HOG": [
+      [
+        "2019-01-18",
+        "2020-06-22"
+      ]
+    ],
+    "ADS": [
+      [
+        "2019-01-18",
+        "2020-06-22"
+      ]
+    ],
+    "HP": [
+      [
+        "2019-01-18",
+        "2020-05-22"
+      ]
+    ],
+    "AGN": [
+      [
+        "2019-01-18",
+        "2020-05-12"
+      ]
+    ],
+    "CPRI": [
+      [
+        "2019-01-18",
+        "2020-05-12"
+      ]
+    ],
+    "ARNC": [
+      [
+        "2019-01-18",
+        "2020-04-06"
+      ]
+    ],
+    "RTN": [
+      [
+        "2019-01-18",
+        "2020-04-06"
+      ]
+    ],
+    "M": [
+      [
+        "2019-01-18",
+        "2020-04-06"
+      ]
+    ],
+    "UTX": [
+      [
+        "2019-01-18",
+        "2020-04-03"
+      ]
+    ],
+    "XEC": [
+      [
+        "2019-01-18",
+        "2020-03-03"
+      ]
+    ],
+    "WCG": [
+      [
+        "2019-01-18",
+        "2020-01-28"
+      ]
+    ],
+    "MAC": [
+      [
+        "2019-01-18",
+        "2019-12-23"
+      ]
+    ],
+    "TRIP": [
+      [
+        "2019-01-18",
+        "2019-12-23"
+      ]
+    ],
+    "AMG": [
+      [
+        "2019-01-18",
+        "2019-12-23"
+      ]
+    ],
+    "JEC": [
+      [
+        "2019-01-18",
+        "2019-12-10"
+      ]
+    ],
+    "STI": [
+      [
+        "2019-01-18",
+        "2019-12-09"
+      ]
+    ],
+    "BBT": [
+      [
+        "2019-01-18",
+        "2019-12-09"
+      ]
+    ],
+    "VIAB": [
+      [
+        "2019-01-18",
+        "2019-12-05"
+      ]
+    ],
+    "CBS": [
+      [
+        "2019-01-18",
+        "2019-12-05"
+      ]
+    ],
+    "CELG": [
+      [
+        "2019-01-18",
+        "2019-11-21"
+      ]
+    ],
+    "HCP": [
+      [
+        "2019-01-18",
+        "2019-11-05"
+      ]
+    ],
+    "SYMC": [
+      [
+        "2019-01-18",
+        "2019-11-05"
+      ]
+    ],
+    "BHGE": [
+      [
+        "2019-01-18",
+        "2019-10-18"
+      ]
+    ],
+    "NKTR": [
+      [
+        "2019-01-18",
+        "2019-10-03"
+      ]
+    ],
+    "JEF": [
+      [
+        "2019-01-18",
+        "2019-09-26"
+      ]
+    ],
+    "TSS": [
+      [
+        "2019-01-18",
+        "2019-09-23"
+      ]
+    ],
+    "FL": [
+      [
+        "2019-01-18",
+        "2019-08-09"
+      ]
+    ],
+    "APC": [
+      [
+        "2019-01-18",
+        "2019-08-09"
+      ]
+    ],
+    "TMK": [
+      [
+        "2019-01-18",
+        "2019-08-08"
+      ]
+    ],
+    "RHT": [
+      [
+        "2019-01-18",
+        "2019-07-15"
+      ]
+    ],
+    "LLL": [
+      [
+        "2019-01-18",
+        "2019-07-01"
+      ]
+    ],
+    "MAT": [
+      [
+        "2019-01-18",
+        "2019-06-07"
+      ]
+    ],
+    "FLR": [
+      [
+        "2019-01-18",
+        "2019-06-03"
+      ]
+    ],
+    "DWDP": [
+      [
+        "2019-01-18",
+        "2019-06-03"
+      ]
+    ],
+    "HRS": [
+      [
+        "2019-01-18",
+        "2019-06-01"
+      ]
+    ],
+    "BHF": [
+      [
+        "2019-01-18",
+        "2019-04-02"
+      ]
+    ],
+    "GT": [
+      [
+        "2019-01-18",
+        "2019-02-27"
+      ]
+    ],
+    "NFX": [
+      [
+        "2019-01-18",
+        "2019-02-15"
+      ]
+    ]
+  }
+}
