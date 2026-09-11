@@ -198,6 +198,15 @@ class LegacyPDT(Policy):
         if settled * pos.get("last_price", 0) >= self.risk_rules.get("min_notional", 0):
             return settled, self._note(f"PDT guard: only the {settled:.6f} settled shares are "
                                        f"sellable ({used}/{self._max()} day trades used)")
+        # Two different refusals reach this point and they are not the same refusal.
+        # Reaching it with reason == "stop" means the branch above did not take it, which
+        # can only be an exhausted budget — say THAT, because the journal line sits beside
+        # the UNPROTECTED banner and used to contradict it. PM.md §4: "a ninety-day
+        # restriction is worse than one bad hold".
+        if reason == "stop":
+            return 0.0, self._note(f"PDT guard: selling would be day trade {used + 1}/"
+                                   f"{self._max()} and the day-trade budget is exhausted — "
+                                   "the stop is refused and the position held unprotected")
         return 0.0, self._note(f"PDT guard: selling would be day trade {used + 1}/{self._max()} "
                                "and this is not a stop — held")
 
