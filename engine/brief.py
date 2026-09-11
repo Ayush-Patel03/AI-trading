@@ -13,14 +13,48 @@ emits two things:
      `--max-chars` (1,200 by default). It LEADS with anything that needs a human, in this
      order: UNPROTECTED, a kill switch, a ladder rung above 0, a house-cap refusal, an
      UNJUDGED holding, a position within NEAR_STOP_MULT of its stop, a held name with
-     earnings before the next open. When none of that is true it says so in one line and
-     names each of the seven checks it made, because a brief nobody needs to read should
-     be short enough to prove it.
+     earnings before the next open, a flagged house exposure. When none of that is true it
+     says so in one line and names each of the eight checks it made, because a brief
+     nobody needs to read should be short enough to prove it.
 
   2. A self-contained HTML page in the Trade Desk palette. It reuses `render_pm.CSS`
      rather than inventing a second palette, and it is structured the way `render_pm.py`
      and `render.py` structure a page: a masthead with a paper badge, banners for what
      needs a human, a stat rail, then cards.
+
+THE HOUSE-EXPOSURE ALERT, AND THE GAP IT LEAVES. A `house.exposure` block carrying any
+flag — `n_eff`, `beta_w`, `momentum_crowd` — joins the alert list. It is its own class
+because it is not the same event as a cap that bit. With `enforce` off, which is how the
+house has run since K-03, the flag refused nothing: no entry was turned away, no size was
+cut, no order was cancelled, and the line says exactly that in those words. `enforce` on
+is the other thing entirely — then an entry was or will be refused — and it is raised at
+HOUSE CAP's rank instead, with the word ENFORCING in it, so the two cannot be read as the
+same event. The alert sits below EARNINGS because everything above it is money that can
+move today; a crowded house is a reading of the three books, not an emergency.
+
+On the `proxy` basis the 3.0 floor is not merely unmet, it is out of reach: sector ρ is
+1.0 inside a GICS sector and `rho_default` 0.3 across, so eleven equally weighted names,
+one per sector, still measure 2.75. Expect the flag every morning until bars are staged
+and the basis turns `measured`. That is exactly why the basis has to travel with the
+number — read bare, 1.8 looks like a failing book when it is really a failing measurement
+— and it is the strongest argument against enforcing: enforcement would have refused
+entries on the strength of an assumed correlation.
+
+  * NO DEDUPE STATE, BY CONSTRUCTION. The brief runs once per weekday morning, so "the
+    first time it flags each day" is the only time it can fire that day. There is no
+    seen-set to keep, nothing to write, and nothing to go stale between runs.
+
+  * THE GAP THAT BUYS, WRITTEN DOWN RATHER THAN SILENTLY ACCEPTED. An `n_eff` breach that
+    opens intraday is not reported until the next morning. The four PM slots and the
+    hourly sentinel compute the very same block — `pm.house_metrics` writes it into every
+    journal entry — but none of them raises an alert on it, so a house that crowds up at
+    10:05 is carried unremarked for the rest of the session and is first said out loud at
+    08:45 the following day. The measurement has moved slowly in practice (1.76–1.91 over
+    the week to 2026-09-11, all of it under the 3.0 floor), which is the argument that a
+    daily flag is enough; it is an argument from the sample, not a proof, and the session
+    that crowds up fast is the session this is wrong about. Closing it means an alert
+    where the exposure is already computed — `pm.py` and the sentinel — never a second
+    copy of this rule here.
 
 WHAT IT NEVER DOES. It places no order, opens no socket except the optional ntfy POST,
 and writes only the files the caller names. It never writes a book, a journal or a
@@ -178,6 +212,17 @@ def pct(v, dp=1, sign=False):
 
 def price(v):
     return f"{float(v):,.2f}" if _num(v) else DASH
+
+
+def n_eff_str(v):
+    """N_eff to ONE decimal, in every place this module shows it.
+
+    The basis today is `proxy`: the pairwise correlations are assumed from GICS sector,
+    not measured from returns, so 1.78 and 1.8 are the same claim and the second decimal
+    is precision the number has no right to. One formatter, so the alert, the digest, the
+    stat rail and the house card cannot disagree about how precise the house is.
+    """
+    return f"{float(v):.1f}" if _num(v) else DASH
 
 
 def n_of(n, unit, plural=None):
@@ -744,13 +789,85 @@ def watch_view(watch, today):
 
 # ---------------------------------------------------------------- alerts
 # The order the body leads with. Index is the sort key; lower is more urgent.
+#
+# HOUSE EXPOSURE is deliberately the last thing that can be said before INPUT ABSENT.
+# Everything above it is money that can move today: a holding with no stop, a halted desk,
+# a rung that already changed sizing, a cap that already turned an entry away, a mark
+# sitting inside its stop, a print tonight. A flagged house exposure with `enforce` off
+# moved nothing — it reports how concentrated the three books already are, on a number
+# that drifts over days — and a reader shown it above a position on its stop has been told
+# the wrong thing first. An ENFORCING house exposure is not this class at all: it is a
+# refusal, so it is raised as HOUSE CAP, which is what that rank already means.
 ALERT_ORDER = ("UNPROTECTED", "KILL SWITCH", "LADDER", "HOUSE CAP", "UNJUDGED",
-               "NEAR STOP", "EARNINGS", "INPUT ABSENT")
+               "NEAR STOP", "EARNINGS", "HOUSE EXPOSURE", "INPUT ABSENT")
+
+# The ONE clause in this module allowed to put a refusal verb in an unenforced house-
+# exposure line, and it is there to deny the refusal. Same device as DENIAL above: the
+# test strips this exact string out and then refuses to find any refusal word in what is
+# left, so the line cannot drift into implying that a cap bit.
+NOT_ENFORCED_NOTE = "no entry was refused and no size was cut"
 
 
 def _alert(kind, desk, text, symbol=None):
     return {"kind": kind, "rank": ALERT_ORDER.index(kind), "desk": desk,
             "symbol": symbol, "text": scrub(text)}
+
+
+def exposure_detail(ex):
+    """One phrase per raised flag, built from the exposure block's own numbers.
+
+    `n_eff` is printed to ONE decimal, and never without `n_eff_basis` beside it. The
+    basis today is `proxy`: the pairwise correlations are assumed from GICS sector, not
+    measured from bars, so 1.78 and 1.8 are the same claim and the second decimal is
+    precision the number does not have. Nothing here is re-derived — every value and the
+    flag list itself come from `house.assess` via `pm.house_metrics`; only the wording is
+    the brief's. A flag this function does not know how to phrase is named rather than
+    dropped, so a new rule in house.py cannot go quiet here.
+
+    Every threshold is named with a neutral noun — floor, ceiling — and never "cap" or
+    "limit". These phrases are spliced into the unenforced line, which must not carry a
+    word that lets a reader think an entry was turned away; the test strips
+    NOT_ENFORCED_NOTE and then refuses to find any of that vocabulary in what is left.
+    """
+    rules = ex.get("rules") or {}
+    bits = []
+    for f in ex.get("flags") or []:
+        if f == "n_eff" and _num(ex.get("n_eff")):
+            basis = ex.get("n_eff_basis") or "proxy"
+            gloss = (" — correlation assumed from sector, not measured"
+                     if basis == "proxy" else "")
+            floor = rules.get("min_n_eff")
+            against = f" vs the {float(floor):.1f} floor" if _num(floor) else ""
+            bits.append(f"n_eff {n_eff_str(ex['n_eff'])}{against} ({basis} basis{gloss})")
+        elif f == "beta_w" and _num(ex.get("beta_w")):
+            bits.append(f"beta-weighted {float(ex['beta_w']):.2f} vs the "
+                        f"{float(rules.get('max_beta_w', 0)):.2f} ceiling")
+        elif f == "momentum_crowd" and _num(ex.get("momentum_crowd_pct")):
+            bits.append(f"momentum crowding {pct(ex.get('momentum_crowd_pct'), 0)} of "
+                        f"combined paper equity vs the "
+                        f"{pct(rules.get('max_momentum_crowd_pct'), 0)} ceiling")
+        else:
+            bits.append(str(f))
+    return "; ".join(bits)
+
+
+def exposure_verdict(house):
+    """("clear" | "flagged" | "enforcing" | "unread", detail).
+
+    Four answers, never three: `unread` exists so that a house.exposure block that is
+    missing, empty, or carries no flag list can never be reported as an unflagged one. An
+    absent measurement is not a clean measurement, and QUIET_CHECKS below is only honest
+    because every verdict except "clear" raises an alert.
+    """
+    if not house.get("measured"):
+        return "unread", (house.get("reason") or "the house could not be measured")
+    ex = house.get("exposure") or {}
+    if not isinstance(ex, dict) or "flags" not in ex:
+        return "unread", "pm.house_metrics returned no flag list for the combined book"
+    flags = ex.get("flags") or []
+    if not flags:
+        return "clear", ""
+    return ("enforcing" if ex.get("enforce") else "flagged"), exposure_detail(ex)
 
 
 def build_alerts(desk_views, house, earnings, inputs):
@@ -793,10 +910,26 @@ def build_alerts(desk_views, house, earnings, inputs):
                     f"{d} {p['symbol']} {price(p.get('price'))} vs stop "
                     f"{price(p.get('stop'))} ({pct(p.get('stop_distance_pct'))} away, "
                     f"inside {NEAR_STOP_MULT:.2f}x)", p.get("symbol")))
-    if house.get("measured") and (house.get("exposure") or {}).get("block_new_entries"):
+    verdict, detail = exposure_verdict(house)
+    if verdict == "enforcing":
+        # A refusal, so it is a HOUSE CAP at HOUSE CAP's rank: with `enforce` on, a flag
+        # turns entries away house-wide. The word ENFORCING carries the distinction.
         out.append(_alert("HOUSE CAP", None,
-                          "house exposure is enforcing: new entries refused house-wide "
-                          + "; ".join((house.get("exposure") or {}).get("reasons") or [])))
+                          f"house exposure is ENFORCING: {detail} — new entries are "
+                          "refused house-wide while the flag stands"))
+    elif verdict == "flagged":
+        # Awareness, not an emergency. `enforce` is off, so the flag gated nothing: the
+        # desks placed exactly what they would have placed without it. Saying that in the
+        # line is the whole point of the class — a reader must not come away believing a
+        # cap bit and an entry was lost.
+        out.append(_alert("HOUSE EXPOSURE", None,
+                          f"house exposure flagged, not enforced: {detail} — "
+                          f"{NOT_ENFORCED_NOTE}; this is a reading of how crowded the "
+                          "three paper books already are"))
+    elif verdict == "unread":
+        out.append(_alert("HOUSE EXPOSURE", None,
+                          f"house exposure unread: {detail} — unread is not unflagged, "
+                          "and an absent block is not a clean one"))
     for e in earnings.get("before_next_open") or []:
         out.append(_alert("EARNINGS", e["desk"],
                           f"{e['desk']} {e['symbol']} reports {e['date']} "
@@ -808,7 +941,9 @@ def build_alerts(desk_views, house, earnings, inputs):
     return out
 
 
-# The seven checks the quiet line names, in the order build_alerts runs them.
+# The eight checks the quiet line names, in the order build_alerts runs them. The last one
+# is only sayable because exposure_verdict() raises an alert on "unread" as well as on a
+# flag: if it had a third, silent answer this line would be claiming a check nobody made.
 QUIET_CHECKS = (
     "no UNPROTECTED holding",
     "no kill switch",
@@ -817,6 +952,7 @@ QUIET_CHECKS = (
     "no UNJUDGED holding",
     f"nothing inside {NEAR_STOP_MULT:.2f}x its stop",
     "no held name reporting before the next open",
+    "house exposure measured and carrying no flag",
 )
 
 
@@ -946,7 +1082,7 @@ def text_body(brief, max_chars=MAX_CHARS):
     if h.get("measured"):
         ex = h.get("exposure") or {}
         tail.append(
-            f"house paper {money(h.get('equity'), 0)} | n_eff {ex.get('n_eff', DASH)}"
+            f"house paper {money(h.get('equity'), 0)} | n_eff {n_eff_str(ex.get('n_eff'))}"
             f"/{(ex.get('rules') or {}).get('min_n_eff', DASH)} ({ex.get('n_eff_basis')}) | "
             f"{ex.get('largest_sector') or DASH} {pct(ex.get('largest_sector_pct'))}"
             f"/{pct(h['caps'].get('sector_pct'))} | "
@@ -983,6 +1119,16 @@ def text_body(brief, max_chars=MAX_CHARS):
 
 
 # ---------------------------------------------------------------- HTML page
+# render_pm.CSS owns the palette; it styles `.banner.info` but never had a `.chip.info`,
+# because no Trade Desk page had an informational chip to draw. One rule, in the palette's
+# own variables, rather than a second palette or a tone that lies about urgency.
+EXTRA_CSS = """
+.chip.info { color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+.chip.info .dot { background: var(--accent); }
+"""
+
+
 def chip(label, kind="mute"):
     return f'<span class="chip {kind}"><span class="dot"></span>{esc(label)}</span>'
 
@@ -998,7 +1144,7 @@ def _empty(msg):
 
 ALERT_TONE = {"UNPROTECTED": "critical", "KILL SWITCH": "critical", "LADDER": "warning",
               "HOUSE CAP": "warning", "UNJUDGED": "warning", "NEAR STOP": "warning",
-              "EARNINGS": "warning", "INPUT ABSENT": "critical"}
+              "EARNINGS": "warning", "HOUSE EXPOSURE": "info", "INPUT ABSENT": "critical"}
 
 
 def alerts_card(brief):
@@ -1006,7 +1152,7 @@ def alerts_card(brief):
         checks = "".join(f"<li>{esc(c)}</li>" for c in QUIET_CHECKS)
         return (f'<div class="card"><h2>What needs you <span class="count">none</span></h2>'
                 f'<div class="pad"><p>Nothing on this page needs a human this morning. '
-                f'These are the seven checks that were made, all of them on the state the '
+                f'These are the eight checks that were made, all of them on the state the '
                 f'last run left on disk:</p><ul>{checks}</ul></div></div>')
     rows = "".join(
         f'<li><div class="head"><span class="sym">{esc(a["kind"])}</span>'
@@ -1130,7 +1276,7 @@ def house_card(brief):
     flags = ex.get("flags") or []
     rows = [
         ("Effective number of bets (N_eff)",
-         f"{ex.get('n_eff', DASH)} ({esc(ex.get('n_eff_basis') or DASH)} basis, "
+         f"{n_eff_str(ex.get('n_eff'))} ({esc(ex.get('n_eff_basis') or DASH)} basis, "
          f"{esc(n_of(ex.get('corr_pairs_measured') or 0, 'measured pair'))} of "
          f"{esc(ex.get('corr_pairs_total') or 0)})",
          f"floor {(ex.get('rules') or {}).get('min_n_eff', DASH)}",
@@ -1157,9 +1303,10 @@ def house_card(brief):
     body = "".join(
         f'<tr class="{"warn" if flag else ""}"><td>{esc(lab)}</td><td class="n">{val}</td>'
         f'<td class="n sub2">{esc(cap)}</td></tr>' for lab, val, cap, flag in rows)
-    enforce = ("enforcing — a flagged breach refuses new entries house-wide"
+    enforce = ("ENFORCING — a flagged breach refuses new entries house-wide"
                if ex.get("enforce") else
-               "reported only: `enforce` is off, so these numbers gate nothing")
+               "reported only: `enforce` is off, so a flag here gated nothing and "
+               + NOT_ENFORCED_NOTE)
     return f"""<div class="card">
   <h2>House exposure
     <span class="count">{esc(n_of(h.get('desks') or 0, 'desk'))} &middot;
@@ -1384,7 +1531,7 @@ def rail(brief):
     <div class="delta">n = {esc(c['n_closed'])}{sample}<br>
       {esc(c['n_closed_legs'])} sale legs incl. trims</div></div>
   <div class="tile"><div class="lab">N_eff</div>
-    <div class="val">{esc(h.get('n_eff', DASH))}</div>
+    <div class="val">{esc(n_eff_str(h.get('n_eff')))}</div>
     <div class="delta">floor {esc((h.get('rules') or {}).get('min_n_eff', DASH))} &middot;
       {esc(h.get('n_eff_basis') or DASH)}</div></div>
 </div>"""
@@ -1418,7 +1565,7 @@ def page_fragment(brief):
         "have filled are drawn as an em-dash, never as zero.</p>")
     desks_html = "".join(desk_card(dv) for dv in brief["desks"])
     return f"""<title>@@TITLE@@</title>
-<style>{render_pm.CSS}</style>
+<style>{render_pm.CSS}{EXTRA_CSS}</style>
 <div class="wrap">
   <div class="mast">
     <div>

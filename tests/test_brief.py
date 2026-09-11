@@ -118,12 +118,32 @@ def write_state(root, books=None, journals=None, cov=coverage(), scn=None, watch
 
 
 def quiet_state(tmp_path, **kw):
-    """Two clean desks, a clean journal each, coverage, a scan and a quiet watch."""
+    """Two desks with nothing wrong at desk level: clean journals, coverage, scan, watch.
+
+    Quiet, not clear. The house it adds up to is flagged — two holdings and a working buy
+    put N_eff at 1.0, under the 3.0 floor — and that is not an artefact of the fixture:
+    on the `proxy` basis a book cannot clear that floor at all. Sector ρ is 1.0 inside a
+    GICS sector and `rho_default` 0.3 across, so eleven equally weighted names, one per
+    sector, still measure 2.75. `flat_state` below is the only shape that comes out clear.
+    """
     books = {"swing": book("swing", [position("AAA")], [order("BBB")]),
              "momentum": book("momentum", [position("CCC", price=200.0, stop=150.0)])}
     journals = {"swing": journal("swing"), "momentum": journal("momentum")}
     return write_state(tmp_path, books, journals, coverage(), scan(),
                        {"entries": [], "updated": "2026-09-13T21:00:00Z"}, **kw)
+
+
+def flat_state(tmp_path):
+    """Two desks holding nothing at all — the one house that carries no exposure flag.
+
+    No holdings means no weights, so N_eff is None, and a metric that is None never flags
+    (house.assess: an unmeasured number is not a low one). Every other check is quiet too,
+    which is what makes this the fixture for the no-alert brief.
+    """
+    books = {"swing": book("swing"), "momentum": book("momentum")}
+    return write_state(tmp_path, books,
+                       {"swing": journal("swing"), "momentum": journal("momentum")},
+                       coverage(), scan(), {"entries": [], "updated": "2026-09-13T21:00:00Z"})
 
 
 def build(root, **kw):
@@ -134,11 +154,13 @@ def build(root, **kw):
 
 # ------------------------------------------------------------------ the quiet brief
 def test_a_brief_nobody_needs_is_short_and_names_its_checks(tmp_path):
-    b = build(quiet_state(tmp_path))
+    # flat_state, not quiet_state: a house holding anything at all trips the N_eff floor
+    # on the proxy basis, and a brief with an alert on it is not the no-alert brief.
+    b = build(flat_state(tmp_path))
     assert b["alerts"] == []
     body = brief.text_body(b)
     assert "nothing needs you" in body.splitlines()[0]
-    # "short enough to prove it": the seven checks, on one line, well inside the cap.
+    # "short enough to prove it": the eight checks, on one line, well inside the cap.
     checks = [ln for ln in body.splitlines() if ln.startswith("Checked:")]
     assert len(checks) == 1
     for c in brief.QUIET_CHECKS:
@@ -524,6 +546,180 @@ def test_the_house_block_comes_from_pm_and_carries_its_caps(tmp_path):
     page = brief.page_document(b)
     assert "no bars staged, so beta is unmeasured" in page
     assert "N_eff" in page and "Desk overlap" in page
+
+
+# ------------------------------------------------------------------ the house-exposure alert
+# 2026-09-11 midday, copied out of the swing journal's `house.exposure` block. This is the
+# state the alert was written for: flagged on N_eff, on the proxy basis, enforce off.
+REAL_EXPOSURE = {
+    "n_eff": 1.78, "n_eff_basis": "proxy", "beta_w": None, "momentum_crowd_pct": None,
+    "largest_sector": "Information Technology", "largest_sector_pct": 23.28,
+    "top_symbol": "ANET", "top_symbol_pct": 10.25,
+    "overlap_pct": 75.0, "overlap_equity_pct": 38.36,
+    "flags": ["n_eff"], "reasons": ["house N_eff 1.78 (proxy) under the 3.0 floor"],
+    "enforce": False, "block_new_entries": False,
+    "rules": {"min_n_eff": 3.0, "max_beta_w": 0.8, "max_momentum_crowd_pct": 60.0,
+              "rho_default": 0.3, "enforce": False},
+}
+
+
+def with_exposure(monkeypatch, block):
+    """Serve `block` as the house exposure, leaving every other computation alone."""
+    monkeypatch.setattr(brief.pm_mod, "house_metrics", lambda house, bars=None: block)
+
+
+def test_a_flagged_house_exposure_joins_the_alert_list_and_the_text_body(tmp_path):
+    b = build(quiet_state(tmp_path))
+    ex = b["house"]["exposure"]
+    assert ex["flags"] == ["n_eff"] and ex["enforce"] is False
+    fired = [a for a in b["alerts"] if a["kind"] == "HOUSE EXPOSURE"]
+    assert len(fired) == 1, "a flagged house did not reach the alert list"
+    assert fired[0]["desk"] is None            # it is the house's, not any one desk's
+    body = brief.text_body(b)
+    assert f"HOUSE EXPOSURE: {fired[0]['text']}" in body
+    assert fired[0]["text"] in brief.page_document(b)
+
+
+REFUSAL_WORDS = ("refus", "block", "reject", "turned away", "held back", "cap", "limit",
+                 "gated", "denied", "cut")
+
+
+@pytest.mark.parametrize("flags", (["n_eff"], ["beta_w"], ["momentum_crowd"],
+                                   ["n_eff", "beta_w", "momentum_crowd"]))
+def test_the_unenforced_line_makes_no_claim_that_anything_was_refused(
+        tmp_path, monkeypatch, flags):
+    """The DENIAL device, applied to refusal language: strip the one negating clause and
+    nothing left in the line may suggest a cap bit — whichever rule raised the flag."""
+    with_exposure(monkeypatch, dict(REAL_EXPOSURE, beta_w=1.05, momentum_crowd_pct=71.0,
+                                    flags=list(flags)))
+    b = build(quiet_state(tmp_path))
+    text = next(a["text"] for a in b["alerts"] if a["kind"] == "HOUSE EXPOSURE")
+    assert "not enforced" in text
+    assert brief.NOT_ENFORCED_NOTE in text
+    rest = text.replace(brief.NOT_ENFORCED_NOTE, "").lower()
+    for claim in REFUSAL_WORDS:
+        assert claim not in rest, f"the unenforced line implies a refusal: {claim!r}"
+
+
+def test_enforcing_is_a_different_class_and_a_different_sentence(tmp_path, monkeypatch):
+    lax = build(quiet_state(tmp_path))
+    soft = next(a for a in lax["alerts"] if a["kind"] == "HOUSE EXPOSURE")
+
+    monkeypatch.setitem(pm_mod.PM_RULES["house_exposure"], "enforce", True)
+    hard_b = build(quiet_state(tmp_path / "enforced"))
+    hard = [a for a in hard_b["alerts"] if "house exposure is" in a["text"]]
+    assert len(hard) == 1
+    hard = hard[0]
+
+    # Different class, different rank, different words — and the serious one is serious.
+    assert hard["kind"] == "HOUSE CAP" and soft["kind"] == "HOUSE EXPOSURE"
+    assert hard["rank"] < soft["rank"]
+    assert "ENFORCING" in hard["text"] and "refused house-wide" in hard["text"]
+    assert "ENFORCING" not in soft["text"]
+    assert brief.NOT_ENFORCED_NOTE not in hard["text"]
+    assert not any(a["kind"] == "HOUSE EXPOSURE" for a in hard_b["alerts"]), \
+        "an enforcing house must not also raise the awareness class"
+    assert hard["text"] != soft["text"]
+
+
+def test_n_eff_never_travels_without_the_basis_that_qualifies_it(tmp_path, monkeypatch):
+    with_exposure(monkeypatch, REAL_EXPOSURE)
+    b = build(quiet_state(tmp_path))
+    text = next(a["text"] for a in b["alerts"] if a["kind"] == "HOUSE EXPOSURE")
+    assert "proxy basis" in text
+    assert "correlation assumed from sector, not measured" in text
+    # One decimal. On an assumed correlation the second one is precision the number has
+    # no claim to, and 1.78 read aloud sounds measured.
+    assert "1.8 vs the 3.0 floor" in text and "1.78" not in text
+    for line in brief.text_body(b).splitlines():
+        if "n_eff" in line.lower():
+            assert "proxy" in line, f"n_eff without its basis: {line}"
+    page = brief.page_document(b)
+    assert "proxy basis" in page            # the house-card row
+    assert "floor 3.0" in page and "proxy" in page       # the rail tile
+
+
+def test_n_eff_is_shown_to_one_decimal_in_every_output(tmp_path, monkeypatch):
+    """1.78 and 1.8 are the same claim on an assumed correlation; only one of them is
+    honest about how much the house knows."""
+    with_exposure(monkeypatch, REAL_EXPOSURE)
+    b = build(quiet_state(tmp_path))
+    body, page = brief.text_body(b), brief.page_document(b)
+    assert b["house"]["exposure"]["n_eff"] == 1.78      # the stored value is untouched
+    for out, what in ((body, "the text body"), (page, "the HTML page")):
+        assert "1.78" not in out, f"two-decimal N_eff reached {what}"
+        assert "1.8" in out
+    assert brief.n_eff_str(None) == brief.DASH          # absent is an em-dash, not 0.0
+
+
+def test_the_line_as_it_reads_against_the_real_house(tmp_path, monkeypatch):
+    with_exposure(monkeypatch, REAL_EXPOSURE)
+    b = build(quiet_state(tmp_path))
+    text = next(a["text"] for a in b["alerts"] if a["kind"] == "HOUSE EXPOSURE")
+    assert text == (
+        "house exposure flagged, not enforced: n_eff 1.8 vs the 3.0 floor (proxy basis "
+        "— correlation assumed from sector, not measured) — no entry was refused and no "
+        "size was cut; this is a reading of how crowded the three paper books already are")
+    assert len(brief.text_body(b)) <= brief.MAX_CHARS
+
+
+def test_any_flag_joins_the_list_and_an_unknown_one_is_named_not_swallowed(
+        tmp_path, monkeypatch):
+    """Any non-empty flags, not just n_eff — including a rule house.py has not grown yet."""
+    with_exposure(monkeypatch, dict(REAL_EXPOSURE, n_eff=4.0, n_eff_basis="measured",
+                                    beta_w=1.05, flags=["beta_w"]))
+    b = build(quiet_state(tmp_path))
+    text = next(a["text"] for a in b["alerts"] if a["kind"] == "HOUSE EXPOSURE")
+    assert "beta-weighted 1.05 vs the 0.80 ceiling" in text
+    assert "n_eff" not in text               # an unflagged metric is not narrated
+
+    with_exposure(monkeypatch, dict(REAL_EXPOSURE, flags=["some_rule_added_later"]))
+    b2 = build(quiet_state(tmp_path / "later"))
+    text2 = next(a["text"] for a in b2["alerts"] if a["kind"] == "HOUSE EXPOSURE")
+    assert "some_rule_added_later" in text2
+
+
+def test_an_absent_house_exposure_block_is_absent_not_clear(tmp_path, monkeypatch):
+    """A missing block must never render as "no flags": unread is its own answer."""
+    with_exposure(monkeypatch, {})
+    b = build(flat_state(tmp_path))          # everything else is quiet, so only this speaks
+    assert [a["kind"] for a in b["alerts"]] == ["HOUSE EXPOSURE"]
+    text = b["alerts"][0]["text"]
+    assert "unread" in text and "not unflagged" in text
+    body = brief.text_body(b)
+    assert "nothing needs you" not in body
+    assert "house exposure measured and carrying no flag" not in body
+
+    # The same answer when the house itself could not be tallied at all.
+    assert brief.exposure_verdict({"measured": False, "reason": "one book"})[0] == "unread"
+    # ...and a flag list that is present and empty is the one thing that reads as clear.
+    assert brief.exposure_verdict(
+        {"measured": True, "exposure": {"flags": []}}) == ("clear", "")
+
+
+def test_a_house_flag_never_outranks_a_holding_that_can_lose_money_now(tmp_path):
+    b = build(loud_state(tmp_path))
+    kinds = [a["kind"] for a in b["alerts"]]
+    assert "HOUSE EXPOSURE" in kinds
+    house_at = kinds.index("HOUSE EXPOSURE")
+    for urgent in ("UNPROTECTED", "KILL SWITCH", "LADDER", "HOUSE CAP", "UNJUDGED",
+                   "NEAR STOP", "EARNINGS"):
+        assert kinds.index(urgent) < house_at, f"{urgent} ranked below the house flag"
+    assert brief.ALERT_ORDER.index("HOUSE EXPOSURE") > brief.ALERT_ORDER.index("NEAR STOP")
+    lines = brief.text_body(b).splitlines()
+    assert lines[1].startswith("UNPROTECTED:")
+    assert (next(i for i, ln in enumerate(lines) if ln.startswith("HOUSE EXPOSURE:"))
+            > next(i for i, ln in enumerate(lines) if ln.startswith("NEAR STOP:")))
+
+
+def test_the_quiet_line_names_the_house_check_it_made(tmp_path):
+    b = build(flat_state(tmp_path))
+    assert b["alerts"] == []
+    checked = next(ln for ln in brief.text_body(b).splitlines()
+                   if ln.startswith("Checked:"))
+    assert "house exposure measured and carrying no flag" in checked
+    assert len(brief.QUIET_CHECKS) == 8
+    assert "eight checks" in brief.page_document(b)
 
 
 def test_building_the_house_does_not_leave_pm_s_active_desk_changed(tmp_path):
