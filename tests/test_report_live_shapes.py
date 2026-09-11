@@ -17,6 +17,8 @@ Each test names the number the broken code produced on this data, so a regressio
 recognisable rather than merely red.
 """
 import json
+import re
+from collections import Counter
 
 import pytest
 
@@ -60,7 +62,7 @@ def books(rp):
 
 # ------------------------------------------------------------------ the fixture itself
 def test_the_live_fixture_carries_the_shapes_that_broke_the_report(rp, entries, books):
-    """If this drifts, the seven tests below stop testing what they claim to."""
+    """If this drifts, the tests below stop testing what they claim to."""
     assert len(entries) == 35 + 6 + 6
     raw = json.loads(SWING.read_text(encoding="utf-8"))["entries"]
     pre_split = [e for e in raw if "desk" not in e]
@@ -90,8 +92,10 @@ def test_the_swing_return_is_not_measured_across_the_capital_resize(rp, entries,
     assert b["equity_start"] == 5000.0 and b["start"] == "2026-09-01"
     assert b["return_pct"] == pytest.approx(1.83, abs=0.01)
     assert b["return_pct"] < 100, "a +10,083% desk return is a resize, not a return"
-    assert b["excluded_entries"] == {"no_desk": 5, "pre_capital_change": 0}
-    assert B["pullback"]["excluded_entries"] == {"no_desk": 0, "pre_capital_change": 0}
+    assert b["excluded_entries"] == {"sentinel": 5, "no_equity": 0, "no_desk": 5,
+                                     "pre_capital_change": 0}
+    assert B["pullback"]["excluded_entries"] == {"sentinel": 2, "no_equity": 0, "no_desk": 0,
+                                                 "pre_capital_change": 0}
 
 
 def test_either_guard_alone_excludes_the_pre_split_entries(rp, entries, books):
@@ -104,8 +108,44 @@ def test_either_guard_alone_excludes_the_pre_split_entries(rp, entries, books):
     stamped = [dict(e, desk="swing", desk_declared=True) for e in entries]
     by_resize = rp.benchmark(stamped, None, books)["swing"]
     assert by_resize["equity_start"] == 5000.0
-    assert by_resize["excluded_entries"] == {"no_desk": 0, "pre_capital_change": 5}
+    assert by_resize["excluded_entries"] == {"sentinel": 7, "no_equity": 0, "no_desk": 0,
+                                             "pre_capital_change": 5}
     assert rp.capital_change_dates(books) == {"swing": "2026-08-31"}
+
+
+def test_excluded_entries_accounts_for_every_entry_the_benchmark_dropped(rp, rr, entries, books):
+    """BEFORE: `excluded_entries` counted `pre_capital_change` and `no_desk` only, while
+    benchmark() also dropped sentinel runs and entries with no `equity` in silence. On the
+    live swing journal 35 raw entries became 25 and the field owned up to five of the ten,
+    so a reader could not reconcile the journal against the row's n — which is the whole
+    reason the exclusions were surfaced."""
+    B = rp.benchmark(entries, None, books)
+    b = B["swing"]
+    assert set(b["excluded_entries"]) == set(rp.EXCLUSIONS)
+    assert b["excluded_entries"] == {"sentinel": 5, "no_equity": 0, "no_desk": 5,
+                                     "pre_capital_change": 0}
+    assert b["n_entries"] == 25 and b["n_entries_excluded"] == 10
+    # every entry the window carried for a desk is either in n or in one of the four
+    raw = Counter(e["desk"] for e in entries)
+    assert raw["swing"] == 35
+    for desk, row in B.items():
+        assert row["n_entries"] + row["n_entries_excluded"] == raw[desk], desk
+        assert row["n_entries_excluded"] == sum(row["excluded_entries"].values()), desk
+
+    # an entry that records no equity is counted too, not skipped in silence
+    stripped = [{k: v for k, v in e.items() if not (e["desk"] == "momentum" and k == "equity")}
+                for e in entries]
+    m = rp.benchmark(stripped, None, books)["momentum"]
+    assert m["excluded_entries"]["no_equity"] == 6 and m["n_entries"] == 0
+    assert m["n_entries"] + m["n_entries_excluded"] == raw["momentum"]
+
+    # and the page can be reconciled against the journal without opening the JSON
+    md = rp.markdown(rp.build(entries, books, None, (5,)))
+    doc = rr.benchmark_section({"benchmark": B})
+    for page in (md, doc):
+        assert "25 of 35" in page, page[:200]
+        assert "7 sentinel" in page
+        assert "5 with no `desk`" in page or "5 with no <code>desk</code>" in page
 
 
 # ------------------------------------------------------------------ 2 · the honesty chip
@@ -154,6 +194,35 @@ def test_the_cli_joins_against_the_whole_journal(rp, tmp_path):
     assert A["by_score_bucket"]["unknown"]["n"] == 15
     assert A["n_unmatched_to_a_decision"] == 15
     assert {k for k in A["by_score_bucket"]} == {"60-69", "70-79", "unknown"}
+
+
+def test_the_attribution_docstring_quotes_only_figures_this_data_gives(rp, entries, books):
+    """The docstring said the broken join left "74% of the week's closed trades" unknown.
+    Nothing measures 74%: it is 6 of the swing desk's 8 in-window exits (75%), or 21 of the
+    23 across all three desks (91%), and 15 of 23 (65%) remain unknown after the fix
+    because the peer journals were trimmed to a week. A reader must not be able to derive a
+    number the tests contradict, so the prose is pinned to the data it describes."""
+    windowed = [e for e in entries if e["date"] >= MONDAY]
+    broken_swing = rp.attribution(windowed, {"swing": books["swing"]}, since=MONDAY)
+    broken_all = rp.attribution(windowed, books, since=MONDAY)
+    fixed_all = rp.attribution(windowed, books, since=MONDAY, join_entries=entries)
+    counts = {"swing_broken": (broken_swing["by_score_bucket"]["unknown"]["n"],
+                               broken_swing["n_closed"]),
+              "all_broken": (broken_all["by_score_bucket"]["unknown"]["n"],
+                             broken_all["n_closed"]),
+              "all_fixed": (fixed_all["by_score_bucket"]["unknown"]["n"],
+                            fixed_all["n_closed"])}
+    assert counts == {"swing_broken": (6, 8), "all_broken": (21, 23), "all_fixed": (15, 23)}
+
+    doc = " ".join((rp.attribution.__doc__ or "").split())   # prose wraps; the claim does not
+    supported = {round(100.0 * hit / n) for hit, n in counts.values()}
+    assert supported == {75, 91, 65}
+    claimed = {int(x) for x in re.findall(r"(\d+)\s*%", doc)}
+    assert claimed, "the docstring quotes no share at all"
+    assert claimed <= supported, (f"{sorted(claimed - supported)} is not a share this data "
+                                  f"measures; the shares it measures are {sorted(supported)}")
+    for phrase in ("6 of the swing desk's 8", "(75%)", "21 of the 23", "15 of the 23"):
+        assert phrase in doc, phrase
 
 
 # ------------------------------------------------------------------ 4 · the dead refusal
