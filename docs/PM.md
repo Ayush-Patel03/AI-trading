@@ -953,16 +953,113 @@ is accumulating evidence for or against the model. It never touches the book, ne
 recommends going live, and appends one line per week to `claude/reviews/index.md`. This is
 the evidence the go-live checklist's second item requires.
 
-The numbers in that review come from `engine/report.py --md` (S-07, `docs/BACKTEST.md`
-§6c): stage the three `claude/pm-journal*.json` docs into a directory, the three
-`claude/paper-book*.json` into another, add a bars file with SPY, and run
-`python3 engine/report.py --journals journals/ --books books/ --bars bars.json
---counterfactual --md review.md`. It gives the week's refusals by rule, week and desk, the
-E5 counterfactual per gate (did the names it refused underperform the names it admitted,
-with a bootstrap interval and n), closed-trade P&L by exit reason, desk, entry-score decile
-and setup, and each desk's return against exposure-adjusted SPY. It is read-only over the
-journals and books; every number carries its n, anything under 30 says *not a sample*, and
-it prints no win rate and no Sharpe. The review quotes it; it does not recompute it.
+The numbers in that review come from `engine/report.py` (S-07, `docs/BACKTEST.md` §6c):
+stage the three `claude/pm-journal*.json` docs into a directory, the three
+`claude/paper-book*.json` into another, add a bars file carrying SPY and this week's
+`claude/pm-coverage.json`, and run
+
+```bash
+python3 engine/report.py --journals journals/ --books books/ --bars bars.json \
+        --coverage coverage/pm-coverage.json --since <Monday> \
+        --counterfactual --md report.md --json review.json
+```
+
+It gives the week's refusals by rule, week and desk; the E5 counterfactual per gate (did the
+names it refused underperform the names it admitted, with a bootstrap interval and n);
+closed-trade P&L by exit reason, desk, entry-score decile, verdict and setup; each desk's
+return against exposure-adjusted SPY; and, from `--coverage`, the COVER-01 expected-versus-
+actual run table. It is read-only over the journals and books; every number carries its n,
+anything under 30 says *not a sample*, and it prints no win rate and no Sharpe. The review
+quotes it; it does not recompute it — including the coverage table, which the review's
+system-health section is told to quote rather than retype from the coverage doc's prose,
+because an expected-versus-actual count is exactly the number a human should not be
+transcribing by hand.
+
+**`--coverage` is expected versus actual, not a tally of what happened.** Expected per
+trading day is the schedule and not a guess: four decision slots and seven sentinels, each
+across every desk — the shape `runner/slots.json` defines, carried in `report.py` as
+`DECISION_SLOTS` and `SENTINELS_PER_DAY` rather than parsed out of it. Present is what
+`claude/pm-coverage.json` (12d) records. The day the review runs on is still being written,
+so the most recent day — the one the doc's own `updated` stamp falls on — is marked
+`partial`, shown in the table and left out of the expected/present/missing totals; its desk
+rows and its aborted runs still count. A missing row is a run that left no record: the desk
+was not looked at, or the run could not write. That is not the same as a quiet run, which
+writes a row saying nothing fired.
+
+Six things about how those numbers are counted changed on 2026-09-11, and every one of them
+changes what the page says rather than how it looks. **Read the review knowing them.**
+
+**n is round trips; the rows are slices.** A book row is a slice of an exit, not a trade:
+three cap-rebalance shavings of one position are three rows. On the live books 41 exit rows
+were 17 desk-positions in 9 names — 11 closed out, 6 still being shaved — and nine of the
+rows were rebalance shavings, the smallest $1.23 of notional. Counting rows badged that
+`sample: ok` at the 30 bar. Every table now carries both `n` (exit slices) and
+`n_round_trips` (the positions those rows closed OUT), and the sample gate counts the
+completed round trips, which is what the runner prompt has always asked for: *no average R
+until n >= 30 on complete round trips*. The return is printed twice for the same reason —
+equal-weighted across rows (+5.26% on that book) and weighted by the notional each row
+exited (+3.99%). The first is what the rows say, the second is what the money did, and a
+$1.23 shaving is not the same observation as a $700 position.
+
+**The benchmark window starts after the capital resize.** The swing book records
+`resized: {date: 2026-08-31, from: 50, to: 5000}`, and the five journal entries from that
+evening carry the pre-resize $50. Taking `equity_start` off the first entry in the window
+divided a $5,000 book by a $50 one and printed a **+10,083%** desk return — and, being 30
+entries, badged it a sample while the two honest desks carried *not a sample*. `benchmark()`
+now excludes every entry dated on or before the book's own `resized.date`, and every entry
+with no declared desk: an entry from before the desk split carries no `desk` field,
+`load_journals` has to call it something to group it at all and calls it swing, and that
+guess must not be allowed to set a desk's opening equity — `desk_declared` is what makes the
+fallback distinguishable from a real one. Both counts are surfaced per desk as
+`excluded_entries`, so the exclusion is visible rather than silent. On the live journal that
+is five entries: swing drops from 30 to 25, the return reads +1.83%, and swing carries the
+*not a sample* chip with the others. `starting_equity` is not the answer — with `--since`
+the window is a week, not the book's whole life, and the start of the window is what the
+return is measured from.
+
+**A composite refusal is counted against every gate it names.** `portfolio.py` joins a
+blocked proposal's warnings with `"; "`, so one `skipped` item can carry an evidence-coverage
+refusal AND a sector limit AND a 15% cap trim. `classify()` used to split on that separator
+and keep the head: a three-gate refusal counted once, the other two gates disappeared, and
+because the coverage message contains a semicolon of its own — *a thin row can outrank a
+complete one; it is not sized on that basis* — the split also cut that message mid-sentence
+into a bogus `other`. `segments()` now re-joins a part that matches no rule onto the part
+before it, and `classify()` returns every rule the string names. `refusals()` counts each, so
+the by-rule column totals `n_rules` and can exceed `n`: **`n` is how many names were turned
+away, `by_rule` is how often each gate was a reason.** On the live journals that is 138 names
+and 143 rule-hits, four of them composite. E5 follows the same rule — a refused name's
+forward return is an observation for every gate that turned it away, not only the first.
+
+One rule in that taxonomy is deliberately not a gate. `size_trim` covers portfolio.py's
+sizing notes — *Trimmed to the 15% max-position cap*, *Trimmed to available cash*, *Trimmed
+to the 90% max-deployed cap* — which ride inside a composite string beside the gate that
+actually blocked the name. They refused nothing: the proposal was sized down, not turned
+away. So they are counted, and `NON_GATE_RULES` keeps them out of the E5 counterfactual,
+which has no question to ask of a rule that admitted the name. The page lists them separately
+as counted reasons that are not measurable as gates.
+
+**The attribution join reads the whole journal, not the reporting window.** A closed trade
+carries no entry score; the score, setup and verdict come from the `place-buy` decision that
+opened the position. Building that map from the already-windowed entries threw away the
+decision behind every position carried into the week — on the swing desk six of the week's
+eight exits landed in bucket `unknown`, which reads as "the engine does not record entry
+scores" rather than "the report cut the join". `--since` now says which trades to REPORT,
+never which decisions a trade is allowed to remember (`join_entries=`). A trade the join
+genuinely cannot match is counted in `n_unmatched_to_a_decision`, so `unknown` means
+unmatched rather than un-recorded.
+
+**A measurement that was asked for and did not run says so on the page.** `--counterfactual`
+without `--bars` is still a refusal and the exit code is still 2 — but the report is now
+written first, carrying the reason, so the page names the measurement that did not run and
+why instead of falling back to a generic "not run this week". Every other number on it
+stands.
+
+**An absent number carries no n, and a zero is not a measurement.** `— (n=25)` beside an
+empty SPY column reads as twenty-five observations of nothing; `+$0.00 n=0` on a desk whose
+shadow model has priced no fill reads as a measured zero execution gap. Neither was
+measured. A cell needs a value AND n ≥ 1 or it renders as absent, with the reason and no
+count beside it; a shadow model that is on and has priced no fill says *on · no fills priced*
+in every gap column rather than printing zeros.
 
 The same numbers are published as a page (U-05): `python3 engine/render_review.py --review
 review.json --ledger experiments/ledger.jsonl --model-card docs/model-card.md [--ic ic.json]
@@ -970,13 +1067,15 @@ review.json --ledger experiments/ledger.jsonl --model-card docs/model-card.md [-
 experiment ledger, the week's `ic.py` output when the archive was staged, and the model card
 (`docs/model-card.md`, whose front-matter fields it parses) — into one self-contained HTML
 page in the Trade Desk palette: masthead, benchmark-relative per desk, attribution, refusals
-histogram by rule and week (inline SVG), the E5 counterfactual, the shadow ledger, house
-exposure from the latest journal entry, the ledger table with the DSR reminder, and the model
-card block. The honesty budget is enforced in code: every aggregate cell carries its n, every
-row under 30 carries a *not a sample* chip, and the renderer exits 2 rather than publish a
-page in which the words "win rate" or "Sharpe" appear — from any input, the ledger and the
-card included. The Friday task publishes it as `claude/reviews/weekly-<date>.html` next to
-the markdown (`docs/runner/prompts/weekly-review.md`).
+histogram by rule and week (inline SVG), the E5 counterfactual, the COVER-01 coverage table,
+the shadow ledger, house exposure from the latest journal entry, the ledger table with the
+DSR reminder, and the model card block. The honesty budget is enforced in code: every
+aggregate cell goes through one formatter that will not print a number without its n and will
+not print an n without a number, the *not a sample* chip on the attribution tables counts
+round trips rather than exit rows, and the renderer exits 2 rather than publish a page in
+which the words "win rate" or "Sharpe" appear — from any input, the ledger and the card
+included. The Friday task publishes it as `claude/reviews/weekly-<date>.html` next to the
+markdown (`docs/runner/prompts/weekly-review.md`).
 
 **The 2026-09-01 one-off** (`trig_018y5gXv3gNafba2GULRoDaU`, 11:00 ET) verifies that the
 first morning under the rewritten prompts and engine actually completed: no `import archive`
