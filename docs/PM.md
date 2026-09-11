@@ -775,7 +775,7 @@ the archive — read it to find any past board or any past book without opening 
 ### Where this sits in the run
 
 ```bash
-python3 pm.py --slot <slot> --book paper_book.json --scan scan_results.json \\
+python3 pm.py --slot <slot> --book paper_book.json --scan scan_results.json \
               --quotes pm_quotes.json --broker pm_broker.json --journal pm_journal_current.json
 python3 render_pm.py          # prints exactly which artifacts to publish, in order
 # re-read claude/paper-book.json -> fresh_probe.json; pm.py --check ...  (section 8)
@@ -959,8 +959,8 @@ stage the three `claude/pm-journal*.json` docs into a directory, the three
 `claude/pm-coverage.json`, and run
 
 ```bash
-python3 engine/report.py --journals journals/ --books books/ --bars bars.json \\
-        --coverage coverage/pm-coverage.json --since <Monday> \\
+python3 engine/report.py --journals journals/ --books books/ --bars bars.json \
+        --coverage coverage/pm-coverage.json --since <Monday> \
         --counterfactual --md report.md --json review.json
 ```
 
