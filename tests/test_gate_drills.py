@@ -317,8 +317,8 @@ def test_a_high_impact_release_inside_the_window_freezes_entries(
 
 def test_the_macro_gate_does_not_fire_on_adp_or_on_a_release_outside_the_window(
         pm, run_dir, quotes, rules):
-    """PM.md §2, retuned 2026-09-01: "A gate that fires on every calendar item does not
-    protect the book, it silently stops it." ADP is explicitly not the payrolls report,
+    """PM.md §2, retuned 2026-09-01: a gate that fires on every calendar item does not
+    protect the book, it silently stops it. ADP is explicitly not the payrolls report,
     and a release outside the 120-minute lookahead is reported, never gated."""
     _edit(run_dir, lambda b: (_arm_session(b, _today(pm)), _quiet_ladder(b)))
     _scan_rows(run_dir, [SCHW], macro_events=[
@@ -334,7 +334,8 @@ def test_the_macro_gate_does_not_fire_on_adp_or_on_a_release_outside_the_window(
 
 
 def test_a_stop_still_fires_through_the_macro_gate(pm, run_dir, quotes, rules):
-    """PM.md §2: "Exits, trims and rebalancing always stay live through a gate.""""
+    """PM.md §2, the macro gate: exits, trims and rebalancing always stay live
+    through a gate."""
     def edit(b):
         _arm_session(b, _today(pm))
         _quiet_ladder(b)
@@ -369,8 +370,8 @@ def _drawdown_book(run_dir, pm, hwm, with_stop=False, working=False):
 
 def test_rung_2_refuses_new_entries_and_leaves_the_exit_pass_running(
         pm, run_dir, quotes, rules):
-    """PM.md §7 ladder table, rung 2: "no new entries, reason journaled in `skipped`" —
-    and "exits, trims and rebalancing all still run.""""
+    """PM.md §7 ladder table, rung 2: no new entries, with the reason journaled in
+    `skipped` — while exits, trims and rebalancing all still run."""
     _drawdown_book(run_dir, pm, hwm=5300.0, with_stop=True)   # ≈ 6.5% under the HWM
     _scan_rows(run_dir, [SCHW])
     book, jrn, _ = run_pm(pm, run_dir, slot="opening-range", with_scan=True)
@@ -415,8 +416,8 @@ def test_rung_3_halts_cancels_the_resting_buys_and_flattens_the_book(
 
 def test_the_rung_3_flatten_will_not_sell_a_position_it_cannot_price(
         pm, run_dir, quotes, rules):
-    """PM.md §7: "a position with no fresh price is reported UNPROTECTED, never sold on a
-    stale mark." The flatten is the one exit that could plausibly get this wrong, because
+    """PM.md §7: a position with no fresh price is reported UNPROTECTED, never sold on a
+    stale mark. The flatten is the one exit that could plausibly get this wrong, because
     it is a book-wide sweep rather than a per-position test."""
     _drop_quote(run_dir, "MU")
     _drawdown_book(run_dir, pm, hwm=5600.0)
@@ -432,8 +433,8 @@ def test_the_rung_3_flatten_will_not_sell_a_position_it_cannot_price(
 
 def test_a_half_sized_entry_under_the_broker_minimum_is_refused_by_name(
         pm, run_dir, quotes, rules, monkeypatch):
-    """Rung 1 halves the entry; PM.md §7: "a halved order that falls under the broker
-    minimum is skipped with the reason." The reason reads like min_notional and is
+    """Rung 1 halves the entry; PM.md §7: a halved order that falls under the broker
+    minimum is skipped with the reason. The reason reads like min_notional and is
     classified `ladder`, because the ladder is what made it too small."""
     monkeypatch.setitem(pm.RULES, "min_notional", 400.0)
     _drawdown_book(run_dir, pm, hwm=5200.0)                   # ≈ 4.7% under the HWM
@@ -496,8 +497,8 @@ def test_the_house_sector_cap_refuses_at_its_real_forty_percent_default(
 def test_the_house_sector_cap_refuses_a_trade_portfolio_py_had_already_approved(
         pm, run_dir, quotes, rules):
     """The point of HOUSE-01: the per-desk rules see one book and say yes. Run the same
-    slot with `house_caps_enabled` off — PM.md's `--no-house-caps`, which "measures and
-    reports without refusing" — and the identical proposal is placed."""
+    slot with `house_caps_enabled` off — PM.md's `--no-house-caps`, which measures and
+    reports without refusing — and the identical proposal is placed."""
     _reshape_for_a_real_sector_breach(run_dir)
     _scan_rows(run_dir, [AVGO])
 
@@ -612,8 +613,8 @@ def test_exits_run_through_an_enforced_house_exposure_block(pm, run_dir, quotes,
 
 def test_the_default_reported_only_exposure_block_refuses_nothing_and_warns_nothing(
         pm, run_dir, quotes, rules):
-    """PM.md §14b: "With `enforce` off — the default — the block is reported and gates
-    nothing", and "a reported-only flag raises NO journal warning, on purpose" — because
+    """PM.md §14b: with `enforce` off — the default — the block is reported and gates
+    nothing, and a reported-only flag raises NO journal warning, on purpose — because
     `archive.should_publish` treats any warning as a reason to publish a board."""
     _scan_rows(run_dir, [SCHW])
     _, jrn, state = run_pm(pm, run_dir, slot="opening-range", with_scan=True)
@@ -759,8 +760,8 @@ def test_an_exhausted_day_trade_budget_refuses_the_stop_and_shouts_unprotected(
 
 def test_the_default_intraday_margin_policy_never_refuses_a_stop(
         pm, run_dir, quotes, rules):
-    """PM.md §4: under `intraday_margin` "Sales are always allowed... The `UNPROTECTED …
-    policy refused the sale` state of the old guard cannot arise under this policy." The
+    """PM.md §4: under `intraday_margin` sales are always allowed, and the UNPROTECTED
+    'policy refused the sale' state of the old guard cannot arise under this policy. The
     same book that produces the banner above must produce a fill here."""
     _pdt_exhausted(run_dir, pm)
     _edit(run_dir, lambda b: b.pop("broker_policy", None))     # back to the default
@@ -871,8 +872,8 @@ def test_veto_has_no_rule_on_this_branch_so_its_drill_is_deferred(rules):
 
 # ================================================================== other
 def test_an_unrecognised_reason_lands_in_other_with_its_text_intact(rules):
-    """`other` is the taxonomy's safety net: "anything else; the raw text is kept in
-    `detail` ... so a new string is seen, never silently absorbed." It works."""
+    """`other` is the taxonomy's safety net: anything else, with the raw text kept in
+    `detail`, so a new string is seen and never silently absorbed. It works."""
     unknown = "refused because the desk did not like the look of it"
     got = rules.classify(unknown)
     assert got["rule"] == "other"
