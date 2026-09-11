@@ -775,7 +775,7 @@ the archive — read it to find any past board or any past book without opening 
 ### Where this sits in the run
 
 ```bash
-python3 pm.py --slot <slot> --book paper_book.json --scan scan_results.json \
+python3 pm.py --slot <slot> --book paper_book.json --scan scan_results.json \\
               --quotes pm_quotes.json --broker pm_broker.json --journal pm_journal_current.json
 python3 render_pm.py          # prints exactly which artifacts to publish, in order
 # re-read claude/paper-book.json -> fresh_probe.json; pm.py --check ...  (section 8)
@@ -959,8 +959,8 @@ stage the three `claude/pm-journal*.json` docs into a directory, the three
 `claude/pm-coverage.json`, and run
 
 ```bash
-python3 engine/report.py --journals journals/ --books books/ --bars bars.json \
-        --coverage coverage/pm-coverage.json --since <Monday> \
+python3 engine/report.py --journals journals/ --books books/ --bars bars.json \\
+        --coverage coverage/pm-coverage.json --since <Monday> \\
         --counterfactual --md report.md --json review.json
 ```
 
@@ -978,7 +978,12 @@ transcribing by hand.
 **`--coverage` is expected versus actual, not a tally of what happened.** Expected per
 trading day is the schedule and not a guess: four decision slots and seven sentinels, each
 across every desk — the shape `runner/slots.json` defines, carried in `report.py` as
-`DECISION_SLOTS` and `SENTINELS_PER_DAY` rather than parsed out of it. Present is what
+`DECISION_SLOTS` and `SENTINELS_PER_DAY` rather than parsed out of it, because
+`engine/MANIFEST.txt` stages the engine modules and nothing from `runner/`: a staged
+`report.py` has no `slots.json` to read and the coverage table still has to grade. A copy is
+only honest while something fails when the two drift, so a test reads `slots.json` and pins
+both constants to it — change the schedule there and the test says to change them here,
+rather than the table quietly grading against last week's shape. Present is what
 `claude/pm-coverage.json` (12d) records. The day the review runs on is still being written,
 so the most recent day — the one the doc's own `updated` stamp falls on — is marked
 `partial`, shown in the table and left out of the expected/present/missing totals; its desk
@@ -1010,12 +1015,24 @@ now excludes every entry dated on or before the book's own `resized.date`, and e
 with no declared desk: an entry from before the desk split carries no `desk` field,
 `load_journals` has to call it something to group it at all and calls it swing, and that
 guess must not be allowed to set a desk's opening equity — `desk_declared` is what makes the
-fallback distinguishable from a real one. Both counts are surfaced per desk as
-`excluded_entries`, so the exclusion is visible rather than silent. On the live journal that
-is five entries: swing drops from 30 to 25, the return reads +1.83%, and swing carries the
-*not a sample* chip with the others. `starting_equity` is not the answer — with `--since`
-the window is a week, not the book's whole life, and the start of the window is what the
-return is measured from.
+fallback distinguishable from a real one. On the live journal that is five entries: the
+return reads +1.83%, and swing carries the *not a sample* chip with the others.
+`starting_equity` is not the answer — with `--since` the window is a week, not the book's
+whole life, and the start of the window is what the return is measured from.
+
+**`excluded_entries` is every entry the benchmark dropped, not the interesting half.** It
+counted those two exclusions; `benchmark()` also skips a sentinel run — the between-slots
+risk check, which is not a decision slot and would put two equity marks on some slots and one
+on others — and any entry recording no `equity`, and it skipped both in silence. A field that
+names two of four reasons reads as a complete account of what was dropped while being a
+partial one: on the live swing journal 35 raw entries become 25 and the field owned up to
+five of the ten. All four are counted now, `n_entries_excluded` totals them, and **n plus the
+exclusions is every journal entry the window carried for that desk** — so a reader can
+reconcile the benchmark row against the journal instead of taking it on trust. The page
+carries the arithmetic: an `entries` column reading *25 of 35* on each row, and a note
+breaking the exclusions down by category (7 sentinel runs, 5 with no `desk`, none of the
+other two, across the three desks). An exclusion that cannot be counted back is not visible,
+which was the whole point of surfacing it.
 
 **A composite refusal is counted against every gate it names.** `portfolio.py` joins a
 blocked proposal's warnings with `"; "`, so one `skipped` item can carry an evidence-coverage
@@ -1046,7 +1063,11 @@ eight exits landed in bucket `unknown`, which reads as "the engine does not reco
 scores" rather than "the report cut the join". `--since` now says which trades to REPORT,
 never which decisions a trade is allowed to remember (`join_entries=`). A trade the join
 genuinely cannot match is counted in `n_unmatched_to_a_decision`, so `unknown` means
-unmatched rather than un-recorded.
+unmatched rather than un-recorded. Across all three desks the broken join left 21 of the 23
+in-window exits in `unknown`; with it restored, 15 remain — the peer desks', whose journals
+were trimmed to a week and carry no `place-buy` for a position opened before it. A join
+cannot find a decision the journal no longer holds; that residue is a retention limit, and
+`n_unmatched_to_a_decision` is the number that says which kind of `unknown` you are reading.
 
 **A measurement that was asked for and did not run says so on the page.** `--counterfactual`
 without `--bars` is still a refusal and the exit code is still 2 — but the report is now
