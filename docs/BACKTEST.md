@@ -494,6 +494,189 @@ nothing.
 
 ---
 
+## 6d. E15 — opportunistic insider buying (P-01, 2026-09-10)
+
+**The claim.** Cohen, Malloy & Pomorski (2012) — an insider's trade is *routine* when they
+traded in the same calendar month in each of the three prior years, *opportunistic*
+otherwise; opportunistic buys earned ≈ 82 bp/month abnormal, routine trades ≈ 0. The
+retail-friendly version is the cluster buy: ≥ 2 distinct non-routine insiders buying on the
+open market inside 30 days. `engine/insiders.py` parses Form 4 XML into `insiders.json`,
+computes `insiders_signal.json`, and the scanner logs three keys on every row's `features`
+dict — `insider_cluster_buy` (bool), `insider_opportunistic_buy_usd_30d`, `insider_net_usd_90d`
+— null for a name with no filings, absent when nothing was staged (`docs/DATA.md` §4).
+**Scored by nothing.** The test is the same table §6a describes: over the scan archive, the
+20- and 60-session forward return of cluster-buy names against the rest. `ic.py --by-feature`
+treats the boolean as a two-quantile split, so the quantile-spread row *is* cluster-minus-rest
+with its block-bootstrap interval; the dollar feature is the graded version and the 90-day
+net is the control that should carry less than either. Expected signs: `insider_cluster_buy`
+**+**, `insider_opportunistic_buy_usd_30d` **+**, `insider_net_usd_90d` **+ but weaker**.
+Two honesty rules: the filing date, not the trade date, is the signal time (stage `filed`;
+the signal already drops anything filed after `as_of`), and a cluster of *unknown-history*
+buyers is counted as opportunistic because a 90-day stager cannot see three years back —
+`unknown_history_buyers_30d` in the signal says how much of the count rests on that.
+
+```bash
+# stage insiders_signal.json on every scan (COLLECTION.md §7) for several weeks, archive as
+# usual, then — the archive's scan records and snapshots carry features.insider_*:
+python3 engine/ic.py --records archive/ --bars bars_all.json --horizons 20,60 \
+    --by-feature --md ic_e15.md --json ic_e15.json
+python3 engine/ledger.py --path experiments/ledger.jsonl --list      # E15 is the next row
+# read features.insider_cluster_buy at h=20 and h=60: quantile spread, its 90% interval, n;
+# under 30 cluster observations the row is not a sample, whatever the interval says
+```
+
+## 6e. E16 — 10-K / 10-Q text change, "Lazy Prices" (P-02, 2026-09-10)
+
+**The question.** Cohen, Malloy & Nguyen (2020) find that firms whose filings changed a lot
+against last year's (changers) underperform those whose filings barely moved, by up to
+188 bp/month on the Risk Factors section, over about three months. Does that hold on this
+universe, on this record, forward? `engine/filings.py` computes the change score from the two
+documents (`docs/DATA.md` §5: sections, cosine, the provisional 0.15 changer threshold) and
+`scanner.py` logs it on every row as `features.filing_change_score` / `filing_changer` /
+`filing_days_since` when `filings_signal.json` is staged. **Scored by nothing.** The intended
+use, if the test passes, is a slow negative screen — a changer is not a swing-desk candidate
+for the next ~60 sessions — and nothing is wired for that until the test has been read.
+
+**The recipe.** Stage the filings file (`docs/COLLECTION.md` §4a) so the live archive records
+carry the features from the next slot on. For a replay, `backtest.py --filings` lays the
+same file over every replay date **point-in-time**: `filings.features_for` nulls any filing
+dated after the scan date, so a record on 2025-03-01 sees only what had been filed by then.
+The replay wants the file in its **history form** — `{SYMBOL: [row, row, ...]}`, one row per
+filing with its own `filed` and `change_score`, which the fetch step produces by running the
+batch once per (filing, year-earlier filing) pair back to the window's start; with the
+single-row live form a replay date before the latest filing is simply null. Then, exactly the
+E10 machinery at the paper's horizons:
+
+```bash
+# the live record (records/ = the archive's compact records) — 20 and 60 sessions forward
+python3 engine/ic.py --records records/ --bars bars.json --horizons 20,60 --by-feature \
+    --md ic_e16.md --json ic_e16.json
+# a replay, once the fetch step has pulled filings back to the replay window's start
+python3 engine/backtest.py --bars bars_all.json --start 2025-01-02 --end 2025-12-31 --every 5 \
+    --filings filings_history.json --out-records records_e16/ --summary e16.json \
+    --ledger --experiment-id E16 --hypothesis "changers underperform non-changers over 20/60 sessions"
+python3 engine/ic.py --records records_e16/ --bars bars_all.json --horizons 20,60 --by-feature \
+    --md ic_e16.md --json ic_e16.json
+```
+
+Read two rows of the `--by-feature` table: `filing_change_score` (continuous, does not depend
+on the threshold) and `filing_changer` (the two-group split, 1.0 / 0.0). The paper predicts a
+**negative** IC and a negative top-minus-bottom spread at both horizons, larger at 60 than
+at 20. Write the expected signs down before running, as §6b requires.
+
+**Sample floor.** One observation per (date, name) only changes when a new filing arrives —
+four times a year per name — so nearby dates repeat the same feature value and the effective
+sample is filings, not rows. Count distinct `(symbol, filed)` pairs behind the table; under
+**100 filings**, or fewer than **20 changers**, the row is *not a sample* and the interval is
+decoration. That is roughly two quarters of a 150-name universe.
+
+**Promotion rule.** The negative screen is wired only if (a) the 60-session IC of
+`filing_change_score` is negative with |t| ≥ 2 on the live record, (b) the changer/non-changer
+spread is negative with its 90% interval below zero, and (c) the same signs hold on the
+replay's hold-out half — the paper's 2020 publication date is a reason to expect decay, and a
+large-cap universe is read faster than the paper's all-CRSP sample. If it passes, the screen is
+a `pm.py` entry gate refusing changers for 60 sessions after `filed`, reported through
+`report.py` like every other gate (§6c). If it fails, the features stay logged and nothing
+else changes.
+## 6f. E22 / E23 — earnings quality: the non-fundamental gap and the agreement gate (P-06, 2026-09-10)
+
+**The question.** The catalyst pillar knows *when* a name reports; it knows nothing about
+what the last report *said*, or how the tape took it. `engine/earnings_quality.py` puts
+five more keys into the same `features` dict as §6b, from a staged `earnings_history.json`
+(`get_earnings_results`, trailing eight quarters per symbol — `docs/DATA.md` §1b) and the
+bars file. Scored by nothing; `ic.py --by-feature` reads them like every other feature.
+
+| key | formula | paper | expected sign |
+|---|---|---|---|
+| `sue` | latest (EPS actual − estimate) / sample std of the last ≤8 surprises; null under 4 quarters | Bernard & Thomas 1989 (PEAD) | **+** over 21–63 sessions |
+| `ear_3d` | Σ over t−1, t, t+1 of (stock daily return − SPY daily return); t = first session on/after the report date, +1 session for an after-close print | Chan, Jegadeesh & Lakonishok 1996 | **+** (drift continues) |
+| `reg_residual` | `ear_3d` − pooled cross-sectional OLS fit of `ear_3d` on `sue` (with intercept) across the run's names; null under 5 names | Ben-Rephael, Da & Israelsen — the "non-fundamental gap" | **−** over 21 sessions (reverses ~1%) |
+| `earnings_agreement` | +1 when `sue` ≥ 1.0 **and** `ear_3d` ≥ 2%; −1 when both ≤ the negatives; 0 otherwise; null when either is null | Chan, Jegadeesh & Lakonishok 1996 | **+** (the +1 bucket beats the 0 and −1 buckets) |
+| `days_since_earnings` | weekdays since the latest reported quarter's report date | — | (conditioning variable) |
+
+The two experiments:
+
+**E22 — REG as a 21-day reversal screen.** The part of the announcement move the surprise
+does not explain is the part that reverses. If `reg_residual` ranks the 21-session forward
+return *negatively* on the hold-out, a name in the top quintile of REG is a candidate to
+refuse (or size down) for a month after its print, whatever its momentum says; a name in
+the bottom quintile gapped less than its surprise warranted and is the PEAD buy.
+
+**E23 — EAR × SUE agreement gate.** Chan, Jegadeesh & Lakonishok's finding is that the
+drift is strongest when the earnings surprise and the price reaction *agree* — high SUE
+with a high abnormal return — and weakest, or absent, when they disagree. If the +1 bucket
+of `earnings_agreement` beats the 0 and −1 buckets on the hold-out, the gate is a
+post-earnings entry filter: enter a name inside `days_since_earnings ≤ 21` only when the
+two agree.
+
+### Inputs the run needs
+
+Beyond §6b's bars (SPY included): `earnings_history.json` for every name the replay scores,
+covering every quarter from 8 quarters before the first replay date. The connector serves
+only the trailing eight, so **a two-year replay needs the history collected once and kept**
+— `experiments/earnings_history.json`, appended each quarter, never re-fetched from scratch,
+because a re-fetch loses the oldest quarters. `backtest.py` does not yet call
+`earnings_quality.build()` per replay date; until it does, the recipes below read the **live
+archive** (`claude/scans/*.json` records, which carry the features from the day they were
+scored), which is survivorship-free and point-in-time by construction, and simply short.
+Wiring the per-date computation into `backtest.py` is the next P-06 step; the flag will be
+`--earnings-history experiments/earnings_history.json` and the records will then carry the
+same five keys.
+
+### The E22 recipe
+
+```bash
+# the live archive: every scan record since P-06 landed, one observation per (date, symbol)
+python3 engine/ic.py --records claude/scans/ --bars bars_all.json --horizons 5,10,21 \
+    --by-feature --md ic_e22.md --json ic_e22.json
+# read the reg_residual row at the 21-session horizon: the sign must be NEGATIVE, the
+# Newey–West t under 3 says "not yet", and the quintile spread's 90% interval must exclude 0
+# then the counterfactual, once backtest.py carries the keys (in-sample first, hold-out once):
+python3 engine/backtest.py --bars bars_all.json --start 2024-08-21 --end 2025-08-20 --every 5 \
+    --sector-map sector_map.json --universe-history experiments/universe_sp500.json \
+    --earnings-history experiments/earnings_history.json \
+    --out-records records/e22_in/ --ledger experiments/ledger.jsonl --experiment-id E22 \
+    --hypothesis "reg_residual ranks 21d forward returns negatively: the non-fundamental part of the earnings gap reverses" \
+    --config-diff '{"features": ["reg_residual"], "gate": "none"}'
+python3 engine/ic.py --records records/e22_in/ --bars bars_all.json --horizons 5,10,21 \
+    --by-feature --md ic_e22_in.md --json ic_e22_in.json
+```
+
+Read `reg_residual` against `ear_3d` side by side: if `ear_3d` is **+** and `reg_residual`
+is **−** at 21 sessions, the decomposition is doing its job — the fundamental part drifts,
+the non-fundamental part reverses. If both carry the same sign, the regression is not
+separating anything and the cross-section was too thin (check `n` per date; under 5 names
+the residual is null by construction, and 5–10 is barely a fit).
+
+### The E23 recipe
+
+```bash
+python3 engine/ic.py --records claude/scans/ --bars bars_all.json --horizons 10,21,42 \
+    --by-feature --md ic_e23.md --json ic_e23.json
+# earnings_agreement is a three-valued feature, so its "quintile" spread is the +1 bucket
+# minus the −1 bucket; the IC row is the rank correlation over the three levels. Split the
+# observations file on days_since_earnings <= 21 (the ic.json observations carry it) and
+# re-run on that half: the gate is only ever applied inside the post-announcement month.
+python3 - <<'PY'
+import json
+o = json.load(open("ic_e23.json"))
+obs = [x for x in o["observations"]
+       if (x.get("features") or {}).get("days_since_earnings") is not None
+       and x["features"]["days_since_earnings"] <= 21]
+json.dump({"observations": obs}, open("ic_e23_post.json", "w"))
+PY
+python3 engine/ic.py --records ic_e23_post.json --horizons 10,21,42 --by-feature \
+    --md ic_e23_post.md --json ic_e23_post.json
+```
+
+What promotes it: on the hold-out, the +1 bucket's mean forward return over 21 and 42
+sessions above the 0 bucket's with an interval clear of zero, **and** `sue` alone weaker than
+the agreement bucket (otherwise the gate adds nothing over PEAD). Then a ledger row
+(`--experiment-id E23`) before any pillar reads it. Both features carry the SUE look-ahead
+`docs/DATA.md` §1b describes — say so in the write-up.
+
+---
+
 ## 7. Where this sits in the plan
 
 Phase 2 of the roadmap (`claude/health/2026-09-02-system-review-and-roadmap.md`) is *prove the

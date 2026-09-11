@@ -11,7 +11,7 @@ import pathlib
 
 import pytest
 
-from conftest import ENGINE, FIX
+from conftest import ENGINE, FIX, ROOT
 
 JOURNALS = FIX / "journals"
 BOOKS = JOURNALS / "books"
@@ -346,7 +346,11 @@ def test_attribution_tables_join_the_entry_decision(rp):
     assert all(k in ("60-69", "70-79", "80-89", "unknown") for k in A["by_score_bucket"])
     assert "unknown" not in A["by_score_bucket"]
     stat = A["by_desk"]["swing"]
-    assert set(stat) == {"n", "pnl_total", "pnl_mean", "pnl_pct_mean", "pnl_pct_median", "sample"}
+    # `n` is exit rows; the round-trip fields and the notional-weighted return came in with
+    # the 2026-09-11 fix (a book row is a slice of an exit, not a trade).
+    assert set(stat) == {"n", "n_round_trips", "n_positions_still_open", "pnl_total",
+                         "pnl_mean", "pnl_pct_mean", "pnl_pct_mean_notional_weighted",
+                         "pnl_pct_median", "sample"}
     assert stat["sample"] == rp.NOT_A_SAMPLE
     assert "win_rate" not in json.dumps(A) and "sharpe" not in json.dumps(A).lower()
     # a trade with no matching decision lands in `unknown`
@@ -354,6 +358,37 @@ def test_attribution_tables_join_the_entry_decision(rp):
         {"symbol": "NOPE", "opened": "2026-09-01", "closed": "2026-09-02", "pnl": 1.0,
          "pnl_pct": 1.0, "reason": "stop"}]}})
     assert A2["n_unmatched_to_a_decision"] == 1 and A2["by_score_bucket"] == {"unknown": A2["all"]}
+
+
+# ------------------------------------------------------------------ the coverage schedule
+def test_the_coverage_schedule_agrees_with_runner_slots_json(rp):
+    """`runner/slots.json` is the schedule; report.py grades COVER-01 against a COPY of it
+    (`DECISION_SLOTS`, `SENTINELS_PER_DAY`), because engine/MANIFEST.txt stages the engine
+    modules and nothing from runner/ — a staged report.py has no slots.json to read, and
+    the coverage table has to work there. A copy is only safe while something fails when
+    the two drift, which is this test: change the schedule in slots.json and the coverage
+    table stops grading against last week's shape in silence."""
+    slots = json.loads((ROOT / "runner" / "slots.json").read_text(encoding="utf-8"))["slots"]
+    decision = tuple(name for name, _ in sorted(
+        ((n, s.get("nominal_et") or "") for n, s in slots.items()
+         if "pm" in (s.get("steps") or [])), key=lambda kv: kv[1]))
+    assert rp.DECISION_SLOTS == decision, (
+        f"runner/slots.json carries the PM slots {decision} and report.py grades against "
+        f"{rp.DECISION_SLOTS} — update DECISION_SLOTS (and the comment beside it)")
+    times = slots["sentinel"]["times_et"]
+    assert rp.SENTINELS_PER_DAY == len(times), (
+        f"runner/slots.json schedules {len(times)} sentinels a day ({times[0]}–{times[-1]} "
+        f"ET) and report.py expects {rp.SENTINELS_PER_DAY} — update SENTINELS_PER_DAY")
+    # the constant's comment quotes the cadence; it has to still be the cadence
+    assert (times[0], times[-1]) == ("09:35", "15:35"), (
+        "report.py's comment says hourly at :35 from 09:35 to 15:35 ET; slots.json now "
+        f"says {times[0]}–{times[-1]}")
+    # and the reason it is a copy at all: nothing from runner/ is staged with the engine
+    manifest = (ENGINE / "MANIFEST.txt").read_text(encoding="utf-8").split()
+    assert "report.py" in manifest
+    assert not [n for n in manifest if "/" in n or n.endswith("slots.json")], (
+        "the engine stages flat, from engine/ only — if runner/slots.json is staged now, "
+        "parse it instead of copying it")
 
 
 def test_benchmark_is_exposure_adjusted_against_spy(rp, tmp_path):

@@ -1,0 +1,643 @@
+{
+  "_what": "Proof that each desk was looked at, including on runs that wrote nothing else. Written by the caller from pm.py's per-run heartbeat files (COVER-01, PM section 12d). One entry per run, all three desks on each entry.",
+  "_protocol": "Merge, never overwrite: read this doc, append or replace the entry with the same ts+slot, keep the last `keep_days` days. The daily health check asserts seven sentinel runs x three desks on every trading day.",
+  "_started": "2026-09-02 opening-range \u2014 the first run under the COVER-01 heartbeat. Runs before this one left no coverage record and cannot be reconstructed from this file.",
+  "days": {
+    "2026-09-08": {
+      "runs": [
+        {
+          "ts": "2026-09-08T13:01:56Z",
+          "slot": "pre-market",
+          "engine_sha": "8fdab37",
+          "desks": {
+            "swing": {
+              "quiet": false,
+              "positions": 4,
+              "working_orders": 1,
+              "decisions": 1,
+              "warnings": 3,
+              "book_revision": 26
+            },
+            "pullback": {
+              "quiet": false,
+              "positions": 3,
+              "working_orders": 0,
+              "decisions": 1,
+              "warnings": 4,
+              "book_revision": 17
+            },
+            "momentum": {
+              "quiet": false,
+              "positions": 3,
+              "working_orders": 2,
+              "decisions": 3,
+              "warnings": 3,
+              "book_revision": 20
+            }
+          },
+          "_note": "Scheduled 08:45 ET run, on time. Engine cloned from the production branch. Live state staged into the run directory from the project docs; the scan staged was a field-subset projection of the 08:00 pre-market scan (all 24 rows, every field the engine reads). All three house blocks were measured against the same pre-run peer snapshot."
+        },
+        {
+          "ts": "2026-09-08T17:30:42Z",
+          "slot": "midday",
+          "engine_sha": "8fdab37",
+          "desks": {
+            "swing": {
+              "quiet": false,
+              "positions": 4,
+              "working_orders": 1,
+              "decisions": 0,
+              "warnings": 1,
+              "book_revision": 27
+            },
+            "pullback": {
+              "quiet": false,
+              "positions": 3,
+              "working_orders": 0,
+              "decisions": 1,
+              "warnings": 2,
+              "book_revision": 18
+            },
+            "momentum": {
+              "quiet": false,
+              "positions": 4,
+              "working_orders": 1,
+              "decisions": 1,
+              "warnings": 1,
+              "book_revision": 21
+            }
+          },
+          "_note": "Scheduled 13:15 ET run, on time. Engine cloned from the production branch. Live state staged into the run directory from the project docs; the scan staged was a field-subset projection of the 08:00 pre-market scan (all 24 rows, every field the engine reads) \u2014 it was 331 minutes old, so entries were frozen and holdings were managed from this run's own broker quotes. Swing heartbeat carries its own 17:30:42Z timestamp; the two strategy desks ran at 17:31:03Z. All three house blocks were measured against the same pre-run peer snapshot."
+        },
+        {
+          "ts": "2026-09-08T20:00:19Z",
+          "slot": "power-hour",
+          "engine_sha": "8fdab37",
+          "desks": {
+            "swing": {
+              "quiet": false,
+              "positions": 5,
+              "working_orders": 0,
+              "decisions": 1,
+              "warnings": 0,
+              "book_revision": 28
+            },
+            "pullback": {
+              "quiet": false,
+              "positions": 3,
+              "working_orders": 0,
+              "decisions": 0,
+              "warnings": 1,
+              "book_revision": 19
+            },
+            "momentum": {
+              "quiet": false,
+              "positions": 5,
+              "working_orders": 0,
+              "decisions": 1,
+              "warnings": 0,
+              "book_revision": 22
+            }
+          },
+          "_note": "Scheduled 15:45 ET run, on time. Engine cloned from the production branch. Live state staged into the run directory from the project docs; the scan staged was a field-subset projection of TODAY'S 15:00 power-hour scan (all 23 rows, every field the engine reads), 46 minutes old and fresh. Swing heartbeat carries its own 20:00:19Z timestamp; the two strategy desks ran at 20:01:53Z. All three house blocks were measured against the same pre-run peer snapshot, before this run's ANET fills. NOTE: all seven of today's scheduled sentinels (09:35-15:35 ET) were BLOCKED by the sandbox clone-permission refusal and left no rows \u2014 see claude/health/2026-09-08-sentinel-*-blocked.md. Sentinel coverage for 2026-09-08 is zero; the three decision slots that did run (08:45, 13:15, 15:45) all cloned successfully."
+        }
+      ]
+    },
+    "2026-09-09": {
+      "runs": [
+        {
+          "ts": "2026-09-09T15:00:39Z",
+          "slot": "opening-range",
+          "engine_sha": "8fdab37",
+          "desks": {
+            "swing": {
+              "quiet": false,
+              "positions": 4,
+              "working_orders": 2,
+              "decisions": 5,
+              "warnings": 5,
+              "book_revision": 29
+            },
+            "pullback": {
+              "quiet": false,
+              "positions": 3,
+              "working_orders": 2,
+              "decisions": 3,
+              "warnings": 6,
+              "book_revision": 20
+            },
+            "momentum": {
+              "quiet": false,
+              "positions": 4,
+              "working_orders": 0,
+              "decisions": 3,
+              "warnings": 3,
+              "book_revision": 23
+            }
+          }
+        },
+        {
+          "ts": "2026-09-09T15:50:57Z",
+          "slot": "sentinel",
+          "engine_sha": "45a753f",
+          "engine_source": "raw-https",
+          "desks": {
+            "swing": {
+              "quiet": false,
+              "positions": 6,
+              "working_orders": 0,
+              "decisions": 2,
+              "warnings": 0,
+              "book_revision": 30
+            },
+            "pullback": {
+              "quiet": false,
+              "positions": 5,
+              "working_orders": 0,
+              "decisions": 2,
+              "warnings": 0,
+              "book_revision": 21
+            },
+            "momentum": {
+              "quiet": true,
+              "positions": 4,
+              "working_orders": 0,
+              "decisions": 0,
+              "warnings": 0,
+              "book_revision": 23
+            }
+          },
+          "_note": "Sentinel slot 11:35 ET, ran ~11:50 ET. git clone refused by the sandbox classifier; engine staged file-by-file from raw.githubusercontent.com production (path B), sha from git ls-remote. Swing and pullback each filled resting KLAC and MDB day limits (paper fills); momentum quiet. Swing heartbeat 15:50:57Z; strategy desks 15:51:01Z."
+        },
+        {
+          "ts": "2026-09-09T17:02:17Z",
+          "slot": "sentinel",
+          "engine_sha": "45a753f",
+          "engine_source": "raw-https",
+          "desks": {
+            "swing": {
+              "quiet": true,
+              "positions": 6,
+              "working_orders": 0,
+              "decisions": 0,
+              "warnings": 0,
+              "book_revision": 30
+            },
+            "pullback": {
+              "quiet": true,
+              "positions": 5,
+              "working_orders": 0,
+              "decisions": 0,
+              "warnings": 0,
+              "book_revision": 21
+            },
+            "momentum": {
+              "quiet": true,
+              "positions": 4,
+              "working_orders": 0,
+              "decisions": 0,
+              "warnings": 0,
+              "book_revision": 23
+            }
+          },
+          "_note": "Sentinel slot 12:35 ET, ran ~13:02 ET. git clone refused by the sandbox classifier again; engine staged via raw.githubusercontent.com production (path B), sha from git ls-remote. All three desks SENTINEL QUIET \u2014 15 positions priced from fresh broker quotes, every stop checked, nothing fired. Live account flat: no divergence. Swing heartbeat 17:02:17Z; strategy desks 17:02:22Z."
+        },
+        {
+          "ts": "2026-09-09T17:21:02Z",
+          "slot": "midday",
+          "engine_sha": "45a753f",
+          "engine_source": "clone",
+          "desks": {
+            "swing": {
+              "quiet": false,
+              "positions": 6,
+              "working_orders": 0,
+              "decisions": 0,
+              "warnings": 5,
+              "book_revision": 31
+            },
+            "pullback": {
+              "quiet": false,
+              "positions": 5,
+              "working_orders": 0,
+              "decisions": 0,
+              "warnings": 6,
+              "book_revision": 22
+            },
+            "momentum": {
+              "quiet": false,
+              "positions": 4,
+              "working_orders": 0,
+              "decisions": 1,
+              "warnings": 2,
+              "book_revision": 24
+            }
+          },
+          "_note": "Scheduled 13:15 ET run, on time. Engine cloned from the production branch (path A succeeded this slot, unlike today's two sentinels). Live state staged byte-exact from the project docs via the session transcript rather than retyped. Scan staged was TODAY'S 12:30 midday scan, all 23 rows, ~46 minutes old and fresh. Swing and pullback both had a KLAC and an MDB trim blocked by the PDT guard (both opened today at the 11:50 sentinel; a same-day exit is allowed only for a stop). Momentum trimmed MDB 2-of-2. Swing heartbeat 17:21:02Z; strategy desks 17:22:17Z. All three house blocks measured against the same pre-run peer snapshot."
+        },
+        {
+          "ts": "2026-09-09T17:51:43Z",
+          "slot": "sentinel",
+          "engine_sha": "45a753f",
+          "engine_source": "raw-https",
+          "desks": {
+            "swing": {
+              "quiet": true,
+              "positions": 6,
+              "working_orders": 0,
+              "decisions": 0,
+              "warnings": 0,
+              "book_revision": 31
+            },
+            "pullback": {
+              "quiet": true,
+              "positions": 5,
+              "working_orders": 0,
+              "decisions": 0,
+              "warnings": 0,
+              "book_revision": 22
+            },
+            "momentum": {
+              "quiet": true,
+              "positions": 4,
+              "working_orders": 0,
+              "decisions": 0,
+              "warnings": 0,
+              "book_revision": 24
+            }
+          },
+          "_note": "Sentinel slot 13:35 ET, ran ~13:51 ET. git clone refused by the sandbox classifier; engine staged via raw.githubusercontent.com production (path B), sha from git ls-remote. All three desks SENTINEL QUIET \u2014 15 positions priced from fresh broker quotes, every stop checked, nothing fired. Live account flat: no divergence. Swing heartbeat 17:51:43Z; strategy desks 17:51:49Z."
+        },
+        {
+          "ts": "2026-09-09T18:52:14Z",
+          "slot": "sentinel",
+          "engine_sha": "45a753f",
+          "engine_source": "raw-https",
+          "desks": {
+            "swing": {
+              "quiet": true,
+              "positions": 6,
+              "working_orders": 0,
+              "decisions": 0,
+              "warnings": 0,
+              "book_revision": 31
+            },
+            "pullback": {
+              "quiet": true,
+              "positions": 5,
+              "working_orders": 0,
+              "decisions": 0,
+              "warnings": 0,
+              "book_revision": 22
+            },
+            "momentum": {
+              "quiet": true,
+              "positions": 4,
+              "working_orders": 0,
+              "decisions": 0,
+              "warnings": 0,
+              "book_revision": 24
+            }
+          },
+          "_note": "Sentinel slot 14:35 ET, ran ~14:52 ET. git clone refused by the sandbox classifier; engine staged via raw.githubusercontent.com production (path B), sha from git ls-remote. All three desks SENTINEL QUIET \u2014 15 positions priced from fresh broker quotes, every stop checked, nothing fired. Live account flat: no divergence. Books, journals and boards untouched."
+        },
+        {
+          "ts": "2026-09-09T19:53:17Z",
+          "slot": "sentinel",
+          "engine_sha": "45a753f",
+          "engine_source": "raw-https",
+          "desks": {
+            "swing": {
+              "quiet": true,
+              "positions": 6,
+              "working_orders": 0,
+              "decisions": 0,
+              "warnings": 0,
+              "book_revision": 31
+            },
+            "pullback": {
+              "quiet": true,
+              "positions": 5,
+              "working_orders": 0,
+              "decisions": 0,
+              "warnings": 0,
+              "book_revision": 22
+            },
+            "momentum": {
+              "quiet": true,
+              "positions": 4,
+              "working_orders": 0,
+              "decisions": 0,
+              "warnings": 0,
+              "book_revision": 24
+            }
+          },
+          "_note": "Sentinel slot 15:35 ET, ran ~15:53 ET \u2014 the day's final sentinel. git clone refused by the sandbox classifier; engine staged via raw.githubusercontent.com production (path B), sha from git ls-remote. All three desks SENTINEL QUIET \u2014 15 positions priced from fresh broker quotes, every stop checked, nothing fired. Live account $50 cash, no positions: no divergence. Books, journals and boards untouched."
+        },
+        {
+          "ts": "2026-09-09T20:03:10Z",
+          "slot": "power-hour",
+          "engine_sha": "45a753f",
+          "engine_source": "clone",
+          "desks": {
+            "swing": {
+              "quiet": false,
+              "positions": 6,
+              "working_orders": 0,
+              "decisions": 0,
+              "warnings": 2,
+              "book_revision": 32
+            },
+            "pullback": {
+              "quiet": false,
+              "positions": 5,
+              "working_orders": 0,
+              "decisions": 0,
+              "warnings": 3,
+              "book_revision": 23
+            },
+            "momentum": {
+              "quiet": false,
+              "positions": 4,
+              "working_orders": 0,
+              "decisions": 0,
+              "warnings": 0,
+              "book_revision": 25
+            }
+          },
+          "_note": "Scheduled 15:45 ET run. Engine cloned from the production branch (path A). Quotes are the OFFICIAL 16:00 ET closing prints (venue 19:59:59Z) plus post-close prints to 20:02Z \u2014 the engine ran at 20:03-20:04Z, i.e. just after the bell rather than 15 minutes before it, because staging live state took longer than usual in this session. The close-of-day marks are therefore BETTER than a 15:45 snapshot, not worse. No entries by design at this slot. Swing and pullback each had a KLAC trim blocked by the PDT guard (KLAC opened today at the 11:50 sentinel; a same-day exit is allowed only for a stop); MU and NVDA trims were blocked by the one-trim-per-session rule. Momentum BOOK UNCHANGED \u2014 marks moved, no decision. Swing published the frozen close-of-day board; the two strategy desks publish none. Live account $50 cash, no positions: no divergence. TRANSPORT NOTE: in this session project_read returns doc content inline rather than writing it into $SCAN_DIR, so all live state and the raw quote payload were materialised by hand from the tool results; the scan staged was a field-subset projection of TODAY'S 15:00 power-hour scan (all 25 rows, every field pm.py and portfolio.py read)."
+        }
+      ]
+    },
+    "2026-09-10": {
+      "runs": [
+        {
+          "ts": "2026-09-10T13:03:08Z",
+          "slot": "pre-market",
+          "engine_sha": "423ed33",
+          "engine_source": "raw-https",
+          "desks": {
+            "swing": {
+              "quiet": false,
+              "positions": 4,
+              "working_orders": 1,
+              "decisions": 6,
+              "warnings": 3,
+              "book_revision": 33
+            },
+            "pullback": {
+              "quiet": false,
+              "positions": 3,
+              "working_orders": 1,
+              "decisions": 6,
+              "warnings": 3,
+              "book_revision": 24
+            },
+            "momentum": {
+              "quiet": false,
+              "positions": 1,
+              "working_orders": 0,
+              "decisions": 3,
+              "warnings": 3,
+              "book_revision": 26
+            }
+          },
+          "_note": "Scheduled 08:45 ET run, on time (engine 13:03-13:04Z). git clone refused by the sandbox classifier at path A; engine staged file-by-file from raw.githubusercontent.com production (path B), sha 423ed33 confirmed by git ls-remote \u2014 a verified commit, not a fingerprint. Scan staged was TODAY'S 08:00 pre-market scan, all 19 rows, ~63 minutes old and fresh. Big repositioning slot: the semis complex re-rated overnight and MU/NVDA fell under the 45 exit threshold on every desk that held them. Swing closed MU and NVDA outright, trimmed SNDK/KLAC/MDB 1-of-2 and placed an ALAB day limit; pullback closed MU and MRVL (MRVL on the trimmed-twice rule), trimmed SNDK/KLAC/MDB and placed its own ALAB limit; momentum closed NVDA, MU and MDB and is down to ANET alone. No PDT block anywhere \u2014 nothing sold was opened today, 0/3 day trades used. Live account $50 cash, no positions: no divergence. OVERNIGHT WATCH UNVERIFIED: pm-watch-journal.json's newest entry of any kind is 2026-09-01, nine days back, so neither today's 07:00 pre-open run nor yesterday's 16:20 after-hours run left a record and quiet cannot be distinguished from not-run. TRANSPORT NOTE: project_read returns doc content inline in this session rather than writing into $SCAN_DIR, so all live state and the raw quote payload were materialised by hand from the tool results; parsed marks were read back against the connector output before any write. The scan staged was a field-subset projection (every row, every field pm.py and portfolio.py read). Swing heartbeat 13:03:08Z; pullback 13:04:06Z; momentum 13:04:11Z."
+        },
+        {
+          "ts": "2026-09-10T13:52:14Z",
+          "slot": "sentinel",
+          "engine_sha": "423ed33",
+          "engine_source": "raw-https",
+          "desks": {
+            "swing": {
+              "quiet": false,
+              "positions": 5,
+              "working_orders": 0,
+              "decisions": 1,
+              "warnings": 0,
+              "book_revision": 34
+            },
+            "pullback": {
+              "quiet": false,
+              "positions": 4,
+              "working_orders": 0,
+              "decisions": 1,
+              "warnings": 0,
+              "book_revision": 25
+            },
+            "momentum": {
+              "quiet": true,
+              "positions": 1,
+              "working_orders": 0,
+              "decisions": 0,
+              "warnings": 0,
+              "book_revision": 26
+            }
+          },
+          "_note": "Sentinel slot 09:35 ET, ran ~09:39-09:52 ET. git clone refused by the sandbox classifier; engine staged file-by-file from raw.githubusercontent.com production (path B), sha 423ed33 confirmed by git ls-remote. Swing and pullback each filled their resting ALAB 288.00 day limit (ALAB traded 283.28 at 09:39 ET) \u2014 paper fills; ALAB's stop is 253.44 on both desks. Momentum SENTINEL QUIET \u2014 ANET alone, 190.63 vs stop 185.05, nothing fired. All 5 held/working symbols priced from fresh broker quotes (venue 13:39Z); no halt, no stale quote, every stop checked. Live account $50 cash, no positions: no divergence. TRANSPORT NOTE: project_read returns doc content inline in this session, so books, journals and the raw quote payload were materialised by hand from tool results in the exact field shape quotes_to_prices parses; the engine, not the operator, picked every price. Swing heartbeat 13:52:14Z; strategy desks 13:52:20Z. Rolling Trade Desk republished; no frozen snapshot (sentinel rule)."
+        },
+        {
+          "ts": "2026-09-10T14:41:50Z",
+          "slot": "sentinel",
+          "engine_sha": "423ed33",
+          "engine_source": "raw-https",
+          "desks": {
+            "swing": {
+              "quiet": true,
+              "positions": 5,
+              "working_orders": 0,
+              "decisions": 0,
+              "warnings": 0,
+              "book_revision": 34
+            },
+            "pullback": {
+              "quiet": true,
+              "positions": 4,
+              "working_orders": 0,
+              "decisions": 0,
+              "warnings": 0,
+              "book_revision": 25
+            },
+            "momentum": {
+              "quiet": true,
+              "positions": 1,
+              "working_orders": 0,
+              "decisions": 0,
+              "warnings": 0,
+              "book_revision": 26
+            }
+          },
+          "_note": "Sentinel slot 10:35 ET, ran ~10:41 ET. git clone refused by the sandbox classifier; engine staged file-by-file from raw.githubusercontent.com production (path B), sha 423ed33 confirmed by git ls-remote. All three desks SENTINEL QUIET \u2014 10 positions across swing/pullback/momentum priced from fresh broker quotes (venue 14:41Z, age ~0.5 min), no halt, no stale quote, no spread refusal; every stop checked, nothing fired. Closest stop: ANET 192.65 vs 185.05 (3.9% above). Live account $50 cash, no positions: no divergence. TRANSPORT NOTE: project_read returns doc content inline in this session, so books and the raw quote payload were materialised by hand from tool results in the exact field shape quotes_to_prices parses; parsed marks were read back against the connector output and matched exactly \u2014 the engine, not the operator, picked every price. Journals were not staged for this quiet run (a quiet sentinel writes no journal; a desk that fired would have had its journal staged before any write-back). No book revision, no journal entry, no publish (QUIET rule)."
+        },
+        {
+          "ts": "2026-09-10T15:04:45Z",
+          "slot": "opening-range",
+          "engine_sha": "423ed33",
+          "engine_source": "clone",
+          "desks": {
+            "swing": {
+              "quiet": false,
+              "positions": 5,
+              "working_orders": 1,
+              "decisions": 1,
+              "warnings": 3,
+              "book_revision": 35
+            },
+            "pullback": {
+              "quiet": false,
+              "positions": 4,
+              "working_orders": 0,
+              "decisions": 0,
+              "warnings": 3,
+              "book_revision": 26
+            },
+            "momentum": {
+              "quiet": false,
+              "positions": 1,
+              "working_orders": 1,
+              "decisions": 1,
+              "warnings": 2,
+              "book_revision": 27
+            }
+          },
+          "_note": "Scheduled 10:45 ET run, on time (engine 15:04-15:06Z). git clone SUCCEEDED at path A this slot \u2014 engine_source=clone, sha 423ed33 from the clone itself, the first path-A success since yesterday's power-hour. Scan staged was TODAY'S 10:00 opening-range scan, all 21 rows, ~46 minutes old and fresh. THE SLOT'S POINT: both resting ALAB 288.00 day limits had ALREADY FILLED at the 09:35 sentinel, so nothing was left resting to fill or fail here; ALAB is now +1.1% above its fill on both desks. Swing and momentum each placed a new AEHR day limit at 98.02 (swing 2.2084 sh / $216.47, momentum 5.3581 sh / $525.20, stop 86.26 on both); pullback took no action \u2014 AEHR is a Momentum setup, outside its mandate, and 16 of 21 rows were declined on mandate. WHAT THE MANAGER WANTED AND COULD NOT DO: an ALAB trim fired on BOTH swing and pullback (score 51, in the 45-55 trim band) and was BLOCKED BY THE PDT GUARD on both \u2014 ALAB opened today at the 09:35 sentinel, so selling it would be day trade 1/3 and a trim is not a stop. KLAC and MDB trims were blocked by the one-trim-per-session rule (both already trimmed at pre-market). SSL was refused on the 70% evidence-coverage floor at 40%. MACRO NOT GATING: seven releases today (PPI, jobless claims, existing home sales, wholesale inventories, EIA) \u2014 all outside the high-impact list, none froze entries; tomorrow's 08:30 CPI IS on the gating list and will freeze the 08:45 pre-market slot. Live account $50 cash, no positions: no divergence. HOUSE $15,301.86, Unclassified 19.5% / Information Technology 11.9%, both far under the 40% sector cap; largest single name ANET 9.9%, under the 15% cap. TRANSPORT NOTE: project_read returns doc content inline in this session, so all live state and the raw quote payload were materialised by hand from tool results in the exact field shape quotes_to_prices parses; all 21 symbols parsed, none refused, and parsed marks were read back against the connector output and matched exactly \u2014 the engine, not the operator, picked every price. Swing heartbeat 15:04:45Z; pullback 15:05:52Z; momentum 15:05:55Z. Swing published the frozen board; desks publish none."
+        },
+        {
+          "ts": "2026-09-10T15:47:33Z",
+          "slot": "sentinel",
+          "engine_sha": "423ed33",
+          "engine_source": "raw-https",
+          "desks": {
+            "swing": {
+              "quiet": true,
+              "positions": 5,
+              "working_orders": 1,
+              "decisions": 0,
+              "warnings": 0,
+              "book_revision": 35
+            },
+            "pullback": {
+              "quiet": true,
+              "positions": 4,
+              "working_orders": 0,
+              "decisions": 0,
+              "warnings": 0,
+              "book_revision": 26
+            },
+            "momentum": {
+              "quiet": true,
+              "positions": 1,
+              "working_orders": 1,
+              "decisions": 0,
+              "warnings": 0,
+              "book_revision": 27
+            }
+          },
+          "_note": "Sentinel slot 11:35 ET, ran ~11:37-11:47 ET. git clone refused by the sandbox classifier; engine staged file-by-file from raw.githubusercontent.com production (path B), sha 423ed33 confirmed by git ls-remote. All three desks SENTINEL QUIET \u2014 10 positions across swing/pullback/momentum priced from fresh broker quotes (venue 15:47Z, age <1 min), no halt, no stale quote, no spread refusal; every stop checked, nothing fired. The two resting AEHR 98.02 day limits (swing, momentum) did NOT fill \u2014 AEHR quoted 99.18, above the limit. Closest stop: ANET 191.45 vs 185.05 (3.5% above). Live account $50 cash, no positions: no divergence. TRANSPORT NOTE: project_read returns doc content inline in this session, so books and the raw quote payload were materialised by hand from tool results in the exact field shape quotes_to_prices parses \u2014 the engine, not the operator, picked every price. The swing journal was staged; the pullback and momentum journals were not staged for this quiet run (a desk that fired would have had its journal staged before any write-back, per the 10:35 precedent). No book revision, no journal entry, no publish (QUIET rule)."
+        },
+        {
+          "ts": "2026-09-10T16:53:30Z",
+          "slot": "sentinel",
+          "engine_sha": "423ed33",
+          "engine_source": "raw-https",
+          "desks": {
+            "swing": {
+              "quiet": true,
+              "positions": 5,
+              "working_orders": 1,
+              "decisions": 0,
+              "warnings": 0,
+              "book_revision": 35
+            },
+            "pullback": {
+              "quiet": true,
+              "positions": 4,
+              "working_orders": 0,
+              "decisions": 0,
+              "warnings": 0,
+              "book_revision": 26
+            },
+            "momentum": {
+              "quiet": true,
+              "positions": 1,
+              "working_orders": 1,
+              "decisions": 0,
+              "warnings": 0,
+              "book_revision": 27
+            }
+          },
+          "_note": "Sentinel slot 12:35 ET, ran ~12:37-12:53 ET. git clone refused by the sandbox classifier; engine staged file-by-file from raw.githubusercontent.com production (path B), sha 423ed33 confirmed by git ls-remote. All three desks SENTINEL QUIET \u2014 10 positions across swing/pullback/momentum priced from fresh broker quotes (venue 16:52Z, age ~1 min), no halt, no stale quote, no spread refusal; every stop checked, nothing fired. The two resting AEHR 98.02 day limits (swing, momentum) did NOT fill \u2014 AEHR quoted 98.85, above the limit. Closest stop: ANET 189.57 vs 185.05 (2.4% above, tightened from 3.5% at the 11:35 sentinel). Live account $50 cash, no positions: no divergence. TRANSPORT NOTE: project_read returns doc content inline in this session, so books, journals and the raw quote payload were materialised by hand from tool results in the exact field shape quotes_to_prices parses; parsed marks were read back against the connector output and matched exactly \u2014 the engine, not the operator, picked every price. All three journals were staged before the engine ran. No book revision, no journal entry, no publish (QUIET rule)."
+        },
+        {
+          "ts": "2026-09-10T17:31:47Z",
+          "slot": "midday",
+          "engine_sha": "423ed33",
+          "engine_source": "clone",
+          "desks": {
+            "swing": {
+              "quiet": false,
+              "positions": 5,
+              "working_orders": 1,
+              "decisions": 0,
+              "warnings": 2,
+              "book_revision": 36
+            },
+            "pullback": {
+              "quiet": false,
+              "positions": 4,
+              "working_orders": 0,
+              "decisions": 0,
+              "warnings": 2,
+              "book_revision": 27
+            },
+            "momentum": {
+              "quiet": false,
+              "positions": 1,
+              "working_orders": 2,
+              "decisions": 1,
+              "warnings": 2,
+              "book_revision": 28
+            }
+          },
+          "_note": "Scheduled 13:15 ET MIDDAY run, on time (engine 17:31-17:33Z). git clone SUCCEEDED at path A \u2014 engine_source=clone, sha 423ed33 from the clone itself. Scan staged was TODAY'S 12:30 midday scan, all 24 rows, 45 minutes old and fresh. THE DAY-TRADE QUESTION THIS SLOT EXISTS TO ASK: ALAB is the only position opened today (09:35 sentinel, intraday on swing and pullback) and it is NOT near its stop \u2014 290.74 against a 253.44 stop, 14.7% clear \u2014 so the exhausted-budget UNPROTECTED case did not arise. Day-trade budget untouched at 0/3 on all three desks; the exit hatch is intact. NO STOP BROKEN ANYWHERE: closest is ANET at 189.44 vs 185.05, 2.4% above, unchanged from the 12:35 sentinel. WHAT THE MANAGER WANTED AND COULD NOT DO: an MDB trim fired on BOTH swing and pullback (score 54, inside the 45-55 trim band) and was BLOCKED BY THE ONE-TRIM-PER-SESSION RULE on both \u2014 MDB was already trimmed 1-of-2 at this morning's pre-market slot. That is the trim-discipline cap doing its job, not a failure. MOMENTUM WAS THE ONLY DESK TO ACT: placed a new AMD day limit at 506.23 (1.2242 sh / $619.73, stop 471.40, target 610.70, risking $42.63) \u2014 AMD is the scan's top row at 62.0, a Momentum setup with RSI 60, inside the desk's mandate. Swing declined AMD on its own sector cap (already 3 Information Technology positions, max 3); pullback declined it on mandate (Momentum setup, not a pullback). The two resting AEHR 98.02 day limits (swing, momentum) did NOT fill \u2014 AEHR quoted 98.47, above the limit \u2014 and both were correctly counted against the sector, position, risk and deployment caps as if filled (CAP-01). MACRO NOT GATING: seven releases today (PPI, jobless claims, existing home sales, wholesale inventories, EIA) \u2014 all outside the high-impact list. Tomorrow's 08:30 CPI IS on the gating list and will freeze the 08:45 pre-market slot. Live account $50 cash, no positions: no divergence. HOUSE $15,276.49 across 3 desks \u2014 Unclassified 19%, Information Technology 15%, both far under the 40% sector cap; largest single name ANET 9.9%, under the 15% cap. No house refusal this run. TRANSPORT NOTE: project_read returns doc content inline in this session, so all live state and the raw quote payload were materialised by hand from tool results in the exact field shape quotes_to_prices parses; all 24 symbols parsed, none refused, none halted, none stale, and parsed marks were read back against the connector output and matched exactly \u2014 the engine, not the operator, picked every price. The scan staged was a FIELD-SUBSET PROJECTION: all 24 rows, every field pm.py and portfolio.py read; the display-only blocks (regime, tape, notable, ipo, insider_panel, per-row reasons/retail/transcript/catalysts/score_trail) were omitted. Swing heartbeat 17:31:47Z; pullback and momentum 17:33:04Z. Swing published the frozen board (warnings raised) and republished the rolling Trade Desk; the two strategy desks publish none."
+        },
+        {
+          "ts": "2026-09-10T17:55:07Z",
+          "slot": "sentinel",
+          "engine_sha": "423ed33",
+          "engine_source": "raw-https",
+          "desks": {
+            "swing": {
+              "quiet": true,
+              "positions": 5,
+              "working_orders": 1,
+              "decisions": 0,
+              "warnings": 0,
+              "book_revision": 36
+            },
+            "pullback": {
+              "quiet": true,
+              "positions": 4,
+              "working_orders": 0,
+              "decisions": 0,
+              "warnings": 0,
+              "book_revision": 27
+            },
+            "momentum": {
+              "quiet": false,
+              "positions": 2,
+              "working_orders": 1,
+              "decisions": 1,
+              "warnings": 0,
+              "book_revision": 29
+            }
+          },
+          "_note": "Sentinel slot 13:35 ET, ran ~13:35-13:56 ET. git clone refused by the sandbox classifier; engine staged file-by-file from raw.githubusercontent.com production (path B), sha 423ed33 confirmed by git ls-remote. Swing and pullback SENTINEL QUIET \u2014 9 positions between them priced from fresh broker quotes (venue 17:54Z, age <2 min), no halt, no stale quote; every stop checked, nothing fired. MOMENTUM FILLED its resting AMD 506.23 day limit (AMD traded 505.07, at/below the limit) \u2014 a PAPER fill, 1.2242 sh / $619.73, stop 471.40, target 610.70; book revision 29 written back after a clean --check (28 -> 29). The two resting AEHR 98.02 day limits (swing, momentum) did NOT fill \u2014 AEHR quoted 98.40, above the limit. Closest stop: ANET 190.10 vs 185.05 (2.7% above). Live account $50 cash, no positions: no divergence. TRANSPORT NOTE: project_read returns doc content inline in this session, so books, journals and the raw quote payload were materialised by hand from tool results in the exact field shape quotes_to_prices parses; parsed marks were read back against the connector output and matched exactly (one transcription slip in AMD's display-only close field was caught and fixed before the engine ran) \u2014 the engine, not the operator, picked every price. Swing was quiet, so the rolling Trade Desk was not republished; desks publish no boards. No frozen snapshot (sentinel rule)."
+        }
+      ]
+    }
+  },
+  "keep_days": 10,
+  "updated": "2026-09-10T17:55:07Z"
+}

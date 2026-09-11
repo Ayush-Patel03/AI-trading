@@ -1,0 +1,533 @@
+{
+  "_what": "Portfolio Manager journal for the 'momentum' desk \u2014 one entry per run, keyed by run_key.",
+  "entries": [
+    {
+      "ts": "2026-09-08T20:01:53Z",
+      "date": "2026-09-08",
+      "slot": "power-hour",
+      "run_key": "2026-09-08#power-hour",
+      "mode": "paper",
+      "desk": "momentum",
+      "sentinel": false,
+      "decisions": [
+        {
+          "action": "fill-buy",
+          "symbol": "ANET",
+          "shares": 3.973355,
+          "price": 197.47,
+          "reason": "Score 71 Momentum \u2014 Buy",
+          "detail": "$784.62 filled at the resting limit"
+        }
+      ],
+      "skipped": [
+        {
+          "symbol": "ANET",
+          "reason": "Over the position cap but not trimmable \u2014 PDT guard: selling would be day trade 1/3 and this is not a stop \u2014 held"
+        },
+        {
+          "symbol": "*",
+          "reason": "power-hour places no new entries \u2014 a day-limit entry placed at the last slot expires unfilled at the session roll before it can ever fill. Exits, trims and rebalancing still ran."
+        }
+      ],
+      "warnings": [],
+      "daily_pnl_pct": -1.47,
+      "scan_as_of": "2026-09-08 15:00",
+      "run_id": "2026-09-08-power-hour-momentum",
+      "book_revision": 22,
+      "book_fingerprint": "2c3f32e25e95704d",
+      "engine_sha": "8fdab37",
+      "house": {
+        "equity": 15402.46,
+        "desks": 3,
+        "top_symbol_pct": {
+          "HOOD": 3.81,
+          "NVDA": 9.76,
+          "MDB": 2.17,
+          "MU": 10.08,
+          "ANET": 10.09,
+          "SNDK": 8.66,
+          "MRVL": 0.88
+        },
+        "sector_pct": {
+          "Financials": 3.81,
+          "Information Technology": 31.55,
+          "Unclassified": 10.09
+        },
+        "caps": {
+          "symbol_pct": 15.0,
+          "sector_pct": 40.0
+        },
+        "peers": [
+          "swing",
+          "pullback"
+        ]
+      },
+      "equity": 5153.81,
+      "cash": 2523.39,
+      "invested": 2630.42,
+      "realized_pnl": 145.78,
+      "halted": false,
+      "day_trades_used": 0,
+      "scan_stale": null,
+      "positions": 5,
+      "working_orders": 0,
+      "changed": true,
+      "change_reasons": [
+        "1 decision taken",
+        "book state changed"
+      ],
+      "attempt": 1,
+      "artifact_url": null,
+      "publish_snapshot": false,
+      "book_snapshot": "claude/book-history/2026-09-08-power-hour-momentum.json"
+    },
+    {
+      "ts": "2026-09-09T15:01:03Z",
+      "date": "2026-09-09",
+      "slot": "opening-range",
+      "run_key": "2026-09-09#opening-range",
+      "mode": "paper",
+      "desk": "momentum",
+      "sentinel": false,
+      "decisions": [
+        {
+          "action": "fill-sell",
+          "symbol": "HOOD",
+          "shares": 2.696517,
+          "price": 117.7948,
+          "reason": "thesis",
+          "detail": "Score 52 \u2014 weakening. Already trimmed 2 times \u2014 a name that keeps weakening gets closed, not shaved again. \u2014 realised $+32.05"
+        },
+        {
+          "action": "fill-sell",
+          "symbol": "NVDA",
+          "shares": 1.110427,
+          "price": 223.9537,
+          "reason": "trim",
+          "detail": "Score 48 \u2014 weakening \u2014 cutting a third (trim 1 of 2 before a full exit) \u2014 realised $+6.19"
+        },
+        {
+          "action": "fill-sell",
+          "symbol": "MU",
+          "shares": 0.147344,
+          "price": 1032.1831,
+          "reason": "trim",
+          "detail": "Score 50 \u2014 weakening \u2014 cutting a third (trim 1 of 2 before a full exit) \u2014 realised $-0.11"
+        }
+      ],
+      "skipped": [
+        {
+          "symbol": "*",
+          "reason": "desk 'momentum': 12 scan row(s) outside this desk's mandate (setups=['Momentum'], rsi_range=[50, 72])"
+        }
+      ],
+      "warnings": [
+        "Macro calendar today (not gating): MBA Mortgage Applications at 07:00 ET, ADP Employment Change (weekly) at 08:15 ET, Redbook YoY at 08:55 ET, 17-Week Bill Auction at 11:30 ET, 10-Year Note Auction at 13:00 ET, API Crude Oil Stock Change at 16:30 ET",
+        "MACRO TOMORROW: PPI MoM / Core PPI MoM / PPI YoY at 08:30 ET, Initial Jobless Claims at 08:30 ET, Continuing Jobless Claims at 08:30 ET, Existing Home Sales at 10:00 ET, Wholesale Inventories MoM at 10:00 ET \u2014 overnight holds carry tape-wide event risk.",
+        "Re-priced to the live quote and entered anyway, but the scan scored them at a different price: MU +3.9%, INTC +4.0%"
+      ],
+      "daily_pnl_pct": -0.03,
+      "scan_as_of": "2026-09-09 08:00",
+      "run_id": "2026-09-09-opening-range-momentum",
+      "book_revision": 23,
+      "book_fingerprint": "4c10093fddb2c182",
+      "engine_sha": "8fdab37",
+      "house": {
+        "equity": 15498.05,
+        "desks": 3,
+        "top_symbol_pct": {
+          "NVDA": 8.06,
+          "MDB": 2.19,
+          "MU": 9.38,
+          "ANET": 9.97,
+          "SNDK": 8.87,
+          "HOOD": 1.76,
+          "MRVL": 0.92
+        },
+        "sector_pct": {
+          "Information Technology": 29.42,
+          "Unclassified": 9.97,
+          "Financials": 1.76
+        },
+        "caps": {
+          "symbol_pct": 15.0,
+          "sector_pct": 40.0
+        },
+        "peers": [
+          "swing",
+          "pullback"
+        ]
+      },
+      "equity": 5172.78,
+      "cash": 3241.8,
+      "invested": 1930.99,
+      "realized_pnl": 183.91,
+      "halted": false,
+      "day_trades_used": 0,
+      "scan_stale": null,
+      "positions": 4,
+      "working_orders": 0,
+      "changed": true,
+      "change_reasons": [
+        "3 decisions taken",
+        "warnings raised",
+        "book state changed"
+      ],
+      "attempt": 1,
+      "artifact_url": null,
+      "publish_snapshot": false,
+      "book_snapshot": "claude/book-history/2026-09-09-opening-range-momentum.json"
+    },
+    {
+      "ts": "2026-09-09T17:22:17Z",
+      "date": "2026-09-09",
+      "slot": "midday",
+      "run_key": "2026-09-09#midday",
+      "mode": "paper",
+      "desk": "momentum",
+      "sentinel": false,
+      "decisions": [
+        {
+          "action": "fill-sell",
+          "symbol": "MDB",
+          "shares": 0.308852,
+          "price": 362.1923,
+          "reason": "trim",
+          "detail": "Score 54 \u2014 weakening \u2014 cutting a third (trim 2 of 2 before a full exit) \u2014 realised $-5.67"
+        }
+      ],
+      "skipped": [
+        {
+          "symbol": "NVDA",
+          "reason": "Score 48 \u2014 weakening, but it was already trimmed today \u2014 one trim per name per session"
+        },
+        {
+          "symbol": "MU",
+          "reason": "Score 47 \u2014 weakening, but it was already trimmed today \u2014 one trim per name per session"
+        },
+        {
+          "symbol": "ANET",
+          "reason": "15.0% of equity, over the 15% cap but inside the 1.5pt rebalance deadband \u2014 a price wobble is not a breach"
+        },
+        {
+          "symbol": "*",
+          "reason": "desk 'momentum': 15 scan row(s) outside this desk's mandate (setups=['Momentum'], rsi_range=[50, 72])"
+        },
+        {
+          "symbol": "SSL",
+          "reason": "Only 40% of the evidence base was available (catalyst, fundamentals, intelligence) \u2014 under the 70% floor. The score is normalised to what was there, so a thin row can outrank a complete one; it is not sized on that basis; Trimmed to the 15% max-position cap"
+        },
+        {
+          "symbol": "AMD",
+          "reason": "Sector limit: already 3 positions in Information Technology (max 3)"
+        }
+      ],
+      "warnings": [
+        "Macro calendar today (not gating): MBA Mortgage Applications at 07:00 ET, ADP Employment Change (weekly) at 08:15 ET, Redbook YoY at 08:55 ET, 17-Week Bill Auction at 11:30 ET, 10-Year Note Auction at 13:00 ET, API Crude Oil Stock Change at 16:30 ET",
+        "MACRO TOMORROW: PPI MoM / Core PPI MoM / PPI YoY at 08:30 ET, Initial Jobless Claims at 08:30 ET, Continuing Jobless Claims at 08:30 ET, Existing Home Sales at 10:00 ET, Wholesale Inventories MoM at 10:00 ET \u2014 overnight holds carry tape-wide event risk."
+      ],
+      "daily_pnl_pct": -0.13,
+      "scan_as_of": "2026-09-09 12:30",
+      "run_id": "2026-09-09-midday-momentum",
+      "book_revision": 24,
+      "book_fingerprint": "d2ca238aa67217bb",
+      "engine_sha": "45a753f",
+      "house": {
+        "equity": 15455.52,
+        "desks": 3,
+        "top_symbol_pct": {
+          "NVDA": 6.48,
+          "MDB": 6.81,
+          "MU": 6.88,
+          "ANET": 10.0,
+          "SNDK": 8.82,
+          "KLAC": 8.76,
+          "MRVL": 0.92
+        },
+        "sector_pct": {
+          "Information Technology": 24.57,
+          "Unclassified": 24.09
+        },
+        "caps": {
+          "symbol_pct": 15.0,
+          "sector_pct": 40.0
+        },
+        "peers": [
+          "swing",
+          "pullback"
+        ]
+      },
+      "equity": 5167.78,
+      "cash": 3353.66,
+      "invested": 1814.11,
+      "realized_pnl": 178.24,
+      "halted": false,
+      "day_trades_used": 0,
+      "scan_stale": null,
+      "positions": 4,
+      "working_orders": 0,
+      "changed": true,
+      "change_reasons": [
+        "1 decision taken",
+        "warnings raised",
+        "book state changed"
+      ],
+      "attempt": 1,
+      "artifact_url": null,
+      "publish_snapshot": false,
+      "book_snapshot": "claude/book-history/2026-09-09-midday-momentum.json"
+    },
+    {
+      "ts": "2026-09-09T20:04:13Z",
+      "date": "2026-09-09",
+      "slot": "power-hour",
+      "run_key": "2026-09-09#power-hour",
+      "mode": "paper",
+      "desk": "momentum",
+      "sentinel": false,
+      "decisions": [],
+      "skipped": [
+        {
+          "symbol": "NVDA",
+          "reason": "Score 48 \u2014 weakening, but it was already trimmed today \u2014 one trim per name per session"
+        },
+        {
+          "symbol": "MU",
+          "reason": "Score 47 \u2014 weakening, but it was already trimmed today \u2014 one trim per name per session"
+        },
+        {
+          "symbol": "*",
+          "reason": "power-hour places no new entries \u2014 a day-limit entry placed at the last slot expires unfilled at the session roll before it can ever fill. Exits, trims and rebalancing still ran."
+        }
+      ],
+      "warnings": [],
+      "daily_pnl_pct": -0.33,
+      "scan_as_of": "2026-09-09 15:00",
+      "run_id": "2026-09-09-power-hour-momentum",
+      "book_revision": 25,
+      "book_fingerprint": "d2ca238aa67217bb",
+      "engine_sha": "45a753f",
+      "house": {
+        "equity": 15423.3,
+        "desks": 3,
+        "top_symbol_pct": {
+          "NVDA": 6.49,
+          "MDB": 6.74,
+          "MU": 6.93,
+          "ANET": 9.9,
+          "SNDK": 8.77,
+          "KLAC": 8.8,
+          "MRVL": 0.91
+        },
+        "sector_pct": {
+          "Information Technology": 24.57,
+          "Unclassified": 23.99
+        },
+        "caps": {
+          "symbol_pct": 15.0,
+          "sector_pct": 40.0
+        },
+        "peers": [
+          "swing",
+          "pullback"
+        ]
+      },
+      "equity": 5157.4,
+      "cash": 3353.66,
+      "invested": 1803.74,
+      "realized_pnl": 178.24,
+      "halted": false,
+      "day_trades_used": 0,
+      "scan_stale": null,
+      "positions": 4,
+      "working_orders": 0,
+      "changed": false,
+      "change_reasons": [
+        "close-of-day record of an open book"
+      ],
+      "attempt": 1,
+      "artifact_url": null,
+      "publish_snapshot": false,
+      "book_snapshot": null
+    },
+    {
+      "ts": "2026-09-10T13:04:11Z",
+      "date": "2026-09-10",
+      "slot": "pre-market",
+      "run_key": "2026-09-10#pre-market",
+      "mode": "paper",
+      "desk": "momentum",
+      "sentinel": false,
+      "decisions": [
+        {
+          "action": "fill-sell",
+          "symbol": "NVDA",
+          "shares": 2.254502,
+          "price": 220.0784,
+          "reason": "thesis",
+          "detail": "Score fell to 43 \u2014 the thesis that bought it is gone \u2014 realised $+3.83"
+        },
+        {
+          "action": "fill-sell",
+          "symbol": "MDB",
+          "shares": 0.627063,
+          "price": 353.3045,
+          "reason": "thesis",
+          "detail": "Score 51 \u2014 weakening. Already trimmed 2 times \u2014 a name that keeps weakening gets closed, not shaved again. \u2014 realised $-17.08"
+        },
+        {
+          "action": "fill-sell",
+          "symbol": "MU",
+          "shares": 0.299153,
+          "price": 997.3005,
+          "reason": "thesis",
+          "detail": "Score fell to 45 \u2014 the thesis that bought it is gone \u2014 realised $-10.65"
+        }
+      ],
+      "skipped": [
+        {
+          "symbol": "*",
+          "reason": "desk 'momentum': 12 scan row(s) outside this desk's mandate (setups=['Momentum'], rsi_range=[50, 72])"
+        },
+        {
+          "symbol": "AEHR",
+          "reason": "bid/ask spread 1.08% of price, over the 1.0% entry limit \u2014 too expensive to trade at this size"
+        }
+      ],
+      "warnings": [
+        "Macro calendar today (not gating): PPI MoM / Core PPI MoM / PPI YoY at 08:30 ET, Initial Jobless Claims at 08:30 ET, Continuing Jobless Claims at 08:30 ET, Existing Home Sales at 10:00 ET, Wholesale Inventories MoM at 10:00 ET, EIA Natural Gas Stocks Change at 10:30 ET, EIA Crude Oil Stocks Change at 12:00 ET",
+        "MACRO TOMORROW: CPI / Core CPI (Inflation Rate MoM & YoY) at 08:30 ET, Michigan Consumer Sentiment Prel at 10:00 ET \u2014 overnight holds carry tape-wide event risk.",
+        "Not entered \u2014 bid/ask spread over the 1.0% limit: AEHR 1.08%"
+      ],
+      "daily_pnl_pct": -0.05,
+      "scan_as_of": "2026-09-10 08:00",
+      "run_id": "2026-09-10-pre-market-momentum",
+      "book_revision": 26,
+      "book_fingerprint": "2fd36f69cdb8f0d9",
+      "engine_sha": "423ed33",
+      "house": {
+        "equity": 15228.5,
+        "desks": 3,
+        "top_symbol_pct": {
+          "ANET": 9.76,
+          "MU": 4.86,
+          "SNDK": 8.66,
+          "NVDA": 3.21,
+          "KLAC": 8.56,
+          "MDB": 5.28,
+          "MRVL": 0.89
+        },
+        "sector_pct": {
+          "Unclassified": 23.6,
+          "Information Technology": 17.63
+        },
+        "caps": {
+          "symbol_pct": 15.0,
+          "sector_pct": 40.0
+        },
+        "peers": [
+          "swing",
+          "pullback"
+        ]
+      },
+      "equity": 5115.52,
+      "cash": 4369.72,
+      "invested": 745.8,
+      "realized_pnl": 154.34,
+      "halted": false,
+      "day_trades_used": 0,
+      "scan_stale": null,
+      "positions": 1,
+      "working_orders": 0,
+      "changed": true,
+      "change_reasons": [
+        "3 decisions taken",
+        "warnings raised",
+        "book state changed"
+      ],
+      "attempt": 1,
+      "artifact_url": null,
+      "publish_snapshot": false,
+      "book_snapshot": "claude/book-history/2026-09-10-pre-market-momentum.json"
+    },
+    {
+      "ts": "2026-09-10T15:05:55Z",
+      "date": "2026-09-10",
+      "slot": "opening-range",
+      "run_key": "2026-09-10#opening-range",
+      "mode": "paper",
+      "desk": "momentum",
+      "sentinel": false,
+      "decisions": [
+        {
+          "action": "place-buy",
+          "symbol": "AEHR",
+          "shares": 5.358068,
+          "price": 98.02,
+          "reason": "Score 64 Momentum \u2014 Buy",
+          "detail": "$525.20, stop 86.26, target 133.30, risking $63.01"
+        }
+      ],
+      "skipped": [
+        {
+          "symbol": "*",
+          "reason": "desk 'momentum': 13 scan row(s) outside this desk's mandate (setups=['Momentum'], rsi_range=[50, 72])"
+        }
+      ],
+      "warnings": [
+        "Macro calendar today (not gating): PPI MoM / Core PPI MoM / PPI YoY at 08:30 ET, Initial Jobless Claims at 08:30 ET, Continuing Jobless Claims at 08:30 ET, Existing Home Sales at 10:00 ET, Wholesale Inventories MoM at 10:00 ET, EIA Natural Gas Stocks Change at 10:30 ET, EIA Crude Oil Stocks Change at 12:00 ET",
+        "MACRO TOMORROW: CPI / Core CPI (Inflation Rate MoM & YoY) at 08:30 ET, Michigan Consumer Sentiment Prel at 10:00 ET \u2014 overnight holds carry tape-wide event risk."
+      ],
+      "daily_pnl_pct": 0.29,
+      "scan_as_of": "2026-09-10 10:00",
+      "run_id": "2026-09-10-opening-range-momentum",
+      "book_revision": 27,
+      "book_fingerprint": "7743a195e45fd59b",
+      "engine_sha": "423ed33",
+      "house": {
+        "equity": 15301.86,
+        "desks": 3,
+        "top_symbol_pct": {
+          "ANET": 9.94,
+          "KLAC": 5.83,
+          "SNDK": 5.71,
+          "ALAB": 4.75,
+          "MDB": 3.71,
+          "AEHR": 3.43
+        },
+        "sector_pct": {
+          "Unclassified": 19.48,
+          "Information Technology": 13.89
+        },
+        "caps": {
+          "symbol_pct": 15.0,
+          "sector_pct": 40.0
+        },
+        "peers": [
+          "swing",
+          "pullback"
+        ]
+      },
+      "equity": 5132.92,
+      "cash": 4369.72,
+      "invested": 763.2,
+      "realized_pnl": 154.34,
+      "halted": false,
+      "day_trades_used": 0,
+      "scan_stale": null,
+      "positions": 1,
+      "working_orders": 1,
+      "changed": true,
+      "change_reasons": [
+        "1 decision taken",
+        "warnings raised",
+        "book state changed"
+      ],
+      "attempt": 1,
+      "artifact_url": null,
+      "publish_snapshot": false,
+      "book_snapshot": "claude/book-history/2026-09-10-opening-range-momentum.json"
+    }
+  ],
+  "updated": "2026-09-10T15:05:55Z"
+}

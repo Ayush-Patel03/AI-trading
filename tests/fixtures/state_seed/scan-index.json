@@ -1,0 +1,22 @@
+{
+  "keep": 40,
+  "updated": "2026-09-10",
+  "runs": [
+    {
+      "run_id": "2026-09-10-opening-range",
+      "date": "2026-09-10",
+      "slot": "Opening range",
+      "time": "10:00",
+      "run_label": "Opening range \u00b7 Thu 10 Sep 2026",
+      "avg": 49.6,
+      "count": 21,
+      "coverage_avg": 91.0,
+      "artifact_url": null,
+      "regime_label": "Constructive",
+      "top": "SSL",
+      "doc": "claude/scans/2026-09-10-opening-range.json",
+      "stale": false
+    }
+  ],
+  "_readme": "Index of every archived Scan Desk run, newest first (fixture: one row)."
+}

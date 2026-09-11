@@ -90,6 +90,7 @@ import archive
 import ic
 import ledger
 import scanner
+import filings
 import technicals
 import universe_history
 
@@ -319,7 +320,7 @@ def allowed_on(membership, as_of):
 
 # ---------------------------------------------------------------- the replay
 def replay(bars, as_of, benchmark="SPY", financials=None, slot="Backtest", allowed=None,
-           universe_bias=None, sector_map=None, shares_outstanding=None):
+           universe_bias=None, sector_map=None, shares_outstanding=None, filings_signal=None):
     """One historical scan. Returns the scanner's output, or None if nothing scored.
 
     `allowed` is the set of symbols that were index members on as_of (see `allowed_on`);
@@ -327,7 +328,9 @@ def replay(bars, as_of, benchmark="SPY", financials=None, slot="Backtest", allow
     `sector_map` is {SYMBOL: SECTOR_ETF}; the ETFs named in it are benchmarks for the
     industry features and are NOT scored as candidates. `shares_outstanding` is
     {SYMBOL: float} for turnover_20d — a static snapshot, so treat that one feature as
-    approximate (see --shares-outstanding)."""
+    approximate (see --shares-outstanding). `filings_signal` is the parsed filings file
+    (E16; `filings.load_staged` shape, ideally the per-symbol HISTORY form): laid over the
+    rows point-in-time — a filing dated after as_of is null on that date."""
     bench_bars = bars.get(benchmark) or []
     bench_tech, bench_hist = None, None
     if bench_bars:
@@ -370,7 +373,7 @@ def replay(bars, as_of, benchmark="SPY", financials=None, slot="Backtest", allow
         "candidates": candidates,
         "history": [],
     }
-    return scanner.scan(data)
+    return scanner.scan(data, filings_signal=filings_signal)
 
 
 def rebalance_dates(bars, benchmark, start, end, every):
@@ -407,6 +410,10 @@ def main(argv=None):
                     help="{SYMBOL: shares} for turnover_20d. A STATIC snapshot (today's "
                          "share count applied to every date), so the feature is approximate "
                          "and every record says so. Absent = turnover_20d null.")
+    ap.add_argument("--filings", metavar="JSON",
+                    help="filings_signal.json (E16): {SYMBOL: [rows...]} history preferred; laid "
+                         "over every replay date point-in-time (a filing is null before its "
+                         "filing date). Features only — the score does not read it")
     ap.add_argument("--out-records", required=True)
     ap.add_argument("--summary")
     # The trial ledger. `--ledger` alone uses the default path; omitted, the run is not
@@ -443,6 +450,12 @@ def main(argv=None):
 
     uni = universe_block(a.universe_history, bars, a.benchmark, a.start, a.end)
     membership = uni.pop("_membership", None)
+    filings_signal = None
+    if a.filings:
+        filings_signal = filings.load_file(a.filings)
+        if filings_signal is None:
+            print(f"REFUSED: --filings {a.filings} is missing or unreadable.", file=sys.stderr)
+            return 2
 
     os.makedirs(a.out_records, exist_ok=True)
     written, rows_total, skipped = 0, 0, []
@@ -450,7 +463,7 @@ def main(argv=None):
         allowed = allowed_on(membership, d) if membership is not None else None
         out = replay(bars, d, a.benchmark, fin, allowed=allowed,
                      universe_bias=uni.get("bias"), sector_map=sector_map,
-                     shares_outstanding=shares_out)
+                     shares_outstanding=shares_out, filings_signal=filings_signal)
         if not out or not out.get("results"):
             skipped.append(d)
             continue

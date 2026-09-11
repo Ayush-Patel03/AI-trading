@@ -210,6 +210,50 @@ the Intelligence pillar simply drops out of the denominator.
 
 ---
 
+## 4a. Filings — `filings_signal.json` (P-02 / E16, 2026-09-10)
+
+A second optional staged input, alongside `technicals.json` and `sentiment.json`. It carries
+the 10-K/10-Q text-change score ("Lazy Prices", `docs/DATA.md` §5) and is read by
+`scanner.py` at the top of a run; when it is not in `$SCAN_DIR` nothing changes. **Not
+scored** — it lands on each row's `features` block for `ic.py --by-feature`.
+
+The scan slot does **not** fetch filings. A separate task on the box does, at most weekly
+per name, under the SEC fair-access rules (`User-Agent` with a contact, ≤ 10 requests/s):
+
+```bash
+# on the box: URLs per symbol, in order — submissions index, then the two primary documents
+python3 filings.py --edgar-plan --symbols ACME,WIDG --cik-map cik.json
+# fetch step saves <batch>/<SYMBOL>/current.htm + prior.htm + meta.json
+#   meta.json = {"filed", "form", "prior_filed", "accession", "prior_accession"}
+#   (form, filed and the accessions straight from data.sec.gov/submissions; prior = same
+#    form ~one year earlier, filings.pick_filing_pair does the choosing)
+python3 filings.py --batch <batch> --out filings_signal.json
+# then stage filings_signal.json into $SCAN_DIR before:
+python3 scanner.py
+```
+
+Shape of the staged file (full schema in `docs/DATA.md` §5):
+`{"_meta": {generated_at, threshold, n_symbols, n_changers, skipped}, "<SYMBOL>": {filed,
+form, prior_filed, accession, prior_accession, change_score: {sections, risk_factors_change,
+mdna_change, overall_change, changer, n_sections_compared, threshold, weights}}}`.
+
+Rules that are in the code, not the prompt:
+
+| Trap | Handling |
+|---|---|
+| A filing dated after the scan | `features_for` returns all-null — not knowable yet |
+| A row with no `filed` date | no features (the point-in-time guard cannot run) |
+| A section the parser could not find | `null` in `sections`, excluded from `overall_change`; **never 0** |
+| No comparable section at all | `overall_change` and `changer` are `null`, not "unchanged" |
+| Table of contents / cross-references | lose to the longest line-start body, never the section |
+| Symbol not in the file | row carries the three keys as `null` — "not covered" ≠ "no change" |
+| Threshold | provisional 0.15, travels in every output; reset from the archive's 80th percentile when there is one |
+
+`filings.py` is a data dependency of the scan and an import of `scanner.py`; it is in
+`engine/MANIFEST.txt` and the CI stdlib allowlist, and it imports nothing else from the engine.
+
+---
+
 ## 5. Corroboration — the finding the probe actually forced
 
 On 2026-09-01 ApeWisdom and StockTwits trending shared **4 of 15** top names, and
@@ -254,3 +298,103 @@ insiderscreener, and every keyed news-sentiment API — AlphaVantage's free tier
 **Cboe option chains** (`cdn.cboe.com/api/global/delayed_quotes/options/<T>.json`) are
 reachable and fresh but **unusable on this fetch path** — section 0. They become
 viable only with a raw-bytes fetch route.
+
+---
+
+## 7. Insider transactions — the staged `insiders.json` (P-01 / E15, 2026-09-10)
+
+The insider **panel** at the 15:00 slot stays exactly as it is (§6, MarketBeat). This is a
+second, separate input: parsed Form 4 transactions that `engine/insiders.py` turns into a
+per-symbol signal the scanner logs as research features. **Reported, not scored** — the
+§5 rule — until `docs/BACKTEST.md` §6d says otherwise.
+
+**What to stage, into `$SCAN_DIR`, before `scanner.py` runs:**
+
+| File | Shape | Who writes it |
+|---|---|---|
+| `insiders.json` | a list of parsed transactions, or `{"_meta", "transactions": [...]}` — schema in `docs/DATA.md` §4 | the box, from `insiders.py --dump-transactions` after a `--fetch`; or a session that parsed filings some other way |
+| `form4/*.xml`, `form4/*.txt` | raw Form 4 documents (bare XML or the EDGAR complete-submission `.txt`) | the box (`insiders.py --fetch`); never a sandbox — SEC rate-limits and requires a contact User-Agent |
+| `insiders_signal.json` | the output — what `scanner.py` reads | `insiders.py` |
+
+```bash
+cd "$SCAN_DIR"
+# either input may be absent; both are merged and deduplicated
+python3 insiders.py --run-dir . --as-of "$SCAN_DATE" --out insiders_signal.json \
+    [--history-since 2023-01-01]     # the date the staged history is complete from
+python3 scanner.py                   # attaches features.insider_* to every row
+```
+
+Exit 2 means nothing was staged; the signal file is still written (empty), and the scan
+proceeds with no insider feature on any row — which is the correct record of "we did not
+look". Do **not** fabricate an `insiders.json` from the MarketBeat panel: it has no owner
+CIK, no filing date and no history, so every row would be an *unknown* buyer and the routine
+rule could never fire.
+
+The scanner adds `meta.insider_signal_meta` (`as_of`, `n_txns`, `n_symbols`,
+`n_cluster_buy`, `covered`) and prefixes the module's warnings with `INSIDERS:` in
+`data_warnings`. A signal whose `as_of` is older than the scan date is stale — say so on the
+board rather than carrying it silently.
+## 8. Staged files the engine reads on its own — veto.json, earnings_history.json (P-03 / P-06, 2026-09-10)
+
+Two more inputs, both optional, both picked up from `$SCAN_DIR` without a flag. **Absent means
+"not collected", never "checked and clean"** — the engine says so on the console and writes
+no field it did not measure.
+
+### `veto.json` — the deny list
+
+Assembled once per scan day before the 08:00 slot, from the sources in `docs/DATA.md` §1a
+(the publishers in `docs/veto-publishers.md`, `get_equity_news` for held names and
+candidates, the exchange halt pages). Every list optional; every row needs a `symbol` and a
+`date` (YYYY-MM-DD, the report's or headline's own date) or it is dropped and counted:
+
+```json
+{
+  "as_of": "2026-09-10",
+  "short_reports": [{"symbol": "XYZ", "publisher": "Muddy Waters Research",
+                     "date": "2026-09-08", "url": "https://…", "title": "…"}],
+  "negative_news": [{"symbol": "XYZ", "date": "2026-09-09", "headline": "Auditor resigns",
+                     "source": "get_equity_news", "severity": "high"}],
+  "halts": [{"symbol": "XYZ", "date": "2026-09-10", "reason": "news pending"}]
+}
+```
+
+`severity` is `"high"` (fraud / accounting allegation, restatement, auditor resignation,
+regulatory or DOJ action, guidance withdrawal, going-concern, delisting notice, failed trial,
+recall) or `"medium"` (downgrade, lawsuit, executive departure, missed print). Only high
+vetoes; medium is journaled. Stage the file for **every slot** — `scanner.py` reads it at
+scan time and `pm.py` reads it again at decision time, so a report that lands between the
+two still refuses the entry. Then, as usual:
+
+```bash
+python3 scanner.py            # prints "VETO FEED: {…} — overrode N row(s): …" or "not staged"
+python3 pm.py --slot midday   # reads veto.json by default; --veto <file> to point elsewhere
+```
+
+### `earnings_history.json` → `earnings_quality.json` — the E22/E23 features
+
+One `get_earnings_results` call per symbol (held names plus the candidates the scan will
+score; the connector serves the trailing eight quarters). Write the rows into
+`earnings_history.json` as `{SYMBOL: [quarters]}` in either the connector's own shape or the
+file shape — `earnings_quality.from_connector()` accepts both and the mapping is in that
+module's docstring:
+
+```json
+{"NVDA": [{"fiscal_quarter": "2026Q2", "report_date": "2026-08-26", "timing": "pm",
+           "eps_actual": 1.05, "eps_estimate": 1.01, "surprise_pct": 3.96,
+           "revenue_actual": 46700000000, "revenue_estimate": 46000000000}]}
+```
+
+Then, after `technicals.py` and before `scanner.py` (the bars file is the same one, and it
+must include SPY):
+
+```bash
+python3 earnings_quality.py --history earnings_history.json --bars bars.json \
+                            --as-of $(date +%F) --out earnings_quality.json
+python3 scanner.py            # merges the five keys into each row's `features`
+```
+
+`earnings_quality.json` is `{SYMBOL: {sue, ear_3d, reg_residual, earnings_agreement,
+days_since_earnings}}`, nulls where an input was missing. `reg_residual` needs at least five
+names with both `sue` and `ear_3d` in the file — collect the history for the whole candidate
+list, not one name, or the cross-section does not exist. Nothing scores these; they are for
+`ic.py --by-feature` and the recipes in `docs/BACKTEST.md` §6f.

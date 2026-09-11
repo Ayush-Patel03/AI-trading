@@ -335,8 +335,10 @@ def test_stdlib_only():
     """The runner may import nothing the box does not ship with."""
     import ast
     # The runner may also import the engine's own stdlib-only modules (they sit next to it
-    # in the clone): fetch_bars.py reads the membership file through universe_history.
-    allowed = set(sys.stdlib_module_names) | {"run", "selftest", "deadman", "universe_history"}
+    # in the clone): fetch_bars.py reads the membership file through universe_history,
+    # seed_state.py takes the banned-shape list from mirror.
+    allowed = set(sys.stdlib_module_names) | {"run", "selftest", "deadman", "universe_history",
+                                              "mirror", "seed_state", "validate_state"}
     for p in (ROOT / "runner").glob("*.py"):
         for node in ast.walk(ast.parse(p.read_text(encoding="utf-8"))):
             if isinstance(node, ast.Import):
@@ -447,7 +449,7 @@ def test_health_slot_runs_engine_health_and_keeps_the_runner_checks(tmp_path):
     assert names[:13] == ["tzdata", "engine_branch", "book_freshness", "coverage_today", "unjudged",
                           "shadow_gap", "halt_state", "broker_policy", "state_commit_age", "push_backlog",
                           "mirror_age", "runner_heartbeat", "deadman"]
-    assert names[13:] == ["lock_free", "engine_sha"]
+    assert names[13:] == ["lock_free", "engine_sha", "state_layout"]
     by = {c["name"]: c for c in doc["checks"]}
     assert by["mirror_age"]["status"] == "pass" and by["lock_free"]["status"] == "pass"
     assert by["engine_sha"]["status"] == "pass" and by["tzdata"]["status"] == "pass"

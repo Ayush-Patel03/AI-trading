@@ -1,0 +1,24 @@
+{
+  "updated": "2026-09-10",
+  "keep_days": 30,
+  "days": {
+    "2026-09-10": {
+      "runs": [
+        {
+          "run_id": "2026-09-10-opening-range",
+          "slot": "Opening range",
+          "time": "10:00",
+          "count": 21,
+          "top5": [
+            "SSL",
+            "AEHR",
+            "ANET",
+            "VRT",
+            "AMD"
+          ]
+        }
+      ]
+    }
+  },
+  "_readme": "Fixture: one day of scan history in the project's shape."
+}

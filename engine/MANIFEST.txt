@@ -5,14 +5,18 @@ brief.py
 broker_policy.py
 config.py
 desks.json
+earnings_quality.py
+filings.py
 fills.py
 guardrails.py
 health.py
 history.py
 house.py
 ic.py
+insiders.py
 ladder.py
 ledger.py
+memo.py
 mirror.py
 paper_mirror.py
 pm.py
@@ -20,6 +24,7 @@ portfolio.py
 render.py
 render_pm.py
 render_portfolio.py
+render_review.py
 report.py
 scanner.py
 sentiment.py
@@ -29,4 +34,5 @@ technicals.py
 universe.py
 universe_history.py
 validate.py
+veto.py
 watch.py

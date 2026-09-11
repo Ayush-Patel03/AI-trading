@@ -149,6 +149,7 @@ import house as house_mod
 import ladder as ladder_mod
 import portfolio as pf_mod
 import stops as stops_mod
+import veto as veto_mod
 from portfolio import RULES, build_proposals
 
 # ---- execution policy. Risk limits live in portfolio.RULES; these are order mechanics ----
@@ -245,6 +246,11 @@ PEERS = {"books": {}, "loaded": [], "missing": []}
 # technicals.py reads), loaded by main() through load_bars(). None means no bars were
 # staged: N_eff falls back to the sector proxy and beta / momentum crowding report null.
 BARS = {"rows": None, "path": None}
+
+# P-03 — the optional deny-list feed ($SCAN_DIR/veto.json, see veto.py), loaded by main()
+# through load_veto(). None means no feed was staged: nothing is vetoed by the feed, and the
+# only veto the entry pass can still honour is a `veto: true` the scanner wrote on a row.
+VETO = {"feed": None, "path": None}
 
 # K-01 — the broker policy for this run, built once by run() from the resolution order in
 # broker_policy.get_policy(). None until then; _policy() resolves a default for any helper
@@ -677,6 +683,63 @@ def load_bars(path="bars.json"):
     BARS["rows"] = rows if rows else None
     BARS["path"] = path if rows else None
     return BARS
+
+
+def load_veto(path="veto.json"):
+    """P-03 — the optional deny-list feed, resolved inside the run directory. Absent is
+    normal and means no override; it never means 'checked and clean'."""
+    p = _in_base(path)
+    feed = veto_mod.load(os.path.dirname(p), os.path.basename(p)) if p else None
+    VETO["feed"] = feed
+    VETO["path"] = path if feed else None
+    return VETO
+
+
+def veto_of(row, today):
+    """P-03 — why a candidate row may not be entered, or None.
+
+    Two sources, either is enough: the feed this run staged (checked live, so a report
+    that landed after the scan still counts), and a `veto: true` the scanner wrote on the
+    row from the feed IT had. Returns the joined reasons; the entry pass prefixes `veto:`,
+    which is report.py's rule for the refusal."""
+    sym = row.get("ticker")
+    reasons = []
+    if VETO["feed"] is not None:
+        v = veto_mod.check(sym, today, VETO["feed"])
+        if v["veto"]:
+            reasons += v["reasons"]
+    if row.get("veto") and not reasons:
+        reasons += list(row.get("veto_reasons") or ["flagged by the scan's veto feed"])
+    return "; ".join(reasons) if reasons else None
+
+
+def review_pass(book, today, jrn):
+    """P-03 — the held-name review flag. A position whose symbol carries a FRESH short
+    report (inside veto.RULES['short_report_sessions']) gets `review: "short-report"` and
+    the journal warns ONCE, when the flag is first set; while it stays set the sentinel is
+    quiet about it. Never an exit: the report is an argument, the stop is what sells. The
+    flag clears when the feed no longer names the symbol inside the window. With no feed
+    staged nothing changes — an existing flag is left exactly as it was."""
+    if VETO["feed"] is None:
+        return []
+    flagged = []
+    for p in book.get("positions") or []:
+        v = veto_mod.check(p.get("symbol"), today, VETO["feed"])
+        if v["review"]:
+            if p.get("review") != veto_mod.REVIEW_FLAG:
+                p["review"] = veto_mod.REVIEW_FLAG
+                p["review_since"] = today.isoformat()
+                jrn["warnings"].append(
+                    f"REVIEW {p['symbol']}: " + "; ".join(v["reasons"]) +
+                    ". Held through it — the veto feed never sells; the stop does. Read the "
+                    "report and decide by hand whether the thesis survives it.")
+            p["review_reasons"] = v["reasons"]
+            flagged.append(p["symbol"])
+        elif p.get("review") == veto_mod.REVIEW_FLAG:
+            p.pop("review", None)
+            p.pop("review_since", None)
+            p.pop("review_reasons", None)
+    return flagged
 
 
 def house_block(house, symbol, gics, notional):
@@ -1551,7 +1614,7 @@ def entry_pass(book, scan, pb, today, marked, jrn, scan_stale, house=None, ladde
     # starving candidates later in the list.
     pending = {o["symbol"] for o in book["working_orders"]
                if o["side"] == "buy" and o.get("status") == "working"}
-    clean, malformed, moved, drifted, wide = [], [], [], [], []
+    clean, malformed, moved, drifted, wide, vetoed = [], [], [], [], [], []
     for r in desk_filter(scan["results"], jrn):
         if not (isinstance(r.get("score"), (int, float)) and isinstance(r.get("price"), (int, float))
                 and r["price"] > 0 and r.get("setup") and r.get("verdict")):
@@ -1561,6 +1624,16 @@ def entry_pass(book, scan, pb, today, marked, jrn, scan_stale, house=None, ladde
             jrn["skipped"].append({"symbol": r["ticker"], "reason":
                                    "already has a working order — excluded before sizing so its "
                                    "cash cannot be counted against the budget twice"})
+            continue
+        # P-03: the deny list. A short report inside 20 sessions, high-severity negative
+        # news inside 5, or a halt today — from the feed this run staged or the flag the
+        # scanner wrote. Refused before sizing; nothing here touches a held position.
+        vr = veto_of(r, today)
+        if vr:
+            vetoed.append(r["ticker"])
+            jrn["skipped"].append({"symbol": r["ticker"], "reason":
+                                   f"veto: {vr} — no new entry; a held position is never "
+                                   "sold on this, its stop is what sells"})
             continue
         # Spread gate: the broker quote carries bid/ask. A limit entry on a name whose
         # spread is wider than max_spread_pct pays more in the spread than the model's
@@ -1605,6 +1678,10 @@ def entry_pass(book, scan, pb, today, marked, jrn, scan_stale, house=None, ladde
     if wide:
         jrn["warnings"].append("Not entered — bid/ask spread over the "
                                f"{PM_RULES['max_spread_pct']:.1f}% limit: " + ", ".join(wide))
+    if vetoed:
+        jrn["warnings"].append("VETO — not entered, whatever the score: " + ", ".join(vetoed) +
+                               ". Short report, high-severity negative news or a halt (see the "
+                               "skipped reasons); the verdict on the board reads Avoid.")
     if not clean:
         jrn["skipped"].append({"symbol": "*", "reason":
                                "no scan row carried enough data to size a position"})
@@ -1807,6 +1884,12 @@ def run(book, scan, prices_override, slot, now_iso, mode, policy_name=None):
     if ladder["halt"]:
         marked = mark_book(book, pb)
     exit_pass(book, pb, scan_by_tk, today, marked["equity"], jrn)
+    # P-03. After the exits, on every slot including the sentinel: a held name with a fresh
+    # short report is flagged for review and warned about once. It sells nothing. The
+    # journal key exists only with a feed staged, so the no-feed path stays byte-identical.
+    review_flags = review_pass(book, today, jrn)
+    if VETO["feed"] is not None:
+        jrn["review_flags"] = review_flags
 
     # HOUSE-01. Computed AFTER the exit pass so a stop that just fired is already out of
     # the tally, and before rebalancing and entries, which are the two passes that use it.
@@ -2110,6 +2193,11 @@ def main():
                          "reads). When staged, K-03 measures N_eff from daily-return "
                          "correlations and reports beta and momentum crowding; absent, the "
                          "sector proxy is used and those two are n/a.")
+    ap.add_argument("--veto", default="veto.json",
+                    help="optional deny-list feed (P-03, see veto.py): short reports, "
+                         "high-severity negative news, halts. Staged: vetoed names are "
+                         "refused at entry and held names with a fresh short report are "
+                         "flagged for review. Absent: no override.")
     ap.add_argument("--broker-policy", default=None, choices=list(broker_policy.VALID),
                     help="day-trade / margin regime (K-01). Overrides the book, desks.json and "
                          "engine-config.json; default intraday_margin (FINRA Reg. Notice 26-10)")
@@ -2171,6 +2259,10 @@ def main():
     # K-03 — optional. Present: N_eff is measured from returns and beta / momentum crowding
     # exist. Absent: the sector proxy, and those two report n/a.
     load_bars(args.bars)
+    # P-03 — optional. Present: the deny list gates entries and flags held names.
+    load_veto(args.veto)
+    if VETO["feed"] is not None:
+        print(f"veto feed: {VETO['feed']['_meta']['counts']}", file=sys.stderr)
 
     mode = args.mode or book.get("mode", "paper")
     ts_now = _now(args.now).isoformat().replace("+00:00", "Z")

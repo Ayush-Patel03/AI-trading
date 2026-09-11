@@ -25,6 +25,14 @@ the 60-point proposal floor blocked every order. Scores are now comparable acros
 scans regardless of which sources answered. Rows carry `coverage_pct`, and a row
 under 70% coverage cannot be called Strong Buy - thin evidence is not conviction.
 
+LLM MEMOS (P-07, 2026-09-10). A scheduled session may leave `memos/<SYMBOL>.json` in the
+run dir — a structured extraction from an ANONYMISED news payload (`news_payload.json`).
+memo.py validates each one against that payload (latency, numerals copied not computed,
+verbatim quote, temperature 0, post-cutoff) and the valid ones put `llm_*` keys on the
+row's `features`, exactly like the S-04 technical features: logged, scored by nothing.
+Every probability call goes to archive/calibration.jsonl for history.py --resolve-memos.
+See docs/LLM.md.
+
 Paths resolve from SCAN_DIR, else from this file's own directory, so the bundle
 runs wherever it is copied.
 """
@@ -40,6 +48,12 @@ import config
 # (six). Importing pm is safe: it has no import-time side effects and does not import
 # this module.
 from pm import _is_high_impact as is_high_impact
+# P-02 / E16: the 10-K/10-Q text-change signal ("Lazy Prices"). Pure functions over a staged
+# file; no import-time side effects and it imports nothing from the engine.
+import filings
+# P-03: the deny-list override (short reports, negative news, halts). Applied AFTER scoring,
+# only when the feed was staged; see veto.py and scan()'s `veto_feed` argument.
+import veto as veto_mod
 
 BASE = os.environ.get("SCAN_DIR") or os.path.dirname(os.path.abspath(__file__))
 if BASE not in sys.path:
@@ -47,6 +61,11 @@ if BASE not in sys.path:
 
 PILLAR_MAX = {"trend": 25, "momentum": 15, "fundamentals": 20,
               "catalyst": 20, "intelligence": 20}
+# P-06: the earnings-quality feature keys (earnings_quality.FEATURE_KEYS, restated here so
+# this module does not import that one — it is a data dependency, like sentiment.py).
+EARNINGS_QUALITY_KEYS = ("sue", "ear_3d", "reg_residual", "earnings_agreement",
+                         "days_since_earnings")
+EARNINGS_QUALITY_FILE = "earnings_quality.json"
 FULL_SCALE = sum(PILLAR_MAX.values())          # 100
 MIN_COVERAGE_FOR_STRONG = 70.0                 # % of the evidence base
 
@@ -515,6 +534,46 @@ def pillar_coverage(c):
                         or present(c.get("insider")) or present(c.get("catalysts")),
     }
 
+# ---------------------------------------------------------------- insider features (P-01 / E15)
+# insiders.py (a data dependency, not an import — the sentiment.py rule) writes
+# insiders_signal.json into the run directory when the scheduled task staged Form 4 data.
+# When that file is present, every scored row's `features` dict gains the three keys below
+# — null for a name the signal has no transactions for — and the archive record and the
+# scan snapshot carry them like every other research feature. When it is absent the row
+# is untouched: "we did not look" and "no insider bought" must stay distinguishable, and
+# the golden output must not move. NOT an input to any pillar; the existing `insider`
+# panel is a separate, hand-collected display and is not read here.
+INSIDER_SIGNAL_FILE = "insiders_signal.json"
+INSIDER_FEATURE_KEYS = ("insider_cluster_buy", "insider_opportunistic_buy_usd_30d",
+                        "insider_net_usd_90d")
+
+def load_insider_signal(base=None):
+    """The staged insiders_signal.json ({_meta, symbols}), or None when not staged."""
+    p = os.path.join(base or BASE, INSIDER_SIGNAL_FILE)
+    if not os.path.exists(p):
+        return None
+    try:
+        with open(p, encoding="utf-8") as fh:
+            doc = json.load(fh)
+    except (OSError, ValueError):
+        return None
+    return doc if isinstance(doc, dict) and isinstance(doc.get("symbols"), dict) else None
+
+def insider_features(sig, ticker):
+    """The three feature values for one ticker from a loaded signal; all None when the
+    signal carries nothing for it."""
+    row = (sig or {}).get("symbols", {}).get(str(ticker).upper())
+    if not isinstance(row, dict):
+        return {k: None for k in INSIDER_FEATURE_KEYS}
+    cb = row.get("cluster_buy")
+    return {
+        "insider_cluster_buy": bool(cb) if cb is not None else None,
+        "insider_opportunistic_buy_usd_30d": (row.get("opportunistic_buy_usd_30d")
+                                              if isnum(row.get("opportunistic_buy_usd_30d")) else None),
+        "insider_net_usd_90d": (row.get("net_insider_usd_90d")
+                                if isnum(row.get("net_insider_usd_90d")) else None),
+    }
+
 def data_confidence(c):
     """Not scored — reported. How much should you trust this row's price?"""
     n = c.get("price_sources", 1)
@@ -567,9 +626,87 @@ def scan_date_of(meta):
     return str(d)
 
 
-def scan(data):
+def attach_filings(rows, staged, today):
+    """P-02 / E16: lay the 10-K/10-Q text-change features onto every row's `features`
+    block when `filings_signal.json` was staged. Logged for ic.py --by-feature; scored by
+    nothing — the intended use, once E16 has a result, is a slow negative screen.
+
+    `staged` is filings.load_staged()'s dict, or None when the file is not there, in which
+    case nothing is touched (a row with no feature block stays without one, exactly as
+    before). With the file present every row carries the three keys, null for a symbol the
+    file does not name or whose filing post-dates the scan — "not covered" must never read
+    as "unchanged". Returns {"n_symbols", "n_matched", "n_changers"} for the meta block."""
+    if not isinstance(staged, dict):
+        return None
+    n_matched = n_changers = 0
+    for r in rows:
+        f = filings.features_for(staged.get(r["ticker"]), today)
+        feats = r.get("features") if isinstance(r.get("features"), dict) else {}
+        feats.update(f)
+        r["features"] = feats
+        if f["filing_change_score"] is not None:
+            n_matched += 1
+            n_changers += 1 if f["filing_changer"] else 0
+    return {"n_symbols": sum(1 for k in staged if not str(k).startswith("_")),
+            "n_matched": n_matched, "n_changers": n_changers,
+            "threshold": (staged.get("_meta") or {}).get("threshold", filings.CHANGER_THRESHOLD)}
+
+
+def attach_memos(data, run_dir, archive_dir=None):
+    """P-07: LLM memos as logged features. `memos/<SYMBOL>.json` in the run dir, validated
+    by memo.py against `news_payload.json` (the staged raw news the session was given);
+    valid ones put `llm_*` keys on the candidate's `features`, rejections land in
+    `meta.memo_rejections`, probability calls go to `<archive>/calibration.jsonl`. No pillar
+    reads any of it — the row's score is the same with or without a memo. Never raises."""
+    try:
+        import memo
+        return memo.apply_memos(data, run_dir, archive_dir)
+    except Exception as exc:                      # noqa: BLE001 — a memo never kills a scan
+        data.setdefault("meta", {}).setdefault("data_warnings", []).append(
+            f"MEMO: processing failed and was skipped: {type(exc).__name__}: {exc}")
+        return {"accepted": [], "rejected": {}, "logged": [], "error": str(exc)}
+
+
+def scan(data, *, insider_signal=None, filings_signal=None, veto_feed=None,
+         earnings_quality=None, run_dir=None):
+    """Score one scan_data.json document.
+
+    Every optional input is a staged file the scheduled task may or may not have put in
+    the run directory; each attaches *logged* features (scored by nothing) and a `meta`
+    block only when present, so the output of a scan with none of them is byte-identical
+    to one that never had the arguments.
+
+    `insider_signal` (P-01): the insiders_signal.json document to attach as features; when
+    None (the normal CLI path) it is read from $SCAN_DIR if staged there, and when nothing
+    is staged no insider feature is attached at all.
+
+    `filings_signal` (P-02): the parsed filings_signal.json (filings.load_staged), or None.
+    It is an explicit argument rather than a file read here so that a backtest replay —
+    which calls scan() per historical date — cannot pick up today's staged file by
+    accident; __main__ loads it for the live path.
+
+    `veto_feed` (P-03): what veto.load() returned, or None. With a feed, vetoed rows are
+    overridden to Avoid AFTER scoring — scores and pillars untouched, the override logged
+    in NOTABLE and meta.veto. None means no override anywhere; the output is byte-identical
+    to a scan that never had the argument. The veto pass runs last, after every feature
+    block is on the row, so it sees the final row.
+
+    `earnings_quality` (P-06): {TICKER: {sue, ear_3d, reg_residual, earnings_agreement,
+    days_since_earnings}} from earnings_quality.py, or None. Merged into each row's
+    `features` dict — logged, scored by nothing. A ticker absent from the map gets every
+    key null when the map was supplied, and nothing at all when it was not.
+
+    `run_dir` (P-07): the run directory holding `memos/<SYMBOL>.json` and
+    `news_payload.json`, or None. Valid memos put `llm_*` keys on the candidate's
+    `features` before scoring (so they ride into the row with the S-04 technicals),
+    rejections land in `meta.memo_rejections`, and probability calls are logged to
+    `<run_dir>/archive/calibration.jsonl`. With no memos/ directory nothing is touched.
+    """
     today = datetime.strptime(scan_date_of(data["meta"]), "%Y-%m-%d").date()
+    if run_dir:
+        attach_memos(data, run_dir, os.path.join(run_dir, "archive"))
     mult, regime_label, regime_notes = score_regime(data["regime"])
+    insider_sig = insider_signal if insider_signal is not None else load_insider_signal()
 
     # Prior scans from earlier slots today: [{slot, time, regime_label, avg, scores:{TKR:score}}]
     history = [h for h in data.get("history", [])
@@ -657,8 +794,36 @@ def scan(data):
         # candidate from technicals.json, or set directly by backtest.py). Logged so the
         # archive record and the snapshot carry them for ic.py --by-feature; NOT an input
         # to any pillar above, and absent rather than null when nothing computed them.
+        # The P-07 memo keys (llm_*) arrive here too: attach_memos() put them on the
+        # candidate before scoring, and every staged source below adds disjoint keys.
         if isinstance(c.get("features"), dict):
-            rows[-1]["features"] = c["features"]
+            rows[-1]["features"] = dict(c["features"])
+        # P-01: the insider signal, when staged. Same rule — logged, scored by nothing.
+        if insider_sig is not None:
+            feats = dict(rows[-1].get("features") or {})
+            feats.update(insider_features(insider_sig, tk))
+            rows[-1]["features"] = feats
+        # P-06: the earnings-quality features ride in the same dict, same rule — logged on
+        # the row, read by ic.py --by-feature, scored by nothing. Only when the map exists.
+        if isinstance(earnings_quality, dict):
+            eq = earnings_quality.get(tk) or {}
+            feats = dict(rows[-1].get("features") or {})
+            feats.update({k: eq.get(k) for k in EARNINGS_QUALITY_KEYS})
+            rows[-1]["features"] = feats
+
+    # P-02: filing text-change features, when the staged file is present. Rows only;
+    # nothing above reads them.
+    filings_meta = attach_filings(rows, filings_signal, today)
+
+    # P-03: the veto override. A separate pass, after every pillar is scored, every verdict
+    # struck and every feature block laid on the row, and only with a staged feed. It
+    # changes a verdict, never a score, so a vetoed name still ranks where it scored — with
+    # "Avoid" written across it and the reason on the row, in NOTABLE and in meta.veto.
+    # Without the feed nothing here runs. Keep this the LAST pass over the rows: it must
+    # see the final row.
+    vetoed = []
+    if veto_feed is not None:
+        vetoed = veto_mod.apply_to_rows(rows, today, veto_feed)
 
     # Score trail across today's slots, with this scan appended as the final point
     prior_top5 = set()
@@ -686,6 +851,11 @@ def scan(data):
     }]
 
     notable = []
+    for r in rows:
+        if r.get("veto"):
+            notable.append(f'VETO: {r["ticker"]} — ' + "; ".join(r["veto_reasons"]) +
+                           f' — verdict overridden to Avoid (scored {r["score"]:.0f}, '
+                           f'{r["pre_veto_verdict"]}); the manager refuses the entry')
     for r in rows:
         if r["score"] >= 75:
             notable.append(f'{r["ticker"]} scores {r["score"]:.0f} ({r["verdict"]}, {r["setup"]})')
@@ -765,9 +935,33 @@ def scan(data):
     meta["coverage_avg"] = (round(sum(r["coverage_pct"] for r in rows) / len(rows), 0)
                             if rows else 0)
     meta["dropped"] = sorted(skipped)
+    if insider_sig is not None:
+        sm = insider_sig.get("_meta") or {}
+        meta["insider_signal_meta"] = {
+            "as_of": sm.get("as_of"), "n_txns": sm.get("n_txns"),
+            "n_symbols": sm.get("n_symbols"), "n_cluster_buy": sm.get("n_cluster_buy"),
+            "covered": sorted(tk for tk in data["candidates"]
+                              if str(tk).upper() in insider_sig["symbols"]),
+        }
+        for w in (sm.get("warnings") or []):
+            warns.append("INSIDERS: " + str(w))
+    if veto_feed is not None:
+        vm = veto_feed.get("_meta") or {}
+        meta["veto"] = {"applied": vetoed, "checked": len(rows),
+                        "feed_counts": vm.get("counts"), "feed_path": vm.get("path"),
+                        "feed_as_of": veto_feed.get("as_of")}
+    if isinstance(earnings_quality, dict):
+        meta["earnings_quality"] = {
+            "symbols_with_data": sorted(t for t in earnings_quality
+                                        if t in data["candidates"]),
+            "keys": list(EARNINGS_QUALITY_KEYS)}
     # Which commit of the engine produced this scan. Written by the clone step as
     # $SCAN_DIR/engine_sha; None when the engine was not run from a repo.
     meta["engine_sha"] = config.engine_sha()
+    # P-02: only when the staged file was there — an absent key is "not staged", and the
+    # golden output of a run without it must not move.
+    if filings_meta is not None:
+        meta["filings_signal"] = filings_meta
 
     return {"meta": meta, "ipo": data.get("ipo"), "insider_panel": data.get("insider"),
             "sector_concentration": dict(conc),
@@ -779,12 +973,36 @@ if __name__ == "__main__":
     import shutil
     import archive
     src = sys.argv[1] if len(sys.argv) > 1 else os.path.join(BASE, "scan_data.json")
-    out = scan(json.load(open(src, encoding="utf-8")))
+    # Every optional staged file lives in the run directory ($SCAN_DIR); each is None when
+    # the scheduled task did not stage it, and the rows then carry none of its features.
+    # Absent means "not run", not "clean".
+    # P-01: insiders_signal.json.  P-02: filings_signal.json.
+    staged_insiders = load_insider_signal(BASE)
+    staged_filings = filings.load_staged(BASE)
+    # P-03: veto.json.  P-06: earnings_quality.json.
+    feed = veto_mod.load(BASE)
+    eq_path = os.path.join(BASE, EARNINGS_QUALITY_FILE)
+    eq_map = None
+    if os.path.exists(eq_path):
+        try:
+            eq_map = json.load(open(eq_path, encoding="utf-8"))
+            eq_map = {str(k).upper(): v for k, v in eq_map.items()
+                      if isinstance(v, dict)} if isinstance(eq_map, dict) else None
+        except (OSError, json.JSONDecodeError) as exc:
+            print(f"note: {EARNINGS_QUALITY_FILE} unreadable ({exc}) — earnings-quality "
+                  "features not attached", file=sys.stderr)
+    data = json.load(open(src, encoding="utf-8"))
     # Every run owns its own file names. The unstamped scan_results.json stays as the
     # "latest" copy the rest of the pipeline reads; the stamped copy is the one that is
     # still here after the next slot runs. The input is snapshotted too, so a board can
-    # be re-derived from exactly what it was scored on.
-    rid = archive.run_id(out["meta"])
+    # be re-derived from exactly what it was scored on. The id is fixed before scoring so
+    # the memo calibration rows (P-07) carry it.
+    scan_date_of(data["meta"])
+    rid = archive.run_id(data["meta"])
+    data["meta"]["run_id"] = rid
+    # BASE is the run dir: memos/<SYMBOL>.json + news_payload.json are read from it (P-07).
+    out = scan(data, insider_signal=staged_insiders, filings_signal=staged_filings,
+               veto_feed=feed, earnings_quality=eq_map, run_dir=BASE)
     out["meta"]["run_id"] = rid
     fn = archive.files_for(rid)
     json.dump(out, open(os.path.join(BASE, "scan_results.json"), "w", encoding="utf-8"), indent=2)
@@ -811,7 +1029,41 @@ if __name__ == "__main__":
     for name in ("scan_results.json", fn["results"]):
         json.dump(out, open(os.path.join(BASE, name), "w", encoding="utf-8"), indent=2)
     print(f"RUN {rid}  ->  {fn['results']} + {fn['data']}")
-    print(f"{snap_note}\n")
+    print(snap_note)
+    # One line per optional source, staged or not, so the run log says what was looked at.
+    im = out["meta"].get("insider_signal_meta")
+    if im:
+        print(f"INSIDERS (E15, not scored): {len(im['covered'])} of {len(out['results'])} rows covered, "
+              f"{im.get('n_cluster_buy')} cluster buy(s) across {im.get('n_symbols')} symbol(s) as of {im.get('as_of')}")
+    else:
+        print("INSIDERS: insiders_signal.json not staged — no insider features attached")
+    fm = out["meta"].get("filings_signal")
+    if fm:
+        print(f"FILINGS (E16, not scored): {fm['n_matched']} of {len(out['results'])} rows carry a "
+              f"10-K/10-Q change score, {fm['n_changers']} changer(s) at threshold {fm['threshold']}")
+    else:
+        print("FILINGS: filings_signal.json not staged — no filing features attached")
+    em = out["meta"].get("earnings_quality")
+    if em:
+        print(f"EARNINGS QUALITY (E22/E23, not scored): {len(em['symbols_with_data'])} of "
+              f"{len(out['results'])} rows carry {', '.join(em['keys'])}")
+    else:
+        print(f"EARNINGS QUALITY: {EARNINGS_QUALITY_FILE} not staged — no earnings-quality features attached")
+    if feed is not None:
+        print(f"VETO FEED: {feed['_meta']['counts']} — overrode "
+              f"{len(out['meta']['veto']['applied'])} row(s): "
+              f"{', '.join(out['meta']['veto']['applied']) or 'none'}")
+    else:
+        print("VETO FEED: not staged — no override applied")
+    mm = out["meta"].get("memos")
+    if mm:
+        print(f"MEMOS (P-07, not scored): {len(mm['accepted'])} accepted ({', '.join(mm['accepted']) or '-'}), "
+              f"{mm['rejected']} rejected; calibration advisory={mm.get('advisory', True)}")
+        for sym, errs in sorted((out["meta"].get("memo_rejections") or {}).items()):
+            print(f"  ! {sym}: " + "; ".join(errs))
+    else:
+        print("MEMOS: memos/ not staged — no llm_* features attached")
+    print()
     print(f"REGIME: {out['regime']['label']} (x{out['regime']['multiplier']})   "
           f"coverage avg {out['meta']['coverage_avg']:.0f}%\n")
     print(f"{'#':<3}{'TKR':<7}{'SCORE':>6}  {'VERDICT':<12}{'SETUP':<22}{'T/M/F/C/I':<16}"

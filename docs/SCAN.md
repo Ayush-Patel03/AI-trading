@@ -178,6 +178,9 @@ python3 sentiment.py --apewisdom apewisdom.json --stocktwits-trending st_trendin
                      --watchlists rh_watchlists.json --quotes quotes_min.json \
                      --options-scan options_scan.json --earnings-days earnings_days.json \
                      --out sentiment.json --merge-into scan_data.json
+# INSIDERS (COLLECTION.md §7, DATA.md §4): only when insiders.json / form4/ were staged from
+# the box. Writes insiders_signal.json; scanner.py logs features.insider_* — never scored.
+python3 insiders.py --run-dir . --as-of "$SCAN_DATE" --out insiders_signal.json
 python3 scanner.py            # → scan_results.json + ranked console table
 # >>> HAND-OFF, IMMEDIATELY: project_write scan_results.json → claude/latest-scan.json  <<<
 # PAPER MIRROR (STATE-01): build portfolio.json from the paper books, so the panel and
@@ -234,6 +237,15 @@ within 120 minutes of the print: see PM.md, "The macro gate", retuned 2026-09-01
 first version would have frozen every entry slot on two consecutive real calendars.
 Collect the whole calendar anyway — the non-gating items are still reported.
 
+**LLM memos (P-07, 2026-09-10).** The same `features` dict can carry five `llm_*` keys
+(`llm_event_type`, `llm_direction`, `llm_magnitude`, `llm_confidence`, `llm_p_up_5d`) from a
+structured memo the session wrote off an *anonymised* news payload — `memos/<SYMBOL>.json`
+validated by `engine/memo.py` against `news_payload.json` in the run dir. Same rule as the
+technical features: logged on the row, scored by nothing, `null` where there is no valid
+memo. Rejections are listed in `meta.memo_rejections`; probability calls go to
+`archive/calibration.jsonl` for `history.py --resolve-memos`. The whole design, the exact
+extractor prompt and the calibration rule are in `docs/LLM.md`.
+
 ### 3b. Archive the run — designed on 2026-08-31, executed by nothing until 2026-09-01
 
 `archive.py --record` writes a compact (~10 KB) record of the run — scores, pillars, verdicts,
@@ -243,6 +255,26 @@ the regime, every reported field in `ROW_KEEP`, the artifact URL — and the sca
 that fell off the window. The audit found `scan-index.json` empty after nine runs: the code
 existed, the prompts never called it. They do now, and **the archive is what section 11's
 validation reads** — without it the model can never be tested.
+
+### 3c. Two more staged files — `veto.json`, `earnings_quality.json` (P-03 / P-06, 2026-09-10)
+
+Both optional, both read from `$SCAN_DIR` by `scanner.py` without a flag, both documented in
+`docs/COLLECTION.md` §8 and `docs/DATA.md` §1a–1b.
+
+* **`veto.json`** — short reports (publishers in `docs/veto-publishers.md`), high-severity
+  negative news, halts. When present, `scanner.py` scores every row exactly as before and
+  then overrides a vetoed row's verdict to **Avoid** in a separate pass: `veto: true`,
+  `veto_reasons`, `pre_veto_verdict` on the row, a `VETO:` line in NOTABLE, `meta.veto` with
+  the tickers applied and the feed's counts. Every other row gets `veto: false` — checked and
+  clean is not the same as never checked. The score is untouched; the ranking does not move.
+  The manager reads the file again and refuses the entry (PM.md, "The veto"). When absent the
+  board is byte-identical to a scan without the module — the golden test pins it — and the
+  console says `VETO FEED: not staged`.
+* **`earnings_quality.json`** — from `earnings_quality.py` (run after `technicals.py`, same
+  bars file, SPY included). Five keys merged into each row's `features` dict — `sue`,
+  `ear_3d`, `reg_residual`, `earnings_agreement`, `days_since_earnings` — null for a symbol
+  the file does not cover. Same rule as section 3a: logged, scored by nothing, read by
+  `ic.py --by-feature`. `meta.earnings_quality` lists the symbols that had data.
 
 ### The hand-off to the Portfolio Manager
 
