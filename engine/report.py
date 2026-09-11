@@ -97,14 +97,19 @@ $1.23 shaving and a $700 position are not the same observation.
 Desk return over the window against SPY over the same window from the bars, and
 exposure-adjusted: the average invested fraction times SPY's return is what a passive
 position of the same average size would have earned. `equity_start` is the first entry in
-the window that is on the same capital base: the book's own `resized.date` and a missing
-`desk` field both exclude an entry, counted in `excluded_entries`.
+the window that is on the same capital base. Four kinds of entry never reach the return — a
+sentinel run, an entry with no `equity`, an entry with no `desk` field, and one dated on or
+before the book's own `resized.date` — and `excluded_entries` counts all four, so a desk's
+`n_entries` plus its `n_entries_excluded` is every journal entry the window carried for that
+desk and the row reconciles against the journal.
 
 COVERAGE
 --------
 `--coverage claude/pm-coverage.json` adds the COVER-01 expected-versus-actual run table
 the review's system-health section asks for: four decision slots and seven sentinels per
-trading day across every desk (`runner/slots.json`) against what the coverage doc records.
+trading day across every desk against what the coverage doc records. That schedule is
+`runner/slots.json`'s, held here as `DECISION_SLOTS` / `SENTINELS_PER_DAY` because a staged
+engine has no runner/ to read, and pinned to the file by a test so the two cannot drift.
 
 The `--json` also carries, for `render_review.py` (U-05): `shadow` — the K-06 booked-versus-
 shadow gap per desk, cumulative and across the window; `house` — the latest journal entry's
@@ -625,8 +630,16 @@ def attribution(entries, books, since=None, join_entries=None):
     which decisions a trade is allowed to remember. Building the place-buy map from the
     windowed entries (which is what this did until 2026-09-11) threw away the decision that
     opened every position carried into the window — on the real journals a `--since Monday`
-    run left 74% of the week's closed trades in score bucket `unknown`, which reads as "the
-    engine does not record entry scores" rather than "the report cut the join"."""
+    run left 6 of the swing desk's 8 in-window exits (75%) in score bucket `unknown`, and 21
+    of the 23 across all three desks, which reads as "the engine does not record entry
+    scores" rather than "the report cut the join".
+
+    Restoring the join puts a score on all eight of swing's. 15 of the 23 stay `unknown` and
+    that is not this bug: they are the peer desks' exits, whose journals were trimmed to a
+    week and carry no `place-buy` for a position opened before it. A join cannot find a
+    decision the journal no longer holds, and `n_unmatched_to_a_decision` is what says so.
+    (`tests/test_report_live_shapes.py` pins every figure in this paragraph, the shares
+    included, against the live fixture they were measured on.)"""
     placed = {}
     for e in (entries if join_entries is None else join_entries):
         for d in e.get("decisions") or []:
@@ -695,14 +708,30 @@ def capital_change_dates(books):
     return out
 
 
+EXCLUSIONS = ("sentinel", "no_equity", "no_desk", "pre_capital_change")
+
+
+def _no_exclusions():
+    return {k: 0 for k in EXCLUSIONS}
+
+
 def benchmark(entries, series_oc=None, books=None):
     """Per desk: equity return over the journal window versus SPY over the same window,
     and exposure-adjusted (average invested fraction × SPY). From the journal entries'
     own equity / invested fields; the bars supply SPY.
 
-    Two kinds of journal entry are NOT part of a desk's track record and are excluded from
-    the window, counted in `excluded_entries` so the exclusion is visible:
+    Four kinds of journal entry are NOT part of a desk's return. `excluded_entries` counts
+    every one of them and `n_entries_excluded` totals them, so `n_entries` plus the
+    exclusions is every entry the window carried for that desk: the row reconciles against
+    the journal, which is the only thing that makes an exclusion visible rather than merely
+    admitted to. (Until 2026-09-11 it counted two of the four and dropped the other two in
+    silence: on the live swing journal 35 entries became 25 and the field said five.)
 
+      * `sentinel` — a sentinel run is the between-slots risk check. Its equity mark is
+        real, but n is decision-slot entries and a sentinel is not one of them; counting it
+        would put two marks on some slots and one on others.
+      * `no_equity` — an entry that records no equity is not a point on an equity curve.
+        Nothing can be measured from it, so it is not silently one fewer observation.
       * `pre_capital_change` — an entry dated on or before the book's own `resized.date`.
         The swing book records `resized: {date: 2026-08-31, from: 50, to: 5000}`, and the
         five entries from that evening carry the pre-resize $50. Taking `equity_start` from
@@ -717,23 +746,26 @@ def benchmark(entries, series_oc=None, books=None):
     resized = capital_change_dates(books)
     by_desk, excluded = {}, {}
     for e in entries:
-        if e.get("sentinel"):
-            continue
-        if validate._f(e.get("equity")) is None:
-            continue
         desk = e["desk"]
-        why = None
-        if not e.get("desk_declared", True):
+        # One reason per entry, most-specific-about-the-entry first, so the four counts sum
+        # to the entries this desk's window dropped and neither double-counts nor loses one.
+        if e.get("sentinel"):
+            why = "sentinel"
+        elif validate._f(e.get("equity")) is None:
+            why = "no_equity"
+        elif not e.get("desk_declared", True):
             why = "no_desk"
         elif desk in resized and e["date"] <= resized[desk]:
             why = "pre_capital_change"
+        else:
+            why = None
         if why:
-            excluded.setdefault(desk, {"no_desk": 0, "pre_capital_change": 0})[why] += 1
+            excluded.setdefault(desk, _no_exclusions())[why] += 1
             continue
         by_desk.setdefault(desk, []).append(e)
     out = {}
     for desk in sorted(set(by_desk) | set(excluded)):
-        ex = excluded.get(desk) or {"no_desk": 0, "pre_capital_change": 0}
+        ex = excluded.get(desk) or _no_exclusions()
         es = by_desk.get(desk) or []
         if not es:
             out[desk] = {"start": None, "end": None, "n_entries": 0, "equity_start": None,
@@ -741,7 +773,8 @@ def benchmark(entries, series_oc=None, books=None):
                          "spy_return_pct": None, "spy_window": None,
                          "exposure_adjusted_spy_pct": None,
                          "excess_vs_exposure_adjusted_spy_pct": None,
-                         "sample": NOT_A_SAMPLE, "excluded_entries": ex}
+                         "sample": NOT_A_SAMPLE, "excluded_entries": ex,
+                         "n_entries_excluded": sum(ex.values())}
             continue
         es.sort(key=lambda e: (e["date"], e.get("ts") or ""))
         eq0, eq1 = float(es[0]["equity"]), float(es[-1]["equity"])
@@ -763,6 +796,7 @@ def benchmark(entries, series_oc=None, books=None):
             round(ret - avg_inv * spy, 3)
             if ret is not None and spy is not None and avg_inv is not None else None)
         row["excluded_entries"] = ex
+        row["n_entries_excluded"] = sum(ex.values())
         out[desk] = row
     return out
 
@@ -806,6 +840,13 @@ def house_latest(entries):
 
 
 # ---------------------------------------------------------------- coverage (COVER-01)
+# The schedule COVER-01 grades against. `runner/slots.json` is the source of truth; these
+# are a copy of it, because engine/MANIFEST.txt stages the engine modules and nothing from
+# runner/ — a staged report.py has no slots.json to parse and the coverage table still has
+# to grade. A copy is only honest while something fails when the two drift, so
+# tests/test_report.py::test_the_coverage_schedule_agrees_with_runner_slots_json reads the
+# file and pins both constants (and this comment's cadence) to it. Change slots.json and
+# that test tells you to change these; it is not left to be noticed.
 DECISION_SLOTS = ("pre-market", "opening-range", "midday", "power-hour")
 SENTINELS_PER_DAY = 7          # runner/slots.json: hourly at :35 from 09:35 to 15:35 ET
 
@@ -830,9 +871,12 @@ def coverage(raw, since=None, desks=None,
     be transcribing.
 
     Expected per trading day is the schedule, not a guess: four decision slots and seven
-    sentinels (`runner/slots.json`), each covering every desk. Present is what the doc
-    records. The most recent day is marked `partial` when the doc's own `updated` stamp
-    falls on it — that day is still being written, so its unfired slots are not misses."""
+    sentinels, each covering every desk. That schedule is `runner/slots.json`'s, copied into
+    `DECISION_SLOTS` / `SENTINELS_PER_DAY` above (a staged engine ships without runner/) and
+    held to the file by a test, so a schedule change cannot leave this grading quietly
+    against last week's shape. Present is what the doc records. The most recent day is
+    marked `partial` when the doc's own `updated` stamp falls on it — that day is still
+    being written, so its unfired slots are not misses."""
     days_raw = (raw or {}).get("days") or {}
     updated_day = str((raw or {}).get("updated") or "")[:10]
     last_day = max(days_raw) if days_raw else None
@@ -1081,15 +1125,19 @@ def markdown(res):
     if not B:
         L.append("No journal entries with equity in the window.")
     else:
-        L.append("| desk | window | return | avg invested | SPY | exposure × SPY | excess | |")
-        L.append("|---|---|---|---|---|---|---|---|")
-        excluded = 0
+        L.append("| desk | window | entries | return | avg invested | SPY | exposure × SPY "
+                 "| excess | |")
+        L.append("|---|---|---|---|---|---|---|---|---|")
+        tally = _no_exclusions()
         for desk, b in B.items():
             n = b["n_entries"]
-            excluded += sum((b.get("excluded_entries") or {}).values())
+            for k, v in (b.get("excluded_entries") or {}).items():
+                tally[k] = tally.get(k, 0) + v
             inv = (f"{b['avg_invested_frac']:.0%} (n={n})"
                    if b["avg_invested_frac"] is not None and n else "—")
-            L.append(f"| {desk} | {b['start']} → {b['end']} | {_n(b['return_pct'], n)} | {inv} | "
+            L.append(f"| {desk} | {b['start']} → {b['end']} | "
+                     f"{n} of {n + b['n_entries_excluded']} | "
+                     f"{_n(b['return_pct'], n)} | {inv} | "
                      f"{_n(b['spy_return_pct'], n)} | {_n(b['exposure_adjusted_spy_pct'], n)} | "
                      f"{_n(b['excess_vs_exposure_adjusted_spy_pct'], n)} | "
                      f"{'' if b['sample'] == 'ok' else NOT_A_SAMPLE} |")
@@ -1098,12 +1146,17 @@ def markdown(res):
                  "return is one number per desk however many entries there are, and one "
                  "number is not a distribution. SPY absent from the bars leaves those columns "
                  "empty rather than assumed.")
-        if excluded:
+        if sum(tally.values()):
             L.append("")
-            L.append(f"{excluded} journal entr(ies) were excluded from a desk's window: an "
-                     "entry on or before the book's own `resized.date` is on a different "
-                     "capital base, and an entry with no `desk` field predates the desk "
-                     "split. Neither is that desk's track record.")
+            L.append("**entries** is n of every journal entry the window carried for that "
+                     f"desk. The {sum(tally.values())} the benchmark did not use, in full: "
+                     f"{tally['sentinel']} sentinel run(s) — the between-slots risk check, "
+                     f"not a decision slot; {tally['no_equity']} recording no `equity`, so "
+                     f"nothing to measure; {tally['no_desk']} with no `desk` field, which "
+                     f"predates the desk split; {tally['pre_capital_change']} dated on or "
+                     "before the book's own `resized.date` and so on a different capital "
+                     "base. Subtract them from the entries column and the journal is "
+                     "reconciled; none of the four is that desk's track record.")
     L.append("")
 
     V = res.get("coverage")
