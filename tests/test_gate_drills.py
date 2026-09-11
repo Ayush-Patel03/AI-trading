@@ -19,14 +19,17 @@ Each gate is asked three questions, and the third is the one that matters:
      a position through its stop at the same time.
 
 Written to the DOCTRINE, not to the code. Where the two disagree the test is `xfail` with
-the divergence spelled out, and the engine is left alone:
+the divergence spelled out, and the engine is left alone. One of the three has since been
+fixed in the engine and its drill now passes; the fix changed what the engine SAYS, never
+what it trades:
 
-  * `min_notional` against a rebalance shave — refused with no journal line at all
-    (`test_a_rebalance_shave_under_the_minimum_is_journaled`).
-  * `legacy_pdt` refusing a stop — the banner is right, the `skipped` reason says the sale
-    was refused because "this is not a stop" when it is
+  * `legacy_pdt` refusing a stop — the banner was right, the `skipped` reason said the sale
+    was refused because "this is not a stop" when it is. FIXED: the exhausted-budget case
+    has its own message and the sale is refused exactly as before
     (`test_the_pdt_refusal_says_why_it_really_refused`).
-  * `earnings_gate` — a reserved rule with no doctrine and no emitter
+  * `min_notional` against a rebalance shave — refused with no journal line at all. STILL
+    `xfail` (`test_a_rebalance_shave_under_the_minimum_is_journaled`).
+  * `earnings_gate` — a reserved rule with no doctrine and no emitter. STILL `xfail`
     (`test_a_candidate_reporting_earnings_is_gated`).
 
 Two rules are drilled as facts about this branch rather than as behaviour:
@@ -773,22 +776,27 @@ def test_the_default_intraday_margin_policy_never_refuses_a_stop(
     assert not [w for w in jrn["warnings"] if w.startswith("UNPROTECTED: NVDA")]
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "DIVERGENCE, wording. The UNPROTECTED banner is exactly what PM.md §4 promises, but "
-    "the `skipped` reason beside it reads 'PDT guard: selling would be day trade 4/3 and "
-    "this is not a stop — held' — and it IS a stop. LegacyPDT.sellable tests `used < max "
-    "AND reason == 'stop'` in one branch and falls through to a single message written "
-    "for the not-a-stop case, so an exhausted budget is reported as a wrong exit reason. "
-    "The journal line contradicts the warning printed next to it, and the weekly review "
-    "reads the journal line. PM.md is explicit that the refusal here is the exhausted "
-    "budget: 'a ninety-day restriction is worse than one bad hold'. "
-    "engine/broker_policy.py LegacyPDT.sellable, final return."))
 def test_the_pdt_refusal_says_why_it_really_refused(pm, run_dir, quotes, rules):
+    """FIXED. The UNPROTECTED banner was always exactly what PM.md §4 promises, but the
+    `skipped` reason beside it read 'PDT guard: selling would be day trade 4/3 and this is
+    not a stop — held' — and it IS a stop. `LegacyPDT.sellable` tested `used < max AND
+    reason == "stop"` in one branch and fell through to a single message written for the
+    not-a-stop case, so an exhausted budget was reported as a wrong exit reason and the
+    journal line contradicted the warning printed next to it. The exhausted-budget case now
+    has its own message; the sale is refused exactly as before ('a ninety-day restriction
+    is worse than one bad hold'), and both messages still classify as broker_policy."""
     _pdt_exhausted(run_dir, pm)
     _, jrn, _ = run_pm(pm, run_dir, slot="sentinel")
 
     refused = [r for r in _skips(jrn, "NVDA") if r.startswith("stop wanted to fire")][0]
     assert "this is not a stop" not in refused, refused
+    assert "the day-trade budget is exhausted" in refused, refused
+    assert "day trade 4/3" in refused, refused
+    assert _rule(rules, refused) == "broker_policy", refused
+    # The message the branch was written for is unchanged, and lands on the same rule.
+    not_a_stop = ("trim wanted to fire — legacy_pdt: PDT guard: selling would be day trade "
+                  "1/3 and this is not a stop — held")
+    assert _rule(rules, not_a_stop) == "broker_policy"
 
 
 # ================================================================== stop_policy
