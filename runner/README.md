@@ -104,6 +104,28 @@ task on a different runtime that reads `health\heartbeat.json` and trips at two 
 sentinel/PM runs during market hours — `docs/runner/deadman-task.md`,
 `docs/runbooks/deadman-tripped.md`.
 
+The morning brief (`engine/brief.py`, U-04) is **not** a slot either. It is its own
+scheduled task, `CRON_TZ=America/New_York 45 8 * * 1-5`, and it only reads: the three
+books, the three journals, `coverage/pm-coverage.json`, `scans/latest.json` and
+`journals/watch.json`. It writes a text body of at most 1,200 characters and a
+self-contained HTML page in the Trade Desk palette into `C:\ai-trading-inputs\<run_id>\`,
+and nothing at all into the state repo — so it takes no lock and cannot race the 08:45 PM
+slot that fires at the same minute. Every number it reports is computed by whichever module
+owns it (`ladder.state_for`, `pm.house_exposure`, `pm.house_metrics`, `fills.shadow_summary`,
+`health.day_events`, `pm._is_high_impact`), so the brief cannot disagree with the manager.
+`--ntfy <topic-url>` POSTs the text body with `urllib`; absent, it is a no-op and the exit
+code is 0. The topic name is the password for a public ntfy topic, so it is committed
+nowhere — it lives in `engine-config.json` next to the venv and is passed on the command
+line — and the host needs an egress-allowlist entry before a scheduled run can reach it
+(P-08). Prompt: `docs/runner/prompts/morning-brief.md`.
+
+```
+C:\ai-trading-runner\.venv\Scripts\python.exe C:\ai-trading-runner\engine\engine\brief.py --state C:\ai-trading-state --text <inputs>\brief.txt --html <inputs>\morning-brief.html [--ntfy <topic url>]
+```
+
+Exit 0 the brief was built, with or without alerts; exit 2 nothing under `--state` could be
+read at all. A failed ntfy POST is reported on stderr and never fails the brief.
+
 `--desk` is `swing`, `pullback`, `momentum` or `all` (the default). Use `all` from the
 scheduled prompts: the idempotency key includes the desk argument, so `--desk swing` after a
 committed `--desk all` is a second attempt at the swing desk (it replaces its own journal
