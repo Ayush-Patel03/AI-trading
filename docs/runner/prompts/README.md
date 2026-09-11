@@ -41,14 +41,14 @@ the ones live on 2026-09-10. "Reads / writes" is what changes against today's pr
 | Score validation | `0 9 * * 6` | `score-validation.md` | `trig_012PZZ5YMDo7Hmuza1Vbv4JF` | none (analysis in the sandbox) | — | reads `scan-index.json`, `scans/<run_id>.json`, `archive/followed.json` from the state repo; adds `ic.py`; writes `claude/reviews/` only |
 | Mirror sync | `20 9,11,14,16 * * 1-5` | `mirror-sync.md` | `trig_01DBZpPG7QmYV6Z79rc1xRn6` | none | — | stages from `C:\ai-trading-state` with `Copy-Item` (no project reads, no 60 KB chunked transport); `mirror.py` from the runner's engine clone; steps 3–7 unchanged |
 | **Dead-man's switch (new)** | `5,35 9-16 * * 1-5` | `deadman.md` → `docs/runner/deadman-task.md` | — | `runner/deadman.py --state C:\ai-trading-state` | — | K-05; pushes on a fresh trip, a clear, or a checker that cannot run |
-| **Morning brief (new)** | `45 8 * * 1-5` | `morning-brief.md` | — | none | — | U-04; reads the state repo, sends ntfy + email + push; writes nothing |
+| **Morning brief (new)** | `45 8 * * 1-5` | `morning-brief.md` | — | none (`engine/brief.py --state`, like `deadman.py`) | — | U-04; the program reads the three books, the three journals, `coverage/`, `scans/latest.json` and `journals/watch.json` and writes `brief.txt` + `morning-brief.html` into the inputs dir; the session delivers them. No lock, no state write |
 
 Not trading, not covered here: `refresh-sentiment-premarket`, `refresh-sentiment-midday`,
 `Peca email ticket gap scan`.
 
 Character counts (2026-09-10): scans 4.6 k each, PM slots 4.3–4.6 k, sentinel 3.9 k, watches
 4.5–4.6 k, health 4.2 k, weekly review 4.4 k, validation 3.5 k, mirror sync 3.9 k, morning
-brief 2.8 k, deadman pointer 1.5 k. The ~2.5 k target was not reachable for a trading slot:
+brief 4.9 k, deadman pointer 1.5 k. The ~2.5 k target was not reachable for a trading slot:
 the verbatim standing rules (~620), the box procedure with the exact `start_process` line
 (~900) and the failure ladder (~450) are ~2 k before a single slot-specific word. Detail that
 used to be repeated (manifest shape, chunked writes, exit codes) now points at
@@ -104,7 +104,11 @@ Do this in one sitting, after `selftest.py` prints `PASS` on the box and
    coverage rows, one `engine_sha`, no `aborted: true`.
 8. **Weekly review** and **score validation** (they only read; switch them any Friday).
 9. **Morning brief** (`morning-brief.md`) — new trigger, `45 8 * * 1-5`, after ntfy and the
-   email address are in `claude/engine-config.json` (`alerts.ntfy_topic`, `alerts.email`).
+   email address are in `claude/engine-config.json` (`alerts.ntfy_topic`, `alerts.email`)
+   **and copied by hand into `C:\ai-trading-runner\engine-config.json`**, which is where
+   the task reads them. The topic name is the password for a public topic, so it is never
+   committed to either repo. Until P-08 adds the ntfy host to the egress allowlist the
+   POST fails and the task delivers by push and email alone — which it says out loud.
 10. Retire the project-doc writes in any prompt still carrying them; from step 2 on, the
     health check is the only writer of `claude/paper-book*.json` and friends.
 
