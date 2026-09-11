@@ -346,7 +346,11 @@ def test_attribution_tables_join_the_entry_decision(rp):
     assert all(k in ("60-69", "70-79", "80-89", "unknown") for k in A["by_score_bucket"])
     assert "unknown" not in A["by_score_bucket"]
     stat = A["by_desk"]["swing"]
-    assert set(stat) == {"n", "pnl_total", "pnl_mean", "pnl_pct_mean", "pnl_pct_median", "sample"}
+    # `n` is exit rows; the round-trip fields and the notional-weighted return came in with
+    # the 2026-09-11 fix (a book row is a slice of an exit, not a trade).
+    assert set(stat) == {"n", "n_round_trips", "n_positions_still_open", "pnl_total",
+                         "pnl_mean", "pnl_pct_mean", "pnl_pct_mean_notional_weighted",
+                         "pnl_pct_median", "sample"}
     assert stat["sample"] == rp.NOT_A_SAMPLE
     assert "win_rate" not in json.dumps(A) and "sharpe" not in json.dumps(A).lower()
     # a trade with no matching decision lands in `unknown`
