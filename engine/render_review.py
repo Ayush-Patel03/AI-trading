@@ -12,15 +12,17 @@ page must not add either back. `render()` therefore checks its own output before
 it: if the finished page contains any phrase in `BANNED` (case-insensitive) it raises
 `HonestyError` and the CLI exits 2 — a ledger hypothesis or a model-card field that names
 the metric is refused, not published. Every aggregate cell is emitted through `_agg()`,
-which will not format a number without its n, and every aggregate under `report.MIN_N`
-carries the "not a sample" chip.
+which will not format a number without its n AND will not format an n without a number —
+an absent value, or a count of zero, renders `_absent()` instead. Every aggregate under
+`report.MIN_N` carries the "not a sample" chip, and on the attribution tables the chip
+counts round trips rather than exit rows.
 
 SECTIONS
 --------
 masthead · benchmark-relative per desk · attribution (exit reason / desk / entry-score
 bucket / setup) · refusals histogram by rule and by week (inline SVG) · E5 counterfactual ·
-shadow ledger · house exposure · experiment ledger with the DSR reminder · model card ·
-footer.
+COVER-01 expected-vs-actual runs · shadow ledger · house exposure · experiment ledger with
+the DSR reminder · model card · footer.
 
 Usage
 -----
@@ -81,10 +83,25 @@ def _sample_chip(n):
         f' <span class="chip warning"><span class="dot"></span>{NOT_A_SAMPLE}</span>'
 
 
+def _absent(what="absent"):
+    """A cell with nothing in it. NOT an aggregate: it carries no n, because a count of
+    observations of a value that was never measured is a fabrication."""
+    return f'<td class="n absent">{DASH} <span class="nn">{esc(what)}</span></td>'
+
+
 def _agg(v, n, dp=2, signed=True, unit="%"):
     """An aggregate cell: the number and its n. There is no code path that formats an
-    aggregate without its n; the not-a-sample chip sits once per row (`_chip_td`)."""
+    aggregate without its n, and none that prints an n without a number — an absent value
+    or an n of zero renders `_absent()` instead.
+
+    Both halves matter on the real report. `— n=25` (an empty SPY column beside the 25
+    journal entries of the desk beside it) reads as twenty-five observations of nothing;
+    `+$0.00 n=0` on a desk whose shadow model has priced no fill reads as a measured zero
+    execution gap. Neither was measured. The not-a-sample chip sits once per row
+    (`_chip_td`)."""
     n = 0 if n is None else int(n)
+    if v is None or n <= 0:
+        return _absent("not measured" if n <= 0 else "absent")
     return f'<td class="n agg">{_fmt(v, dp, signed, unit)} <span class="nn">n={n}</span></td>'
 
 
@@ -250,6 +267,13 @@ def benchmark_section(review):
             + _chip_td(n) + "</tr>")
     note = ("n = decision-slot journal entries in the window; one return per desk is one number, "
             "not a distribution. SPY absent from the bars leaves its columns as a dash, never assumed.")
+    excluded = sum(sum((b.get("excluded_entries") or {}).values()) for b in B.values())
+    if excluded:
+        note += (f" {excluded} journal entr(ies) are excluded from a desk's window: an entry on or "
+                 "before the book's own <code>resized.date</code> is on a different capital base, "
+                 "and an entry with no <code>desk</code> field predates the desk split. Neither is "
+                 "that desk's track record, and a return measured across a capital change is not "
+                 "a return.")
     return _card("Benchmark-relative, per desk", _table(head, rows) + f'<p class="pnote">{note}</p>')
 
 
@@ -262,20 +286,34 @@ def attribution_section(review):
         tbl = A.get(key) or {}
         if not tbl:
             continue
-        head = [(title.replace("By ", "").lower(), False), ("P&L total", True), ("P&L mean", True),
-                ("return mean", True), ("return median", True), ("sample", False)]
+        head = [(title.replace("By ", "").lower(), False), ("exits", True), ("round trips", True),
+                ("P&L total", True), ("P&L mean", True), ("return mean", True),
+                ("weighted", True), ("return median", True), ("sample", False)]
         rows = []
         for k, v in tbl.items():
             n = v.get("n") or 0
+            rt = v.get("n_round_trips") or 0
             rows.append(f'<tr><td class="sym">{esc(k)}</td>'
+                        + f'<td class="n">{n}</td><td class="n">{rt}</td>'
                         + _agg(v.get("pnl_total"), n, unit="$")
                         + _agg(v.get("pnl_mean"), n, unit="$")
                         + _agg(v.get("pnl_pct_mean"), n)
+                        + _agg(v.get("pnl_pct_mean_notional_weighted"), n)
                         + _agg(v.get("pnl_pct_median"), n)
-                        + _chip_td(n) + "</tr>")
+                        + _chip_td(rt) + "</tr>")
         parts.append(f'<div class="subh">{esc(title)}</div>' + _table(head, rows))
     if not parts:
         parts.append('<div class="empty">No closed trades in the window.</div>')
+    else:
+        rt = A.get("n_round_trips") or 0
+        parts.append('<p class="pnote"><b>An exit row is a slice, not a trade.</b> '
+                     f'{n_closed} row(s) cover {int(A.get("n_desk_positions") or 0)} '
+                     f'desk-position(s) in {int(A.get("n_names") or 0)} name(s) — {rt} closed '
+                     f'out, {int(A.get("n_positions_still_open") or 0)} still open; a '
+                     'cap-rebalance shaving of a few dollars is one row and so is a finished '
+                     'position. The sample chip counts the round trips that completed, not the '
+                     'rows. <b>return mean</b> equal-weights the rows; <b>weighted</b> weights '
+                     'each by the notional it put at risk, which is what the money did.</p>')
     unmatched = A.get("n_unmatched_to_a_decision") or 0
     note = (f"{unmatched} closed trade(s) not matched to a place-buy decision (score bucket unknown)"
             if unmatched else None)
@@ -296,6 +334,13 @@ def refusals_section(review):
             f'<p class="pnote">Sides: book-wide gates n={int(sides.get("book", 0))} (no names — counted, '
             f'not measurable) · management-side n={int(sides.get("manage", 0))} · entry candidates '
             f'n={int(sides.get("entry", 0))} (the only ones the counterfactual can measure).</p>']
+    if R.get("n_composite"):
+        body.append(f'<p class="pnote">{int(R["n_composite"])} of those {n} items named more than '
+                    f'one rule — portfolio.py joins a blocked proposal\'s reasons with "; ", so one '
+                    f'skipped name can carry an evidence-coverage refusal AND a sector limit AND a '
+                    f'cap trim. Each is counted, so the bars total {int(R.get("n_rules") or n)} '
+                    f'rather than {n}: <b>n</b> is names turned away, the bars are how often each '
+                    f'gate was a reason.</p>')
     if R.get("other"):
         body.append('<p class="pnote"><b>Unclassified (rule <code>other</code> — add a rule in report.py):</b> '
                     + " · ".join(esc(s) for s in R["other"]) + "</p>")
@@ -341,6 +386,11 @@ def counterfactual_section(review):
         parts.append('<p class="pnote">Not measurable from the journal (no candidate names): '
                      + "; ".join(f'{esc(r)} book-wide n={int(v.get("book_wide", 0))}, management n={int(v.get("manage", 0))}'
                                  for r, v in sorted(C["unmeasured"].items())) + "</p>")
+    if C.get("not_a_gate"):
+        parts.append('<p class="pnote">Counted as reasons but not measurable as gates (they '
+                     'refused nothing): ' + "; ".join(f'{esc(r)} n={int(v)}'
+                                                      for r, v in sorted(C["not_a_gate"].items()))
+                     + "</p>")
     if C.get("no_bars"):
         parts.append('<p class="pnote">No bars for: ' + esc(", ".join(C["no_bars"])) + "</p>")
     return _card("E5 · did the names each gate refused underperform the names it admitted?",
@@ -361,12 +411,18 @@ def shadow_section(review, health=None):
     rows = []
     for desk, s in S.items():
         nf = int(s.get("n_fills") or 0)
+        if s.get("model") == "on" and nf == 0:
+            # On, but it has priced no fill yet. A $0.00 gap here is not a measured zero —
+            # there is nothing to have measured — so every gap column says so.
+            rows.append(f'<tr><td class="sym">{esc(desk)}</td>'
+                        f'<td class="sub2">on · no fills priced</td>'
+                        + _absent("no fills") + _absent("no fills") + _absent("no fills")
+                        + f'<td class="chipcell">{_sample_chip(0)}</td></tr>')
+            continue
         if s.get("model") == "off":
             rows.append(f'<tr><td class="sym">{esc(desk)}</td><td class="sub2">off</td>'
-                        f'<td class="n agg">{DASH} <span class="nn">n=0</span></td>'
-                        f'<td class="n agg">{DASH} <span class="nn">n=0</span></td>'
-                        f'<td class="n agg">{DASH} <span class="nn">n=0</span></td>'
-                        f'<td class="chipcell">{_sample_chip(0)} <span class="sub2">model off</span></td></tr>')
+                        + _absent("model off") + _absent("model off") + _absent("model off")
+                        + f'<td class="chipcell">{_sample_chip(0)} <span class="sub2">model off</span></td></tr>')
             continue
         rows.append(f'<tr><td class="sym">{esc(desk)}</td><td class="sub2">on</td>'
                     + _agg(s.get("cum_gap_usd"), nf, unit="$")
@@ -380,6 +436,60 @@ def shadow_section(review, health=None):
     body += ('<p class="pnote">A positive gap means the paper book flattered itself: it sold higher or '
              'bought cheaper than the shadow model says a marketable order would have. n = shadow fills.</p>')
     return _card("Shadow ledger · booked vs shadow fills", body)
+
+
+def coverage_section(review):
+    """COVER-01 expected vs actual engine runs (report.py --coverage).
+
+    The review's system-health section asks for this table and the runner prompt names
+    pm-coverage.json as an input, but until 2026-09-11 neither script had a way to read it,
+    so the table was transcribed by hand from the coverage doc's prose notes."""
+    V = review.get("coverage")
+    if not V:
+        return _card("Coverage · expected vs actual engine runs",
+                     '<div class="empty">No coverage doc staged '
+                     '(<code>report.py --coverage claude/pm-coverage.json</code>). '
+                     'Expected-versus-actual runs were not measured this week.</div>')
+    T = V.get("totals") or {}
+    days = V.get("days") or {}
+    head = [("day", False), ("decision slots", True), ("sentinels", True), ("desk rows", True),
+            ("missing", False), ("engine", False)]
+    rows = []
+    for date, d in days.items():
+        miss = ", ".join(d.get("decision_slots_missing") or [])
+        gap = int(d.get("sentinels_expected") or 0) - int(d.get("sentinels_present") or 0)
+        if gap > 0:
+            miss = (miss + "; " if miss else "") + f"{gap} sentinel(s)"
+        for dk in d.get("desks_missing") or []:
+            miss = (miss + "; " if miss else "") + f"no {dk} row"
+        cls = "down" if (miss and not d.get("partial")) else ""
+        rows.append(
+            f'<tr><td class="sym">{esc(date)}'
+            + ('<span class="sub2"> · partial</span>' if d.get("partial") else "")
+            + "</td>"
+            + f'<td class="n">{int(d.get("decision_slots_present") or 0)}/'
+              f'{int(d.get("decision_slots_expected") or 0)}</td>'
+            + f'<td class="n">{int(d.get("sentinels_present") or 0)}/'
+              f'{int(d.get("sentinels_expected") or 0)}</td>'
+            + f'<td class="n">{int(d.get("desk_rows") or 0)}</td>'
+            + f'<td class="sub2 {cls}">{esc(miss) or DASH}</td>'
+            + f'<td class="sub2">{esc(", ".join(d.get("engine_sha") or [])) or DASH}</td></tr>')
+    body = _table(head, rows) if rows else '<div class="empty">The coverage doc records no days in the window.</div>'
+    body += (f'<p class="pnote">Expected per trading day: '
+             f'{len(V.get("decision_slots") or [])} decision slots '
+             f'({esc(", ".join(V.get("decision_slots") or []))}) plus '
+             f'{int(V.get("sentinels_per_day") or 0)} sentinels, each across every desk '
+             f'(<code>runner/slots.json</code>). Over {int(T.get("days") or 0)} recorded day(s): '
+             f'{int(T.get("present") or 0)}/{int(T.get("expected") or 0)} runs, '
+             f'{int(T.get("missing") or 0)} missing, {int(T.get("aborted") or 0)} aborted, '
+             f'{int(T.get("desk_rows") or 0)} desk rows written'
+             + (f'; {int(T.get("partial_days") or 0)} day still being written is shown but left '
+                'out of the totals' if T.get("partial_days") else "")
+             + '. A missing row is a run that left no record — the desk was not looked at, or '
+               'the run could not write. That is not the same as a quiet run, which writes a '
+               'row saying nothing fired.</p>')
+    return _card("Coverage · expected vs actual engine runs", body,
+                 count=f'{int(T.get("present") or 0)}/{int(T.get("expected") or 0)}')
 
 
 def _tile(label, value, sub=None, cls=""):
@@ -531,6 +641,7 @@ EXTRA_CSS = """
 .pnote code, .empty code { font-family: var(--mono); font-size: 11px; background: var(--surface-2); padding: 1px 4px; border-radius: 3px; }
 .nn { font-family: var(--mono); font-size: 10.5px; color: var(--ink-3); margin-left: 4px; white-space: nowrap; }
 td.agg { white-space: nowrap; }
+td.absent { white-space: nowrap; color: var(--ink-3); }
 td.chipcell { white-space: nowrap; }
 .mast { gap: 10px 16px; }
 .kvgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1px;
@@ -571,6 +682,7 @@ def render(review_json, ledger_rows, ic_json=None, model_card=None, health=None,
         attribution_section(review),
         refusals_section(review),
         counterfactual_section(review),
+        coverage_section(review),
         shadow_section(review, health),
         house_section(review),
         ledger_section(ledger_rows, ic_json),
