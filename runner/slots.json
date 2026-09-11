@@ -1,54 +1,62 @@
 {
-  "_what": "The schedule the box runner enforces. One entry per slot: when it nominally fires, the window inside which a run is accepted, how stale its inputs may be, which engine steps run and which desks. run.py reads this file and refuses anything outside it.",
-  "_tz": "America/New_York. The runner converts; the cron entries on the box are local time.",
-  "quote_files": ["pm_quotes.json", "quotes.json", "quotes_min.json"],
+  "_what": "Slot windows and steps for runner/run.py. Times are America/New_York wall clock. A run is accepted only when the input manifest's `as_of` falls inside the slot's window on the run's own date, and only when the runner was invoked within `max_input_lag_min` of that `as_of` — the quotes a session wrote are only as live as the moment it fetched them.",
+  "_rules": "The four decision slots carry two steps: `scan` (the SCAN.md pipeline, 45 minutes before the PM) and `pm` (pm.py per desk). One invocation runs exactly one step; `--step auto` picks `scan` when the inputs carry scan_data.json and `pm` otherwise. The sentinel and the watch have no scan. The window is deliberately wide (default +/-90 min) so a late session still lands; freshness of the quotes themselves is the tighter gate.",
+  "timezone": "America/New_York",
+  "defaults": {
+    "window_min": 90,
+    "quote_max_age_s": 60,
+    "max_input_lag_min": 25,
+    "lock_stale_min": 45
+  },
+  "desks": ["swing", "pullback", "momentum"],
   "slots": {
     "pre-market": {
-      "cadence": "weekdays 08:00 ET (scan) / 08:45 ET (pm)",
+      "cadence": "weekdays, scan 08:00 ET, PM 08:45 ET",
       "nominal_et": "08:45",
-      "window_et": ["07:30", "09:25"],
-      "max_input_lag_min": 45,
+      "scan_nominal_et": "08:00",
+      "window_min": 90,
       "steps": ["scan", "pm"],
       "scan_premarket": true,
       "desks": ["swing", "pullback", "momentum"]
     },
     "opening-range": {
-      "cadence": "weekdays 10:00 ET (scan) / 10:45 ET (pm)",
+      "cadence": "weekdays, scan 10:00 ET, PM 10:45 ET",
       "nominal_et": "10:45",
-      "window_et": ["09:45", "12:00"],
-      "max_input_lag_min": 45,
+      "scan_nominal_et": "10:00",
+      "window_min": 90,
       "steps": ["scan", "pm"],
       "desks": ["swing", "pullback", "momentum"]
     },
     "midday": {
-      "cadence": "weekdays 12:30 ET (scan) / 13:15 ET (pm)",
+      "cadence": "weekdays, scan 12:30 ET, PM 13:15 ET",
       "nominal_et": "13:15",
-      "window_et": ["12:15", "14:30"],
-      "max_input_lag_min": 45,
+      "scan_nominal_et": "12:30",
+      "window_min": 90,
       "steps": ["scan", "pm"],
       "desks": ["swing", "pullback", "momentum"]
     },
     "power-hour": {
-      "cadence": "weekdays 15:00 ET (scan) / 15:45 ET (pm)",
+      "cadence": "weekdays, scan 15:00 ET, PM 15:45 ET (the session ferries quotes before the bell)",
       "nominal_et": "15:45",
-      "window_et": ["14:45", "16:10"],
-      "max_input_lag_min": 45,
+      "scan_nominal_et": "15:00",
+      "window_min": 90,
       "steps": ["scan", "pm"],
       "desks": ["swing", "pullback", "momentum"]
     },
     "sentinel": {
-      "cadence": "weekdays hourly at :35, 09:35-15:35 ET",
-      "nominal_et": null,
-      "window_et": ["09:30", "16:00"],
-      "max_input_lag_min": 20,
+      "cadence": "weekdays, hourly at :35 from 09:35 to 15:35 ET; one occurrence per ET hour",
+      "times_et": ["09:35", "10:35", "11:35", "12:35", "13:35", "14:35", "15:35"],
+      "window_et": ["09:15", "16:15"],
       "steps": ["sentinel"],
-      "desks": ["swing", "pullback", "momentum"],
-      "once_per": "hour"
+      "desks": ["swing", "pullback", "momentum"]
     },
     "watch": {
-      "cadence": "weekdays 07:00 ET (pre-open) and 16:30 ET (after-hours)",
-      "nominal_et": null,
-      "window_et": ["06:30", "20:00"],
+      "cadence": "weekdays, pre-open 07:00 ET and after-hours 16:20 ET; read-only",
+      "sessions": {
+        "pre-open": {"nominal_et": "07:00", "window_et": ["05:30", "09:15"]},
+        "after-hours": {"nominal_et": "16:20", "window_et": ["16:05", "20:00"]}
+      },
+      "quote_max_age_s": 900,
       "max_input_lag_min": 45,
       "steps": ["watch"],
       "desks": ["swing", "pullback", "momentum"]
@@ -87,5 +95,6 @@
       "required": [],
       "optional": []
     }
-  }
+  },
+  "quote_files": ["pm_quotes.json", "quotes.json"]
 }
