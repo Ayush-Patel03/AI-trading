@@ -250,15 +250,19 @@ def benchmark_section(review):
     if not B:
         return _card("Benchmark-relative, per desk",
                      '<div class="empty">No journal entries with equity in the window.</div>')
-    head = [("desk", False), ("window", False), ("return", True), ("avg invested", True),
-            ("SPY", True), ("exposure × SPY", True), ("excess", True), ("sample", False)]
+    head = [("desk", False), ("window", False), ("entries", True), ("return", True),
+            ("avg invested", True), ("SPY", True), ("exposure × SPY", True), ("excess", True),
+            ("sample", False)]
     rows = []
     for desk, b in B.items():
         n = b.get("n_entries") or 0
+        ex = b.get("excluded_entries") or {}
+        dropped = int(b.get("n_entries_excluded") or sum(ex.values()))
         inv = b.get("avg_invested_frac")
         rows.append(
             f'<tr><td class="sym">{esc(desk)}</td>'
             f'<td class="st sub2">{esc(b.get("start"))} &rarr; {esc(b.get("end"))}</td>'
+            f'<td class="n">{n} of {n + dropped}</td>'
             + _agg(b.get("return_pct"), n)
             + _agg(None if inv is None else inv * 100.0, n, dp=0, signed=False)
             + _agg(b.get("spy_return_pct"), n)
@@ -267,13 +271,23 @@ def benchmark_section(review):
             + _chip_td(n) + "</tr>")
     note = ("n = decision-slot journal entries in the window; one return per desk is one number, "
             "not a distribution. SPY absent from the bars leaves its columns as a dash, never assumed.")
-    excluded = sum(sum((b.get("excluded_entries") or {}).values()) for b in B.values())
+    tally = {}
+    for b in B.values():
+        for k, v in (b.get("excluded_entries") or {}).items():
+            tally[k] = tally.get(k, 0) + int(v or 0)
+    excluded = sum(tally.values())
     if excluded:
-        note += (f" {excluded} journal entr(ies) are excluded from a desk's window: an entry on or "
-                 "before the book's own <code>resized.date</code> is on a different capital base, "
-                 "and an entry with no <code>desk</code> field predates the desk split. Neither is "
-                 "that desk's track record, and a return measured across a capital change is not "
-                 "a return.")
+        note += (" <b>entries</b> is n of every journal entry the window carried for that desk, "
+                 f"so each row reconciles against the journal. The {excluded} the benchmark did "
+                 f"not use, in full: {tally.get('sentinel', 0)} sentinel run(s), the "
+                 "between-slots risk check rather than a decision slot; "
+                 f"{tally.get('no_equity', 0)} recording no "
+                 f"<code>equity</code>, so nothing to measure; {tally.get('no_desk', 0)} with no "
+                 "<code>desk</code> field, which predates the desk split; "
+                 f"{tally.get('pre_capital_change', 0)} dated on or before the book's own "
+                 "<code>resized.date</code> and so on a different capital base &mdash; a return "
+                 "measured across a capital change is not a return. None of the four is that "
+                 "desk's track record.")
     return _card("Benchmark-relative, per desk", _table(head, rows) + f'<p class="pnote">{note}</p>')
 
 
